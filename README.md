@@ -21,6 +21,7 @@ uv sync
 ```
 
 ### Install git hooks (prek)
+Prek is a pre-commit-compatible runner that reads `.pre-commit-config.yaml`.
 ```bash
 uv run prek install
 ```
