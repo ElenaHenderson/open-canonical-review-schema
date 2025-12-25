@@ -1,0 +1,70 @@
+from __future__ import annotations
+from typing import Any, Dict, Optional
+import uuid
+
+from ..util import now_iso, first_paragraph
+
+def from_journal_narrative(payload: Dict[str, Any], *, keep_raw: bool = False) -> Dict[str, Any]:
+    review_id = str(payload.get("review_id") or payload.get("id") or uuid.uuid4())
+    created_at = payload.get("created_at") if isinstance(payload.get("created_at"), str) else now_iso()
+    full_text = payload.get("full_text") if isinstance(payload.get("full_text"), str) else ""
+
+    work_id = str(payload.get("doi") or payload.get("manuscript_id") or payload.get("work_id") or "unknown")
+    venue = payload.get("journal") or payload.get("venue")
+
+    out: Dict[str, Any] = {
+        "review_id": review_id,
+        "version": "1.0.0",
+        "created_at": created_at,
+        "provenance": {
+            "source_system": "journal_narrative",
+            "source_review_id": str(payload.get("source_review_id") or payload.get("id") or ""),
+            "imported_at": now_iso(),
+            "mapping": {"mapping_spec_id":"canonical-review.mapping.v1","mapping_spec_version":"1.1.0","mapper_version":"0.1.0"}
+        },
+        "referee": {
+            "referee_type": "human",
+            "identity_mode": "confidential",
+            "referee_id": payload.get("reviewer_id"),
+            "human_referee": {}
+        },
+        "target": {
+            "work_id": work_id,
+            "work_type": "article",
+            "venue": venue
+        },
+        "metrics": [],
+        "opinion": {
+            "summary": first_paragraph(full_text, max_len=500) if full_text.strip() else "No opinion text provided."
+        },
+        "narrative": {
+            "detailed_review": full_text.strip()
+        } if full_text.strip() else {}
+    }
+
+    if out.get('referee', {}).get('referee_id') is None:
+        out['referee'].pop('referee_id', None)
+
+    if keep_raw:
+        out["provenance"]["raw_payload"] = payload
+    return out
+
+def to_journal_narrative(canonical: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    out["doi"] = canonical.get("target", {}).get("work_id")
+    out["journal"] = canonical.get("target", {}).get("venue")
+    out["review_id"] = canonical.get("review_id")
+    out["created_at"] = canonical.get("created_at")
+    # Narrative text
+    nar = canonical.get("narrative", {}) or {}
+    text = None
+    if isinstance(nar.get("detailed_review"), str) and nar["detailed_review"].strip():
+        text = nar["detailed_review"].strip()
+    else:
+        op = canonical.get("opinion", {}) or {}
+        if isinstance(op.get("text"), str) and op["text"].strip():
+            text = op["text"].strip()
+        elif isinstance(op.get("summary"), str):
+            text = op["summary"]
+    out["full_text"] = text or ""
+    return out

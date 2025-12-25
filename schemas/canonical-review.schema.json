@@ -1,0 +1,1645 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/schemas/canonical-review.schema.json",
+  "title": "Canonical Academic Peer Review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "review_id",
+    "version",
+    "created_at",
+    "provenance",
+    "referee",
+    "target",
+    "opinion"
+  ],
+  "properties": {
+    "review_id": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_system"
+      ],
+      "properties": {
+        "source_system": {
+          "type": "string"
+        },
+        "source_review_id": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "imported_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "raw_payload": {
+          "type": "object"
+        },
+        "mapping": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mapping_spec_id": {
+              "type": "string"
+            },
+            "mapping_spec_version": {
+              "type": "string"
+            },
+            "mapper_version": {
+              "type": "string"
+            },
+            "lossiness_notes": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "referee": {
+      "$ref": "#/$defs/referee"
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "work_id",
+        "work_type"
+      ],
+      "properties": {
+        "work_id": {
+          "type": "string"
+        },
+        "work_type": {
+          "type": "string",
+          "enum": [
+            "article",
+            "preprint",
+            "dataset",
+            "software",
+            "registered_report",
+            "proposal",
+            "other"
+          ]
+        },
+        "venue": {
+          "type": "string"
+        },
+        "track": {
+          "type": "string"
+        },
+        "revision_of": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        }
+      }
+    },
+    "review_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "review_type": {
+          "type": "string",
+          "enum": [
+            "initial",
+            "revision",
+            "rebuttal_response",
+            "meta_review",
+            "shepherding",
+            "post_publication",
+            "replication"
+          ]
+        },
+        "round": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "requested_by": {
+          "type": "string"
+        },
+        "time_spent_hours": {
+          "type": "number",
+          "minimum": 0
+        },
+        "expertise": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "self_reported_level": {
+              "type": "string",
+              "enum": [
+                "expert",
+                "knowledgeable",
+                "somewhat_familiar",
+                "not_familiar"
+              ]
+            },
+            "domain_tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "metric_catalog_ref": {
+      "type": "string"
+    },
+    "metrics": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "$ref": "#/$defs/metricAssessment"
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "recommendation": {
+          "type": "string",
+          "enum": [
+            "strong_accept",
+            "accept",
+            "weak_accept",
+            "borderline",
+            "weak_reject",
+            "reject",
+            "strong_reject",
+            "revise",
+            "major_revision",
+            "minor_revision"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "summary_rationale": {
+          "type": "string"
+        }
+      }
+    },
+    "opinion": {
+      "$ref": "#/$defs/opinion"
+    },
+    "findings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strengths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        },
+        "weaknesses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        },
+        "required_changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/actionItem"
+          }
+        },
+        "optional_suggestions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/actionItem"
+          }
+        }
+      }
+    },
+    "claim_assessments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/claimAssessment"
+      }
+    },
+    "artifact_assessments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifactAssessment"
+      }
+    },
+    "ethics_and_risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ethical_concerns": {
+          "type": "boolean"
+        },
+        "concern_categories": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "human_subjects",
+              "privacy",
+              "bias_fairness",
+              "dual_use",
+              "security",
+              "environmental",
+              "misinformation",
+              "other"
+            ]
+          }
+        },
+        "notes": {
+          "type": "string"
+        },
+        "required_mitigations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/actionItem"
+          }
+        }
+      }
+    },
+    "narrative": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "detailed_review": {
+          "type": "string"
+        },
+        "author_questions": {
+          "type": "string"
+        },
+        "confidential_to_editors": {
+          "type": "string"
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/section"
+          }
+        }
+      }
+    },
+    "calibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reviewer_leniency_z": {
+          "type": "number"
+        },
+        "historical_accept_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "signatures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "value"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "pgp",
+              "did",
+              "x509",
+              "other"
+            ]
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "extensions": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "anyOf": [
+        {
+          "properties": {
+            "opinion": {
+              "required": [
+                "summary"
+              ]
+            }
+          },
+          "required": [
+            "opinion"
+          ]
+        },
+        {
+          "properties": {
+            "opinion": {
+              "required": [
+                "text"
+              ]
+            }
+          },
+          "required": [
+            "opinion"
+          ]
+        },
+        {
+          "properties": {
+            "findings": {
+              "anyOf": [
+                {
+                  "required": [
+                    "strengths"
+                  ],
+                  "properties": {
+                    "strengths": {
+                      "minItems": 1
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "weaknesses"
+                  ],
+                  "properties": {
+                    "weaknesses": {
+                      "minItems": 1
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "questions"
+                  ],
+                  "properties": {
+                    "questions": {
+                      "minItems": 1
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "opinion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stance": {
+          "type": "string",
+          "enum": [
+            "positive",
+            "mixed",
+            "negative",
+            "unclear"
+          ]
+        },
+        "high_level_reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "referee": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "referee_type",
+        "identity_mode"
+      ],
+      "properties": {
+        "referee_type": {
+          "type": "string",
+          "enum": [
+            "human",
+            "ai",
+            "hybrid"
+          ]
+        },
+        "identity_mode": {
+          "type": "string",
+          "enum": [
+            "double_blind",
+            "single_blind",
+            "open",
+            "pseudonymous",
+            "confidential"
+          ]
+        },
+        "referee_id": {
+          "type": "string"
+        },
+        "competing_interests_declared": {
+          "type": "boolean"
+        },
+        "competing_interests_statement": {
+          "type": "string"
+        },
+        "human_referee": {
+          "$ref": "#/$defs/humanReferee"
+        },
+        "ai_referee": {
+          "$ref": "#/$defs/aiReferee"
+        },
+        "hybrid_workflow": {
+          "$ref": "#/$defs/hybridWorkflow"
+        },
+        "reproducibility": {
+          "$ref": "#/$defs/refereeReproducibility"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "referee_type": {
+                "const": "human"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "human_referee"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "referee_type": {
+                "const": "ai"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "ai_referee"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "referee_type": {
+                "const": "hybrid"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "ai_referee",
+              "hybrid_workflow"
+            ]
+          }
+        }
+      ]
+    },
+    "humanReferee": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "expertise": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "self_reported_level": {
+              "type": "string",
+              "enum": [
+                "expert",
+                "knowledgeable",
+                "somewhat_familiar",
+                "not_familiar"
+              ]
+            },
+            "domain_tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "affiliation_redacted": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "refereeReproducibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "seed": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "seeds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "stage",
+              "seed"
+            ],
+            "properties": {
+              "stage": {
+                "type": "string"
+              },
+              "seed": {
+                "oneOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "determinism": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "intended_deterministic": {
+              "type": "boolean"
+            },
+            "notes": {
+              "type": "string"
+            }
+          }
+        },
+        "run_replay": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "run_id": {
+              "type": "string"
+            },
+            "replay_command": {
+              "type": "string"
+            },
+            "config_ref": {
+              "type": "string"
+            },
+            "bundle_ref": {
+              "type": "string"
+            },
+            "bundle_hash": {
+              "type": "string"
+            }
+          }
+        },
+        "environment_snapshot": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "os": {
+              "type": "string"
+            },
+            "runtime": {
+              "type": "string"
+            },
+            "container_image": {
+              "type": "string"
+            },
+            "notes": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "aiReferee": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system",
+        "execution"
+      ],
+      "properties": {
+        "system": {
+          "$ref": "#/$defs/aiSystemProvenance"
+        },
+        "execution": {
+          "$ref": "#/$defs/aiExecutionProvenance"
+        },
+        "inputs": {
+          "$ref": "#/$defs/aiInputsProvenance"
+        },
+        "outputs": {
+          "$ref": "#/$defs/aiOutputsProvenance"
+        },
+        "safety": {
+          "$ref": "#/$defs/aiSafetyProvenance"
+        }
+      }
+    },
+    "aiSystemProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "critic_framework",
+        "models"
+      ],
+      "properties": {
+        "critic_framework": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "version"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "commit": {
+              "type": "string"
+            },
+            "build_id": {
+              "type": "string"
+            }
+          }
+        },
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "organization": {
+              "type": "string"
+            },
+            "platform": {
+              "type": "string"
+            }
+          }
+        },
+        "models": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/aiModelSpec"
+          }
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/aiToolSpec"
+          }
+        },
+        "policies": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "policy_name": {
+              "type": "string"
+            },
+            "policy_version": {
+              "type": "string"
+            },
+            "notes": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "aiModelSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "model_id"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "reviewer",
+            "critic",
+            "verifier",
+            "retriever",
+            "ranker",
+            "planner",
+            "summarizer",
+            "other"
+          ]
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "model_version": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "weights_hash": {
+          "type": "string"
+        }
+      }
+    },
+    "aiToolSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "invocations": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "aiExecutionProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "started_at",
+        "ended_at"
+      ],
+      "properties": {
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "ended_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "wall_time_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cpu_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "gpu_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "seed": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "seeds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "stage",
+              "seed"
+            ],
+            "properties": {
+              "stage": {
+                "type": "string"
+              },
+              "seed": {
+                "oneOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "compute_environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "region": {
+              "type": "string"
+            },
+            "instance_type": {
+              "type": "string"
+            },
+            "accelerator": {
+              "type": "string"
+            },
+            "notes": {
+              "type": "string"
+            }
+          }
+        },
+        "cost": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "currency": {
+              "type": "string",
+              "default": "USD"
+            },
+            "estimated_total": {
+              "type": "number",
+              "minimum": 0
+            },
+            "line_items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "amount"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "api_usage",
+                      "compute",
+                      "storage",
+                      "tooling",
+                      "other"
+                    ]
+                  },
+                  "amount": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "notes": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "estimation_method": {
+              "type": "string"
+            }
+          }
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "logs_ref": {
+          "type": "string"
+        }
+      }
+    },
+    "aiInputsProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "materials_reviewed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "ref"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "pdf",
+                  "tex",
+                  "html",
+                  "supplement",
+                  "code_repo",
+                  "dataset",
+                  "other"
+                ]
+              },
+              "ref": {
+                "type": "string"
+              },
+              "content_hash": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "retrieval": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "used": {
+              "type": "boolean"
+            },
+            "corpus": {
+              "type": "string"
+            },
+            "top_k": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "queries_hash": {
+              "type": "string"
+            },
+            "results_ref": {
+              "type": "string"
+            }
+          }
+        },
+        "prompts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "role",
+              "prompt_hash"
+            ],
+            "properties": {
+              "role": {
+                "type": "string"
+              },
+              "prompt_hash": {
+                "type": "string"
+              },
+              "prompt_ref": {
+                "type": "string"
+              },
+              "redaction_applied": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    "aiOutputsProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "generated_artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "ref"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "review_json",
+                  "review_text",
+                  "claim_graph",
+                  "checks_report",
+                  "other"
+                ]
+              },
+              "ref": {
+                "type": "string"
+              },
+              "content_hash": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "token_usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "input_tokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "output_tokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total_tokens": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "aiSafetyProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "guardrails_triggered": {
+          "type": "boolean"
+        },
+        "guardrails_notes": {
+          "type": "string"
+        },
+        "pii_handling": {
+          "type": "string",
+          "enum": [
+            "not_applicable",
+            "redacted",
+            "not_retained",
+            "retained_with_consent",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "hybridWorkflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "human_contributions"
+      ],
+      "properties": {
+        "human_contributions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/humanContribution"
+          }
+        },
+        "attribution": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ai_fraction_estimate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "human_fraction_estimate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "method": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "humanContribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "prompt_engineering",
+            "scoping",
+            "fact_checking",
+            "technical_verification",
+            "editing",
+            "score_adjustment",
+            "final_approval",
+            "conflict_of_interest_screening",
+            "other"
+          ]
+        },
+        "contributor_id": {
+          "type": "string"
+        },
+        "time_spent_minutes": {
+          "type": "number",
+          "minimum": 0
+        },
+        "notes": {
+          "type": "string"
+        },
+        "diff_ref": {
+          "type": "string"
+        }
+      }
+    },
+    "metricAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "label",
+        "scale",
+        "value"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "aspect": {
+          "type": "string",
+          "enum": [
+            "correctness",
+            "rigor",
+            "clarity",
+            "readability",
+            "novelty",
+            "significance",
+            "impact",
+            "reproducibility",
+            "methodology",
+            "evaluation",
+            "writing",
+            "presentation",
+            "ethics",
+            "overall",
+            "confidence",
+            "other"
+          ]
+        },
+        "scale": {
+          "$ref": "#/$defs/scale"
+        },
+        "value": {
+          "$ref": "#/$defs/metricValue"
+        },
+        "uncertainty": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "interval": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "low": {
+                  "type": "number"
+                },
+                "high": {
+                  "type": "number"
+                }
+              }
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        },
+        "justification": {
+          "type": "string"
+        },
+        "evidence_links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidenceLink"
+          }
+        },
+        "normalized": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "value_0_1": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "method": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "scale": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "ordinal",
+            "interval",
+            "ratio",
+            "binary",
+            "categorical",
+            "textual"
+          ]
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "step": {
+          "type": "number"
+        },
+        "anchors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "value",
+              "label"
+            ],
+            "properties": {
+              "value": {
+                "type": [
+                  "number",
+                  "string",
+                  "boolean"
+                ]
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "units": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "metricValue": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        }
+      ]
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "info",
+            "minor",
+            "major",
+            "critical"
+          ]
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence_links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidenceLink"
+          }
+        }
+      }
+    },
+    "actionItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "blocking"
+          ]
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "typo",
+            "clarification",
+            "analysis",
+            "experiment",
+            "theory",
+            "writing",
+            "artifact",
+            "ethics",
+            "other"
+          ]
+        },
+        "applies_to": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "section": {
+              "type": "string"
+            },
+            "figure": {
+              "type": "string"
+            },
+            "table": {
+              "type": "string"
+            },
+            "claim_id": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "content"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "evidenceLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "ref"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "paper_section",
+            "figure",
+            "table",
+            "equation",
+            "appendix",
+            "supplement",
+            "code",
+            "data",
+            "external"
+          ]
+        },
+        "ref": {
+          "type": "string"
+        },
+        "quote": {
+          "type": "string"
+        }
+      }
+    },
+    "claimAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_id",
+        "claim_text",
+        "status"
+      ],
+      "properties": {
+        "claim_id": {
+          "type": "string"
+        },
+        "claim_text": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "supported",
+            "partially_supported",
+            "unclear",
+            "unsupported",
+            "not_evaluated"
+          ]
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/metricAssessment"
+          }
+        },
+        "notes": {
+          "type": "string"
+        },
+        "evidence_links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidenceLink"
+          }
+        }
+      }
+    },
+    "artifactAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_type",
+        "availability",
+        "assessment"
+      ],
+      "properties": {
+        "artifact_type": {
+          "type": "string",
+          "enum": [
+            "code",
+            "data",
+            "models",
+            "appendix",
+            "protocol",
+            "other"
+          ]
+        },
+        "availability": {
+          "type": "string",
+          "enum": [
+            "public",
+            "restricted",
+            "available_on_request",
+            "not_available",
+            "unknown"
+          ]
+        },
+        "ref": {
+          "type": "string"
+        },
+        "assessment": {
+          "type": "string",
+          "enum": [
+            "excellent",
+            "good",
+            "adequate",
+            "poor",
+            "not_applicable",
+            "not_evaluated"
+          ]
+        },
+        "reproducibility_notes": {
+          "type": "string"
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "status"
+            ],
+            "properties": {
+              "key": {
+                "type": "string",
+                "enum": [
+                  "builds",
+                  "runs",
+                  "tests_pass",
+                  "data_complete",
+                  "instructions_clear",
+                  "licenses_present",
+                  "deterministic",
+                  "computational_cost_reported"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail",
+                  "partial",
+                  "unknown"
+                ]
+              },
+              "notes": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

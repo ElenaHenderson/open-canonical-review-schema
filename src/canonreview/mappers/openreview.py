@@ -1,0 +1,299 @@
+from __future__ import annotations
+from typing import Any, Dict, List, Optional, Tuple
+import uuid
+
+from ..catalog import load_catalog, alias_map, metric_index
+from ..util import now_iso, epoch_ms_to_iso, parse_numeric_prefix, guess_scale_from_value, normalize_linear, map_recommendation_from_numeric, map_recommendation_from_text, first_paragraph
+
+KNOWN_TEXT_KEYS = {
+    "summary","paper_summary","review_summary","review","comments","main_review","detailed_review",
+    "confidential_comments","confidential_to_chairs","questions","strengths","weaknesses"
+}
+
+def _extract_time(note: Dict[str, Any]) -> str:
+    # OpenReview uses cdate/tcdate in ms since epoch
+    for k in ("tcdate","cdate","tmdate","mdate"):
+        v = note.get(k)
+        if isinstance(v, int):
+            return epoch_ms_to_iso(v)
+    return now_iso()
+
+def _get_content(note: Dict[str, Any]) -> Dict[str, Any]:
+    c = note.get("content")
+    return c if isinstance(c, dict) else {}
+
+def _get_signer(note: Dict[str, Any]) -> Optional[str]:
+    sig = note.get("signatures")
+    if isinstance(sig, list) and sig:
+        if isinstance(sig[0], str): return sig[0]
+    return None
+
+def _target_work_id(note: Dict[str, Any]) -> Optional[str]:
+    for k in ("forum","id","note_id"):
+        v = note.get(k)
+        if isinstance(v, str) and v:
+            return v
+    c = _get_content(note)
+    for k in ("paper_id","submission_id","work_id"):
+        v = c.get(k)
+        if isinstance(v, str) and v:
+            return v
+    return None
+
+def _best_text_opinion(content: Dict[str, Any]) -> str:
+    for k in ("summary","paper_summary","review_summary"):
+        if isinstance(content.get(k), str) and content[k].strip():
+            return content[k].strip()
+    for k in ("review","comments","main_review","detailed_review"):
+        if isinstance(content.get(k), str) and content[k].strip():
+            return first_paragraph(content[k].strip(), max_len=500)
+    return ""
+
+def _collect_findings(content: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for k in ("strengths","weaknesses","questions"):
+        v = content.get(k)
+        if isinstance(v, list):
+            items = [{"text": str(x)} for x in v if str(x).strip()]
+            if items:
+                out[k] = items
+        elif isinstance(v, str) and v.strip():
+            # if newline-separated
+            bullets = [b.strip("-* \t") for b in v.splitlines() if b.strip()]
+            if bullets:
+                out[k] = [{"text": b} for b in bullets]
+    return out
+
+def _metric_key_for_label(label: str, amap: Dict[str,str], idx: Dict[str, Any]) -> Tuple[str, Optional[str]]:
+    # Return (key, aspect)
+    if not label:
+        return "other", "other"
+    lcf = label.casefold()
+    if lcf in idx:
+        m = idx[lcf]
+        return m["key"], m.get("aspect")
+    if lcf in amap:
+        key = amap[lcf]
+        # best effort aspect from catalog if present
+        return key, None
+    # fuzzy contains match over aliases
+    for alias, key in amap.items():
+        if alias in lcf or lcf in alias:
+            return key, None
+    return "other", "other"
+
+def from_openreview(note: Dict[str, Any], *, keep_raw: bool = False) -> Dict[str, Any]:
+    catalog = load_catalog()
+    amap = alias_map(catalog)
+    # also index by metric key as lowercase to allow exact_key match
+    idx = {m["key"].casefold(): m for m in catalog.get("metrics", [])}
+
+    created = _extract_time(note)
+    content = _get_content(note)
+
+    work_id = _target_work_id(note) or "unknown"
+    signer = _get_signer(note)
+
+    review_id = note.get("id") if isinstance(note.get("id"), str) else str(uuid.uuid4())
+
+    out: Dict[str, Any] = {
+        "review_id": review_id,
+        "version": "1.0.0",
+        "created_at": created,
+        "provenance": {
+            "source_system": "openreview",
+            "source_review_id": note.get("id") if isinstance(note.get("id"), str) else None,
+            "imported_at": now_iso(),
+            "mapping": {"mapping_spec_id": "canonical-review.mapping.v1", "mapping_spec_version": "1.1.0", "mapper_version": "0.1.0"}
+        },
+        "referee": {
+            "referee_type": "human",
+            "identity_mode": "confidential",
+            "referee_id": signer,
+            "human_referee": {}
+        },
+        "target": {
+            "work_id": work_id,
+            "work_type": "other"
+        },
+        "metric_catalog_ref": catalog.get("catalog_id"),
+        "metrics": [],
+        "opinion": {
+            "summary": _best_text_opinion(content) or "No summary provided."
+        }
+    }
+
+    if keep_raw:
+        out["provenance"]["raw_payload"] = note
+
+    # narrative mapping
+    narrative = {}
+    for src, dst in [
+        ("summary","summary"),
+        ("review","detailed_review"),
+        ("comments","detailed_review"),
+        ("main_review","detailed_review"),
+        ("detailed_review","detailed_review"),
+        ("confidential_comments","confidential_to_editors"),
+        ("confidential_to_chairs","confidential_to_editors"),
+        ("author_questions","author_questions")
+    ]:
+        v = content.get(src)
+        if isinstance(v, str) and v.strip():
+            # keep the first non-empty for detailed_review fields
+            if dst not in narrative:
+                narrative[dst] = v.strip()
+    if narrative:
+        out["narrative"] = narrative
+
+    findings = _collect_findings(content)
+    if findings:
+        out["findings"] = findings
+        # strengthen opinion if missing
+        if (not out["opinion"].get("summary")) and findings:
+            any_text = next(iter(findings.values()))[0]["text"]
+            out["opinion"]["summary"] = first_paragraph(any_text, 200)
+
+    # decision and metrics
+    rec_raw = None
+    for k in ("recommendation","rating","decision","overallEvaluation","overall_rating","overall"):
+        if k in content:
+            rec_raw = content.get(k)
+            break
+
+    conf_raw = None
+    for k in ("confidence","reviewer_confidence"):
+        if k in content:
+            conf_raw = content.get(k)
+            break
+
+    # Parse recommendation
+    decision = {}
+    if rec_raw is not None:
+        num, rest = parse_numeric_prefix(rec_raw)
+        if num is not None:
+            scale = guess_scale_from_value(num)
+            decision["recommendation"] = map_recommendation_from_numeric(num, scale) or map_recommendation_from_text(rest or "") or "borderline"
+            # also store overall metric
+            out["metrics"].append({
+                "key":"overall",
+                "label": "Overall Assessment",
+                "aspect":"overall",
+                "scale": scale,
+                "value": num,
+                "normalized": {"value_0_1": normalize_linear(num, scale), "method":"linear_to_unit_interval"} if normalize_linear(num, scale) is not None else None
+            })
+        elif isinstance(rec_raw, str):
+            decision["recommendation"] = map_recommendation_from_text(rec_raw) or "borderline"
+    if conf_raw is not None:
+        num, _ = parse_numeric_prefix(conf_raw)
+        if num is not None:
+            scale = guess_scale_from_value(num)
+            # treat confidence as metric; decision.confidence expects 0..1
+            out["metrics"].append({
+                "key":"confidence",
+                "label":"Reviewer Confidence",
+                "aspect":"confidence",
+                "scale": scale,
+                "value": num,
+                "normalized": {"value_0_1": normalize_linear(num, scale), "method":"linear_to_unit_interval"} if normalize_linear(num, scale) is not None else None
+            })
+            n01 = normalize_linear(num, scale)
+            if isinstance(n01, (int,float)):
+                decision["confidence"] = float(max(0.0, min(1.0, n01)))
+    if decision:
+        out["decision"] = {k:v for k,v in decision.items() if v is not None}
+
+    # Additional structured metric fields from content
+    for k, v in content.items():
+        if k in KNOWN_TEXT_KEYS:
+            continue
+        if k in {"recommendation","rating","decision","overallEvaluation","confidence","reviewer_confidence"}:
+            continue
+        # numeric-like fields
+        num, rest = parse_numeric_prefix(v)
+        if num is None:
+            continue
+        key, _aspect = _metric_key_for_label(k.replace("_"," ").strip(), amap, idx)
+        aspect = None
+        for m in catalog.get("metrics", []):
+            if m["key"] == key:
+                aspect = m.get("aspect")
+                break
+        if aspect is None:
+            aspect = "other"
+        scale = guess_scale_from_value(num)
+        norm = normalize_linear(num, scale)
+        metric = {
+            "key": key,
+            "label": k.replace("_"," ").strip(),
+            "aspect": aspect,
+            "scale": scale,
+            "value": num
+        }
+        if norm is not None:
+            metric["normalized"] = {"value_0_1": float(max(0.0, min(1.0, norm))), "method":"linear_to_unit_interval"}
+        if rest:
+            metric["justification"] = rest
+        out["metrics"].append(metric)
+
+    # Remove null normalized stubs
+    for m in out["metrics"]:
+        if m.get("normalized") is None:
+            m.pop("normalized", None)
+
+    # Ensure opinion exists even if blank
+    if not out.get("opinion", {}).get("summary") and not out.get("opinion", {}).get("text"):
+        out["opinion"] = {"summary": "No opinion text provided."}
+    return out
+
+def to_openreview(canonical: Dict[str, Any]) -> Dict[str, Any]:
+    # Lossy: produce a Note-like dict with a 'content' review form
+    content: Dict[str, Any] = {}
+    # Map narrative/opinion
+    op = canonical.get("opinion", {}) or {}
+    if isinstance(op.get("summary"), str):
+        content["summary"] = op["summary"]
+    if isinstance(op.get("text"), str):
+        content["review"] = op["text"]
+    nar = canonical.get("narrative", {}) or {}
+    if "detailed_review" in nar and isinstance(nar["detailed_review"], str):
+        content.setdefault("review", nar["detailed_review"])
+    if "confidential_to_editors" in nar and isinstance(nar["confidential_to_editors"], str):
+        content["confidential_comments"] = nar["confidential_to_editors"]
+
+    # Findings
+    findings = canonical.get("findings", {}) or {}
+    for k in ("strengths","weaknesses","questions"):
+        if isinstance(findings.get(k), list) and findings[k]:
+            content[k] = [f.get("text") for f in findings[k] if isinstance(f, dict) and f.get("text")]
+
+    # Decision recommendation
+    dec = canonical.get("decision", {}) or {}
+    if isinstance(dec.get("recommendation"), str):
+        content["recommendation"] = dec["recommendation"].replace("_"," ").title()
+
+    # Metrics back to fields (use key as field name)
+    for m in canonical.get("metrics", []) or []:
+        if not isinstance(m, dict): 
+            continue
+        key = m.get("key")
+        val = m.get("value")
+        if key and val is not None:
+            # avoid overwriting recommendation
+            if key in {"overall","confidence"}:
+                # mirror common OpenReview fields
+                if key == "overall":
+                    content.setdefault("rating", val)
+                else:
+                    content.setdefault("confidence", val)
+            else:
+                content.setdefault(key, val)
+
+    note = {
+        "id": canonical.get("review_id"),
+        "forum": canonical.get("target", {}).get("work_id"),
+        "content": content,
+        "signatures": [canonical.get("referee", {}).get("referee_id")] if canonical.get("referee", {}).get("referee_id") else []
+    }
+    return note
