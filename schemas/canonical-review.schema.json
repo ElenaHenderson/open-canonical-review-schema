@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.org/schemas/canonical-review.schema.json",
-  "$comment": "Copyright (c) 2026 Valency Systems Inc. Licensed under MIT.",
+  "$comment": "Copyright (c) 2026 Valency Systems Inc. Licensed under Apache-2.0.",
   "title": "Open Canonical Review Schema",
   "type": "object",
   "additionalProperties": false,
@@ -370,6 +370,9 @@
     },
     "extensions": {
       "type": "object"
+    },
+    "written_report": {
+      "$ref": "#/$defs/writtenReport"
     }
   },
   "allOf": [
@@ -1893,6 +1896,62 @@
               }
             }
           }
+        }
+      }
+    },
+    "writtenReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional written report document submitted alongside the structured review",
+      "required": ["content_type"],
+      "properties": {
+        "filename": {
+          "type": "string",
+          "description": "Original filename of the uploaded report"
+        },
+        "content_type": {
+          "type": "string",
+          "enum": ["pdf", "docx", "markdown", "txt"],
+          "description": "Format of the written report (PDF, Word document, Markdown, or plain text)"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL or reference to the uploaded file"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/contentHash",
+          "description": "SHA-256/512 hash for integrity verification"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "File size in bytes"
+        },
+        "uploaded_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the report was uploaded"
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional description of the report contents"
+        }
+      }
+    },
+    "contentHash": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Content-addressed hash for integrity verification",
+      "required": ["algorithm", "value"],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "enum": ["sha256", "sha512"]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
         }
       }
     }

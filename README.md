@@ -159,8 +159,37 @@ The canonical review schema captures:
 | `metrics` | Structured assessments (soundness, clarity, novelty, etc.) |
 | `findings` | Strengths, weaknesses, questions, required changes |
 | `ethics_and_risk` | Ethical concerns and required mitigations |
+| `written_report` | Optional uploaded report document (PDF, Word, Markdown, TXT) |
 
 For AI referees, the schema supports detailed provenance including model specifications, execution traces, token usage, costs, and safety metadata.
+
+### Written Report Upload
+
+Reviewers can optionally attach a written report document alongside their structured review. This supports traditional narrative-style reviews while maintaining the structured data benefits of OCRS.
+
+Supported formats:
+- **PDF** (`pdf`) - Portable Document Format
+- **Word** (`docx`) - Microsoft Word documents
+- **Markdown** (`markdown`) - Markdown text files
+- **Plain Text** (`txt`) - Plain text files
+
+Example:
+```json
+{
+  "written_report": {
+    "filename": "detailed_review.pdf",
+    "content_type": "pdf",
+    "url": "https://example.com/reviews/rev_001.pdf",
+    "size_bytes": 245678,
+    "uploaded_at": "2025-01-15T14:30:00Z",
+    "content_hash": {
+      "algorithm": "sha256",
+      "value": "a1b2c3d4e5f6..."
+    },
+    "description": "Detailed technical review with annotated figures"
+  }
+}
+```
 
 ## Entity Identifiers
 
@@ -295,7 +324,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 

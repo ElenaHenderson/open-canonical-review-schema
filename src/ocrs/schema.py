@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Valency Systems Inc.
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """JSON schema loading and validation for canonical reviews."""
 
 from __future__ import annotations

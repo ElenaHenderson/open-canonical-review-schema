@@ -4,7 +4,7 @@ Thank you for your interest in contributing to the Open Canonical Review Schema 
 
 ## Contributor License Agreement
 
-Before your contribution can be accepted, you must sign our [Contributor License Agreement (CLA)](CLA.md). This ensures that Valency Systems Inc. can use and distribute your contributions under the project's MIT license.
+Before your contribution can be accepted, you must sign our [Contributor License Agreement (CLA)](CLA.md). This ensures that Valency Systems Inc. can use and distribute your contributions under the project's Apache License 2.0.
 
 ## Getting Started
 

@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Valency Systems Inc.
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Metric catalog loading and alias resolution."""
 
 from __future__ import annotations

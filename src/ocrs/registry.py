@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Valency Systems Inc.
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Registry of source/target mappers for canonical review conversion."""
 
 from __future__ import annotations
