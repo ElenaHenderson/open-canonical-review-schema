@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.org/schemas/canonical-review.schema.json",
-  "title": "Canonical Academic Peer Review",
+  "$comment": "Copyright (c) 2026 Valency Systems Inc. Licensed under MIT.",
+  "title": "Open Canonical Review Schema",
   "type": "object",
   "additionalProperties": false,
   "required": [

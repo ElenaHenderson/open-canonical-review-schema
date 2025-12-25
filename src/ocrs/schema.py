@@ -1,24 +1,32 @@
+# Copyright (c) 2026 Valency Systems Inc.
+# SPDX-License-Identifier: MIT
+"""JSON schema loading and validation for canonical reviews."""
+
 from __future__ import annotations
+
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from jsonschema import Draft202012Validator
-from jsonschema.exceptions import ValidationError
 
-SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "schemas" / "canonical-review.schema.json"
+SCHEMA_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "schemas" / "canonical-review.schema.json"
+)
 
-_validator: Optional[Draft202012Validator] = None
-_schema: Optional[Dict[str, Any]] = None
+_validator: Draft202012Validator | None = None
+_schema: dict[str, Any] | None = None
 
-def load_schema(path: Optional[str | Path] = None) -> Dict[str, Any]:
+
+def load_schema(path: str | Path | None = None) -> dict[str, Any]:
     global _schema, _validator
     p = Path(path) if path else SCHEMA_PATH
     _schema = json.loads(p.read_text())
     _validator = Draft202012Validator(_schema)
     return _schema
 
-def validate_canonical(obj: Dict[str, Any], *, schema_path: Optional[str | Path] = None) -> None:
+
+def validate_canonical(obj: dict[str, Any], *, schema_path: str | Path | None = None) -> None:
     """Validate a canonical review object; raises ValidationError on failure."""
     global _validator
     if _validator is None or schema_path is not None:

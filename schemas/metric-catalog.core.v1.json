@@ -2,7 +2,9 @@
   "catalog_id": "metric-catalog.core.v1",
   "version": "1.0.0",
   "created_at": "2025-12-25T00:00:00Z",
-  "description": "Core canonical peer-review metric catalog with aliases, recommended scales, and normalization guidance.",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2026 Valency Systems Inc.",
+  "description": "Core Open Canonical Review Schema (OCRS) metric catalog with aliases, recommended scales, and normalization guidance.",
   "normalization": {
     "default_method": "linear_to_unit_interval",
     "tie_breakers": [

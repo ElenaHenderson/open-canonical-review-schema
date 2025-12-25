@@ -3,11 +3,21 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "canonreview"
+name = "ocrs"
 version = "0.1.0"
-description = "Canonical peer-review schema + mappers for OpenReview, CMT, and narrative journal reviews."
+description = "Open Canonical Review Schema (OCRS) - schema + mappers for OpenReview, CMT, and narrative journal reviews."
 requires-python = ">=3.10"
 dependencies = ["jsonschema>=4.19.0"]
 
-[project.optional-dependencies]
-dev = ["pytest>=8.0.0"]
+[dependency-groups]
+dev = ["pytest>=8.0.0", "ruff>=0.14.0", "prek>=0.2.0"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"
