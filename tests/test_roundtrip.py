@@ -1,5 +1,9 @@
-import pytest
-from canonreview import map_from, map_to, validate_canonical
+# Copyright (c) 2026 Valency Systems Inc.
+# SPDX-License-Identifier: MIT
+"""Tests for roundtrip conversion between source formats and canonical schema."""
+
+from ocrs import map_from, map_to, validate_canonical
+
 
 def test_openreview_to_canonical_and_back():
     openreview_note = {
@@ -11,12 +15,15 @@ def test_openreview_to_canonical_and_back():
             "rating": "6: Weak Accept",
             "confidence": "4: confident",
             "summary": "Interesting paper with some gaps.",
-            "review": "The main idea is promising. However, the proof is missing key assumptions.\n\nMore detail here.",
+            "review": (
+                "The main idea is promising. However, the proof is missing key assumptions."
+                "\n\nMore detail here."
+            ),
             "soundness": 3,
             "clarity": 2,
             "strengths": ["Good motivation", "Solid empirical results"],
-            "weaknesses": ["Proof incomplete"]
-        }
+            "weaknesses": ["Proof incomplete"],
+        },
     }
     canon = map_from("openreview", openreview_note, keep_raw=True)
     validate_canonical(canon)
@@ -24,6 +31,7 @@ def test_openreview_to_canonical_and_back():
     assert canon["opinion"]["summary"]
     note2 = map_to("openreview", canon)
     assert "content" in note2 and isinstance(note2["content"], dict)
+
 
 def test_cmt_to_canonical_and_back():
     cmt = {
@@ -35,7 +43,7 @@ def test_cmt_to_canonical_and_back():
         "overallEvaluation": "7: Accept",
         "confidence": 0.8,
         "summary": "Strong contribution.",
-        "commentsToAuthors": "Well-written and significant. Missing ablation."
+        "commentsToAuthors": "Well-written and significant. Missing ablation.",
     }
     canon = map_from("cmt", cmt)
     validate_canonical(canon)
@@ -43,11 +51,15 @@ def test_cmt_to_canonical_and_back():
     assert back["reviewId"] == "cmt_r1"
     assert "commentsToAuthors" in back
 
+
 def test_journal_narrative_minimal():
     j = {
         "doi": "10.5555/12345678",
         "journal": "Journal of Tests",
-        "full_text": "This manuscript addresses an important problem. The methods are plausible but unclear.\n\nPlease clarify the assumptions."
+        "full_text": (
+            "This manuscript addresses an important problem. The methods are plausible but unclear."
+            "\n\nPlease clarify the assumptions."
+        ),
     }
     canon = map_from("journal_narrative", j)
     validate_canonical(canon)
