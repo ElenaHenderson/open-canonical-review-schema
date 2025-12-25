@@ -1,0 +1,28 @@
+{
+  "id": 4527,
+  "pid": 183,
+  "ordinal": 2,
+  "rtype": 1,
+  "rtype_name": "review",
+  "submitted": true,
+  "submitted_at": 1735689600,
+  "round": "R1",
+  "reviewer": {
+    "user": "reviewer42@institution.edu",
+    "first": "Jane",
+    "last": "Doe"
+  },
+  "overall_merit": "4. Accept",
+  "reviewer_expertise": "3. Knowledgeable",
+  "paper_summary": "This paper presents a novel approach to distributed consensus using a hybrid Byzantine fault-tolerant protocol. The key contribution is a new leader election mechanism that reduces latency while maintaining safety guarantees.",
+  "strengths": "- Clear and well-organized presentation of the protocol\n- Strong theoretical foundations with formal proofs\n- Comprehensive experimental evaluation on realistic workloads\n- Open-source implementation provided",
+  "weaknesses": "- Limited comparison with recent state-of-the-art protocols (e.g., Hotstuff)\n- The latency improvements are marginal in WAN settings\n- Some notation inconsistencies between sections 3 and 4",
+  "comments": "This is a solid contribution to the distributed systems literature. The proposed protocol offers meaningful improvements in the common case while maintaining the safety properties of classical BFT protocols.\n\nThe paper would benefit from a more thorough comparison with Hotstuff and Tendermint, particularly in terms of message complexity during view changes.\n\nMinor: Please fix the typo on page 7, line 234.",
+  "questions_for_authors": "1. How does the protocol perform with heterogeneous network conditions?\n2. Can you provide intuition for why the leader election converges faster?",
+  "confidential_comments": "I have no conflicts with this submission. The work is technically sound and publication-worthy with minor revisions.",
+  "suitability": "4. Good fit for the conference",
+  "novelty": "3. Some new ideas",
+  "technical_quality": "4. Strong",
+  "presentation": "4. Well written",
+  "reproducibility": "5. Excellent - code and data available"
+}

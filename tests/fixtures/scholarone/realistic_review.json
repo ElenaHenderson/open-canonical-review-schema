@@ -1,0 +1,27 @@
+{
+  "documentId": "DOC-2024-789012",
+  "submissionId": "SUB-2024-456789",
+  "manuscriptTitle": "Machine Learning Approaches for Early Detection of Neurodegenerative Diseases",
+  "reviewerNumber": 2,
+  "reviewerOrcid": "0000-0002-1234-5678",
+  "dateReviewReceived": "2024-12-20",
+  "dateReviewRequested": "2024-11-25",
+  "overallRecommendation": 2,
+  "overallRecommendationLabel": "Minor Revision",
+  "commentsToAuthor": "This manuscript presents a promising machine learning framework for early detection of neurodegenerative diseases using multimodal imaging data. The approach is methodologically sound and the results are encouraging.\n\n**Strengths:**\n- Novel combination of MRI and PET features using attention mechanisms\n- Large, well-characterized patient cohort (n=2,847)\n- Rigorous cross-validation methodology\n- Clinical interpretability of the feature importance analysis\n\n**Weaknesses:**\n- The comparison with existing methods could be expanded (Table 3)\n- External validation on an independent cohort would strengthen claims\n- Some implementation details are missing (e.g., hyperparameter selection)\n\n**Specific Comments:**\n\n1. Page 5, Methods: Please clarify the preprocessing pipeline for the PET images. Were partial volume corrections applied?\n\n2. Page 8, Results: The sensitivity/specificity trade-off should be discussed in more detail. What threshold was used for the ROC analysis?\n\n3. Page 12, Discussion: The limitations section should mention the demographic composition of the training cohort.\n\n**Minor:**\n- Typo on page 3: 'netowrk' should be 'network'\n- Figure 2 legend is cut off in the PDF",
+  "commentsToEditor": "This is a strong submission that advances the field of computational neurology. The methodology is rigorous and the clinical implications are significant. I recommend minor revision to address the points raised in my review to authors.\n\nI have verified that I have no conflicts of interest with the authors or their institutions.",
+  "criteriaResponses": [
+    {"criterionId": 1, "criterionName": "Originality", "response": 4, "maxResponse": 5, "label": "Good"},
+    {"criterionId": 2, "criterionName": "Scientific Validity", "response": 4, "maxResponse": 5, "label": "Good"},
+    {"criterionId": 3, "criterionName": "Significance", "response": 5, "maxResponse": 5, "label": "Excellent"},
+    {"criterionId": 4, "criterionName": "Presentation Quality", "response": 4, "maxResponse": 5, "label": "Good"},
+    {"criterionId": 5, "criterionName": "Ethical Standards", "response": 5, "maxResponse": 5, "label": "Excellent"},
+    {"criterionId": 6, "criterionName": "Data Availability", "response": 3, "maxResponse": 5, "label": "Adequate"}
+  ],
+  "journalName": "Neurology AI",
+  "journalCode": "NEUAI",
+  "articleType": "Research Article",
+  "specialIssue": null,
+  "competingInterests": "None declared",
+  "fundingStatement": null
+}

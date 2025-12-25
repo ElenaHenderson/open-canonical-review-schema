@@ -1,0 +1,23 @@
+{
+  "reviewId": "ICML2024_Rev_3847",
+  "paperId": 2847,
+  "paperTitle": "Provably Efficient Reinforcement Learning with Function Approximation",
+  "conferenceName": "ICML 2024",
+  "trackName": "Main Conference",
+  "reviewerId": "reviewer_8472",
+  "reviewerEmail": "reviewer8472@cmt3.microsoft.com",
+  "submissionDate": "2024-01-15T23:59:59Z",
+  "reviewDate": "2024-02-28T14:32:00Z",
+  "overallEvaluation": "6: Weak Accept",
+  "confidence": "4: High",
+  "summary": "This paper provides new regret bounds for reinforcement learning with linear function approximation under the linear MDP assumption. The main contribution is a tighter analysis that removes a log factor from previous bounds while maintaining computational efficiency.",
+  "commentsToAuthors": "This is a solid theoretical contribution to the RL theory literature. The improved regret bound is meaningful and the analysis techniques are novel.\n\n**Strengths:**\n- The log-factor improvement is non-trivial and required new proof techniques\n- The algorithm remains computationally efficient\n- The paper is technically sound\n\n**Weaknesses:**\n- The linear MDP assumption is restrictive; discussion of extensions would help\n- No empirical validation of the theoretical improvements\n- Some proof steps in the appendix are hard to follow\n\n**Detailed Comments:**\n\nSection 3.2: The reduction from the general case to the tabular setting is elegant. However, the dependence on the feature dimension d could be made more explicit.\n\nTheorem 4.1: The bound improvement comes primarily from the refined concentration argument in Lemma B.3. Can you provide intuition for why this tighter bound is achievable?\n\nMinor: Please fix citations [14] and [23] which appear to be missing author names.",
+  "commentsToChairs": "This is a competent theoretical paper that makes an incremental but meaningful contribution. The techniques may be of independent interest. I lean towards acceptance but would like to see author responses to the questions about extensions beyond linear MDPs.",
+  "technicalQuality": "4: Strong",
+  "novelty": "3: Fair",
+  "clarity": "3: Fair",
+  "significance": "3: Fair",
+  "ethicsReview": "No concerns",
+  "bestPaperNomination": false,
+  "confidentialToPC": "I have verified no conflicts of interest."
+}

@@ -1,0 +1,28 @@
+{
+  "id": "NeurIPS2024_Review_7834",
+  "forum": "xY9kL2mN3pQ",
+  "replyto": "xY9kL2mN3pQ",
+  "invitation": "NeurIPS.cc/2024/Conference/Submission183/-/Official_Review",
+  "cdate": 1735689600000,
+  "tcdate": 1735689600000,
+  "tmdate": 1735776000000,
+  "signatures": ["~Reviewer_ABC1"],
+  "readers": ["NeurIPS.cc/2024/Conference/Program_Chairs", "NeurIPS.cc/2024/Conference/Submission183/Area_Chairs"],
+  "writers": ["NeurIPS.cc/2024/Conference", "~Reviewer_ABC1"],
+  "content": {
+    "title": "Review of Submission 183",
+    "rating": "7: Accept, but not among top submissions",
+    "confidence": "4: The reviewer is confident but not absolutely certain that the evaluation is correct",
+    "summary": "This paper proposes a novel transformer architecture for long-sequence modeling that achieves linear complexity through a learned sparse attention pattern. The key insight is that attention sparsity can be dynamically predicted based on input characteristics rather than using fixed patterns. Experiments on Long Range Arena and language modeling tasks show consistent improvements over existing efficient transformers.",
+    "review": "## Summary\nThe paper addresses the quadratic complexity bottleneck of transformers for long sequences by introducing a learnable sparse attention mechanism. Unlike prior work that uses fixed sparsity patterns (e.g., Longformer, BigBird), this approach predicts attention sparsity dynamically.\n\n## Strengths\n- **Novel technical contribution**: The learned sparsity predictor is a creative solution that adapts to input complexity.\n- **Strong empirical results**: The method outperforms baselines on all LRA tasks and shows competitive perplexity on language modeling.\n- **Theoretical analysis**: Section 4 provides useful bounds on approximation error.\n- **Clear writing**: The paper is well-organized and the method is clearly explained.\n\n## Weaknesses\n- **Training overhead**: The sparsity predictor adds ~15% training time, which could be problematic for very large models.\n- **Limited scaling analysis**: Experiments only go up to 16K sequence length; it's unclear if the benefits hold at 100K+.\n- **Comparison gaps**: Missing comparison with Flash Attention and recent linear attention variants (RWKV, Mamba).\n\n## Questions\n1. How sensitive is the method to the sparsity predictor architecture?\n2. Can you provide wall-clock training times comparing to baseline methods?\n3. What happens when the predicted sparsity is very different from the optimal?\n\n## Minor Issues\n- Typo in Eq. 7: missing summation index\n- Figure 4 colors are hard to distinguish for colorblind readers",
+    "strengths": ["Novel learned sparsity mechanism that adapts to input", "Strong empirical results across multiple benchmarks", "Solid theoretical grounding with approximation bounds", "Clear presentation and well-organized paper"],
+    "weaknesses": ["Training overhead may limit applicability to very large models", "Limited evaluation at extreme sequence lengths", "Missing comparisons with recent efficient attention methods"],
+    "questions": ["Sensitivity to sparsity predictor architecture?", "Wall-clock training time comparison?", "Behavior when predicted sparsity diverges from optimal?"],
+    "soundness": "3: Good",
+    "presentation": "4: Excellent",
+    "contribution": "3: Good",
+    "ethics_flag": "No",
+    "reproducibility": "4: Good - most details provided",
+    "code_of_conduct": "Yes"
+  }
+}

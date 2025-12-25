@@ -1,0 +1,23 @@
+{
+  "reviewId": "REV-2024-78543-R2",
+  "manuscriptId": "MS-2024-001234",
+  "manuscriptTitle": "Effects of Climate Change on Coastal Erosion Patterns: A Multi-Site Analysis",
+  "revisionNumber": 2,
+  "reviewerId": 8472,
+  "reviewerName": "Anonymous",
+  "dateReceived": "2024-12-28T14:22:00Z",
+  "recommendation": "Accept",
+  "recommendationCode": 1,
+  "confidentialCommentsToEditor": "The authors have adequately addressed all my concerns from the previous rounds. The methodology is now sound and the conclusions are appropriately scoped. I recommend acceptance.",
+  "commentsToAuthor": "Thank you for your thorough revision. The authors have addressed all my previous concerns:\n\n1. The new GAM-based analysis is appropriate and well-implemented.\n2. The expanded dataset (now 45 sites) supports the broader conclusions.\n3. Uncertainty quantification has been added throughout.\n\nThe manuscript is now suitable for publication. Minor copyediting may be needed but this is beyond the scope of peer review.",
+  "ratings": [
+    {"question": "Novelty", "questionId": 1, "score": 4, "maxScore": 5, "label": "Good"},
+    {"question": "Methodology", "questionId": 2, "score": 5, "maxScore": 5, "label": "Excellent"},
+    {"question": "Presentation", "questionId": 3, "score": 4, "maxScore": 5, "label": "Good"},
+    {"question": "Significance", "questionId": 4, "score": 4, "maxScore": 5, "label": "Good"},
+    {"question": "Overall Quality", "questionId": 5, "score": 4, "maxScore": 5, "label": "Good"}
+  ],
+  "journalName": "Journal of Coastal Research",
+  "articleType": "Original Research",
+  "previousReviewId": "REV-2024-78543-R1"
+}

@@ -8,20 +8,29 @@ from collections.abc import Callable
 from typing import Any
 
 from .mappers.cmt import from_cmt, to_cmt
+from .mappers.editorialmanager import from_editorialmanager, to_editorialmanager
+from .mappers.hotcrp import from_hotcrp, to_hotcrp
 from .mappers.journal import from_journal_narrative, to_journal_narrative
 from .mappers.openreview import from_openreview, to_openreview
+from .mappers.scholarone import from_scholarone, to_scholarone
 from .schema import validate_canonical
 
 _FROM: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
-    "openreview": from_openreview,
     "cmt": from_cmt,
+    "editorialmanager": from_editorialmanager,
+    "hotcrp": from_hotcrp,
     "journal_narrative": from_journal_narrative,
+    "openreview": from_openreview,
+    "scholarone": from_scholarone,
 }
 
 _TO: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
-    "openreview": to_openreview,
     "cmt": to_cmt,
+    "editorialmanager": to_editorialmanager,
+    "hotcrp": to_hotcrp,
     "journal_narrative": to_journal_narrative,
+    "openreview": to_openreview,
+    "scholarone": to_scholarone,
 }
 
 

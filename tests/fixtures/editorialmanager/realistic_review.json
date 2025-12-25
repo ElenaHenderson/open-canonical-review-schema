@@ -1,0 +1,26 @@
+{
+  "reviewId": "REV-2024-78543",
+  "manuscriptId": "MS-2024-001234",
+  "manuscriptTitle": "Effects of Climate Change on Coastal Erosion Patterns",
+  "revisionNumber": 0,
+  "reviewerId": 8472,
+  "reviewerName": "Anonymous",
+  "dateReceived": "2024-12-15T10:30:00Z",
+  "dateRequested": "2024-11-15T09:00:00Z",
+  "dateDue": "2024-12-20T23:59:59Z",
+  "recommendation": "Major Revision",
+  "recommendationCode": 3,
+  "confidentialCommentsToEditor": "The methodology section has significant flaws that must be addressed before this paper can be considered for publication. Specifically, the statistical analysis uses outdated techniques and the sample size is insufficient for the claims being made. I recommend a major revision with a focus on strengthening the quantitative analysis.\n\nI have no conflicts of interest with the authors.",
+  "commentsToAuthor": "Thank you for submitting this manuscript examining coastal erosion patterns in the context of climate change. This is an important topic that merits investigation. However, I have several concerns that need to be addressed:\n\n**Major Issues:**\n\n1. The statistical methodology is problematic. You use a simple linear regression when the data clearly shows non-linear trends. Consider using generalized additive models or similar approaches.\n\n2. Sample size: With only 15 coastal sites over a 5-year period, the conclusions about 'global' patterns are overstated. Please either expand the dataset or temper the claims accordingly.\n\n3. The comparison with historical data (Section 4.2) lacks proper uncertainty quantification. Error bars should be included.\n\n**Minor Issues:**\n\n- Figure 3 is difficult to read; please increase font sizes\n- Table 2 has inconsistent significant figures\n- References 12 and 23 are incomplete",
+  "ratings": [
+    {"question": "Novelty", "questionId": 1, "score": 3, "maxScore": 5, "label": "Moderate"},
+    {"question": "Methodology", "questionId": 2, "score": 2, "maxScore": 5, "label": "Below Average"},
+    {"question": "Presentation", "questionId": 3, "score": 4, "maxScore": 5, "label": "Good"},
+    {"question": "Significance", "questionId": 4, "score": 3, "maxScore": 5, "label": "Moderate"},
+    {"question": "Overall Quality", "questionId": 5, "score": 2, "maxScore": 5, "label": "Below Average"}
+  ],
+  "journalName": "Journal of Coastal Research",
+  "journalId": "JCR",
+  "articleType": "Original Research",
+  "keywords": ["climate change", "coastal erosion", "sea level rise", "geomorphology"]
+}

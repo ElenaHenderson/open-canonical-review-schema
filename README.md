@@ -14,11 +14,22 @@ Peer review data is fragmented across platforms (OpenReview, CMT, journal system
 - **Enabling analysis**: Structured schema enables cross-platform review analytics
 - **Ensuring validation**: JSON Schema validation catches malformed data early
 
-## Supported source formats
+## Supported Systems
 
-- **OpenReview** - Note-like dicts from the OpenReview API
-- **CMT** - Export dicts from Microsoft CMT (field names vary by conference)
-- **Journal narrative** - Free-text reviews with minimal metadata (DOI, journal name)
+OCRS provides bidirectional mappers for converting between the canonical schema and various peer review platforms:
+
+| System | Source (`from`) | Target (`to`) | Notes |
+|--------|:---------------:|:-------------:|-------|
+| **OpenReview** | Full | Full | Conference reviews with structured findings and metrics |
+| **CMT** | Full | Full | Microsoft Conference Management Toolkit exports |
+| **HotCRP** | Full | Basic | Conference reviews; `to_hotcrp` is a minimal stub |
+| **Editorial Manager** | Full | Basic | Journal manuscript system; `to_editorialmanager` is a minimal stub |
+| **ScholarOne** | Full | Basic | Clarivate journal system; `to_scholarone` is a minimal stub |
+| **Journal Narrative** | Full | Full | Minimal free-text reviews with DOI/journal metadata |
+
+**Legend:**
+- **Full**: Complete mapping with all relevant fields preserved
+- **Basic**: Lossy stub that produces valid output but may not preserve all fields
 
 ## Quickstart
 ```bash
@@ -153,13 +164,13 @@ For AI referees, the schema supports detailed provenance including model specifi
 
 ## Related Review Platforms
 
-OCRS is designed to interoperate with these peer review systems:
+OCRS currently supports these peer review systems (see [Supported Systems](#supported-systems) for implementation details):
 
 - [OpenReview](https://openreview.net/) - Open peer review platform for scientific publishing
 - [Microsoft CMT](https://cmt3.research.microsoft.com/) - Conference management toolkit
 - [HotCRP](https://hotcrp.com/) - Conference review software
-- [Editorial Manager](https://www.ariessys.com/software/editorial-manager/) - Journal manuscript management
-- [ScholarOne](https://clarivate.com/products/scientific-and-academic-research/research-publishing-solutions/scholarone/) - Manuscript submission and peer review
+- [Editorial Manager](https://www.ariessys.com/software/editorial-manager/) - Journal manuscript management (Aries Systems)
+- [ScholarOne](https://clarivate.com/products/scientific-and-academic-research/research-publishing-solutions/scholarone/) - Manuscript submission and peer review (Clarivate)
 
 ## Contributing
 
