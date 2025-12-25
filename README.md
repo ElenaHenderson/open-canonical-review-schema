@@ -65,6 +65,75 @@ validate_canonical(canonical)
 note_like = map_to("openreview", canonical)
 ```
 
+## Example
+
+A minimal canonical review in JSON:
+
+```json
+{
+  "review_id": "rev_2025_001",
+  "version": "1.0.0",
+  "created_at": "2025-01-15T14:30:00Z",
+  "provenance": {
+    "source_system": "openreview",
+    "source_review_id": "or_review_abc123"
+  },
+  "referee": {
+    "referee_type": "human",
+    "identity_mode": "double_blind",
+    "human_referee": {
+      "expertise": {
+        "self_reported_level": "expert",
+        "domain_tags": ["machine-learning", "nlp"]
+      }
+    }
+  },
+  "target": {
+    "work_id": "paper_xyz789",
+    "work_type": "preprint",
+    "venue": "NeurIPS 2025"
+  },
+  "opinion": {
+    "summary": "Solid contribution with novel approach to attention mechanisms.",
+    "stance": "positive"
+  },
+  "decision": {
+    "recommendation": "weak_accept",
+    "confidence": 0.8
+  },
+  "findings": {
+    "strengths": [
+      {"text": "Novel architecture with strong theoretical grounding", "severity": "major"},
+      {"text": "Comprehensive experiments across multiple benchmarks"}
+    ],
+    "weaknesses": [
+      {"text": "Missing ablation study for key component", "severity": "minor"}
+    ]
+  }
+}
+```
+
+Converting from OpenReview format:
+
+```python
+from ocrs import map_from, validate_canonical
+
+openreview_note = {
+    "id": "or_review_1",
+    "forum": "paper_123",
+    "content": {
+        "rating": "6: Weak Accept",
+        "summary": "Interesting paper with novel contributions.",
+        "review": "The main idea is promising...",
+        "strengths": ["Good motivation", "Solid results"],
+        "weaknesses": ["Proof incomplete"],
+    }
+}
+
+canonical = map_from("openreview", openreview_note, keep_raw=True)
+validate_canonical(canonical)
+```
+
 ## Schema Overview
 
 The canonical review schema captures:
@@ -81,6 +150,16 @@ The canonical review schema captures:
 | `ethics_and_risk` | Ethical concerns and required mitigations |
 
 For AI referees, the schema supports detailed provenance including model specifications, execution traces, token usage, costs, and safety metadata.
+
+## Related Review Platforms
+
+OCRS is designed to interoperate with these peer review systems:
+
+- [OpenReview](https://openreview.net/) - Open peer review platform for scientific publishing
+- [Microsoft CMT](https://cmt3.research.microsoft.com/) - Conference management toolkit
+- [HotCRP](https://hotcrp.com/) - Conference review software
+- [Editorial Manager](https://www.ariessys.com/software/editorial-manager/) - Journal manuscript management
+- [ScholarOne](https://clarivate.com/products/scientific-and-academic-research/research-publishing-solutions/scholarone/) - Manuscript submission and peer review
 
 ## Contributing
 
