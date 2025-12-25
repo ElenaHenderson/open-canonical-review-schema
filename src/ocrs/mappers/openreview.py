@@ -70,6 +70,70 @@ def _target_work_id(note: dict[str, Any]) -> str | None:
     return None
 
 
+def _build_target_identifiers(note: dict[str, Any]) -> dict[str, Any]:
+    """Build structured identifiers from OpenReview note."""
+    from ..identifiers import ARXIV_PATTERN, DOI_PATTERN
+
+    content = _get_content(note)
+    identifiers: dict[str, Any] = {}
+
+    # Check for DOI in content
+    doi = content.get("doi")
+    if isinstance(doi, str) and doi and DOI_PATTERN.match(doi):
+        identifiers["doi"] = {"value": doi, "hyperlink": f"https://doi.org/{doi}"}
+
+    # Check for arXiv ID in content
+    for arxiv_key in ("arxiv_id", "arxiv", "arXiv"):
+        arxiv = content.get(arxiv_key)
+        if isinstance(arxiv, str) and arxiv:
+            # Clean up potential URL format
+            arxiv_clean = arxiv.replace("https://arxiv.org/abs/", "").replace(
+                "http://arxiv.org/abs/", ""
+            )
+            if ARXIV_PATTERN.match(arxiv_clean):
+                identifiers["arxiv_id"] = {
+                    "value": arxiv_clean,
+                    "hyperlink": f"https://arxiv.org/abs/{arxiv_clean}",
+                }
+                break
+
+    # OpenReview forum/note ID as internal_id
+    forum_id = note.get("forum")
+    if isinstance(forum_id, str) and forum_id:
+        identifiers["internal_id"] = {
+            "field_name": "openreview_forum",
+            "value": forum_id,
+            "hyperlink": f"https://openreview.net/forum?id={forum_id}",
+        }
+    else:
+        # Fallback to note ID
+        note_id = note.get("id")
+        if isinstance(note_id, str) and note_id:
+            identifiers["internal_id"] = {
+                "field_name": "openreview_note",
+                "value": note_id,
+                "hyperlink": f"https://openreview.net/forum?id={note_id}",
+            }
+
+    return identifiers
+
+
+def _build_target(note: dict[str, Any], work_id: str, content: dict[str, Any]) -> dict[str, Any]:
+    """Build target object with identifiers."""
+    target: dict[str, Any] = {
+        "identifiers": _build_target_identifiers(note),
+        "work_id": work_id,  # Keep for backward compatibility
+        "work_type": "preprint",
+    }
+
+    # Add version if present
+    version = content.get("version")
+    if isinstance(version, str) and version.strip():
+        target["version"] = version.strip()
+
+    return target
+
+
 def _best_text_opinion(content: dict[str, Any]) -> str:
     for k in ("summary", "paper_summary", "review_summary"):
         if isinstance(content.get(k), str) and content[k].strip():
@@ -153,7 +217,7 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
             "referee_id": signer,
             "human_referee": {},
         },
-        "target": {"work_id": work_id, "work_type": "other"},
+        "target": _build_target(note, work_id, content),
         "metric_catalog_ref": catalog.get("catalog_id"),
         "metrics": [],
         "opinion": {"summary": _best_text_opinion(content) or "No summary provided."},

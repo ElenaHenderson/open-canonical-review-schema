@@ -1,0 +1,412 @@
+# Copyright (c) 2026 Valency Systems Inc.
+# SPDX-License-Identifier: MIT
+"""Tests for identifier validation and resolution utilities."""
+
+import pytest
+
+from ocrs.identifiers import (
+    IDENTIFIER_PRIORITY,
+    RESOLVERS,
+    build_content_hash,
+    build_resolver_url,
+    build_work_identifiers,
+    compute_content_hash,
+    generate_canonical_work_id,
+    normalize_orcid,
+    resolve_primary_identifier,
+    validate_arxiv,
+    validate_doi,
+    validate_google_scholar,
+    validate_openalex_author,
+    validate_openalex_work,
+    validate_orcid,
+    validate_orcid_checksum,
+    validate_pmcid,
+    validate_scopus_author,
+)
+
+
+class TestOrcidValidation:
+    """Tests for ORCID validation and normalization."""
+
+    def test_valid_orcid_with_numeric_checksum(self):
+        """Test valid ORCID with numeric checksum digit."""
+        # 0000-0001-5000-0007 has checksum 7 (verified)
+        assert validate_orcid("0000-0001-5000-0007")
+
+    def test_valid_orcid_with_x_checksum(self):
+        """Test valid ORCID with X checksum digit."""
+        # 0000-0000-0000-001X is a valid ORCID with checksum X
+        assert validate_orcid("0000-0000-0000-001X")
+
+    def test_invalid_checksum_rejected(self):
+        """Test that invalid checksums are rejected."""
+        # Wrong checksum (should be 7, not 8)
+        assert not validate_orcid("0000-0001-5000-0008")
+
+    def test_invalid_format_rejected(self):
+        """Test that invalid formats are rejected."""
+        assert not validate_orcid("0000-0001-5000")  # Too short
+        assert not validate_orcid("0000-0001-5000-00007")  # Too long
+        assert not validate_orcid("000000015000007")  # No hyphens
+        assert not validate_orcid("0000-0001-5000-000Z")  # Invalid char
+
+    def test_checksum_algorithm(self):
+        """Test the checksum algorithm directly."""
+        # Valid ORCIDs with their correct checksums (verified)
+        assert validate_orcid_checksum("0000-0000-0000-001X")  # X checksum
+        assert validate_orcid_checksum("0000-0001-5000-0007")  # 7 checksum
+        assert not validate_orcid_checksum("0000-0001-5000-0008")  # Wrong checksum
+
+    def test_normalize_standard_format(self):
+        """Test normalization of standard ORCID format."""
+        assert normalize_orcid("0000-0001-5000-0007") == "0000-0001-5000-0007"
+
+    def test_normalize_url_format(self):
+        """Test normalization from URL format."""
+        assert normalize_orcid("https://orcid.org/0000-0001-5000-0007") == "0000-0001-5000-0007"
+        assert normalize_orcid("http://orcid.org/0000-0001-5000-0007") == "0000-0001-5000-0007"
+
+    def test_normalize_no_hyphens(self):
+        """Test normalization from format without hyphens."""
+        # 0000-0001-5000-0007 without hyphens
+        assert normalize_orcid("0000000150000007") == "0000-0001-5000-0007"
+
+    def test_normalize_lowercase_x(self):
+        """Test normalization handles lowercase X."""
+        # 0000-0000-0000-001X with lowercase x
+        assert normalize_orcid("0000-0000-0000-001x") == "0000-0000-0000-001X"
+
+    def test_normalize_invalid_returns_none(self):
+        """Test normalization of invalid ORCID returns None."""
+        assert normalize_orcid("invalid") is None
+        assert normalize_orcid("0000-0001-5000-0008") is None  # Invalid checksum
+
+
+class TestDoiValidation:
+    """Tests for DOI validation."""
+
+    def test_valid_doi(self):
+        """Test valid DOI patterns."""
+        assert validate_doi("10.1234/example.2024")
+        assert validate_doi("10.12345/foo-bar.123")
+        assert validate_doi("10.1000/xyz-123")
+
+    def test_invalid_doi_wrong_prefix(self):
+        """Test DOI with wrong prefix is rejected."""
+        assert not validate_doi("9.1234/wrong")
+        assert not validate_doi("11.1234/wrong")
+
+    def test_invalid_doi_no_suffix(self):
+        """Test DOI without suffix is rejected."""
+        assert not validate_doi("10.1234/")
+        assert not validate_doi("10.1234")
+
+
+class TestArxivValidation:
+    """Tests for arXiv identifier validation."""
+
+    def test_modern_format(self):
+        """Test modern arXiv format (YYMM.NNNNN)."""
+        assert validate_arxiv("2401.12345")
+        assert validate_arxiv("2312.01234")
+
+    def test_modern_format_with_version(self):
+        """Test modern format with version number."""
+        assert validate_arxiv("2401.12345v2")
+        assert validate_arxiv("2401.12345v10")
+
+    def test_legacy_format(self):
+        """Test legacy arXiv format (category/YYMMNNN)."""
+        assert validate_arxiv("hep-th/9901001")
+        assert validate_arxiv("astro-ph/0001001")
+
+    def test_invalid_arxiv(self):
+        """Test invalid arXiv identifiers."""
+        assert not validate_arxiv("2401.123")  # Too few digits (only 3)
+        assert not validate_arxiv("240.12345")  # Wrong year format
+        assert not validate_arxiv("invalid")
+        assert not validate_arxiv("2401.123456")  # Too many digits (6)
+
+
+class TestPmcidValidation:
+    """Tests for PubMed Central ID validation."""
+
+    def test_valid_pmcid(self):
+        """Test valid PMCID formats."""
+        assert validate_pmcid("PMC5555555")
+        assert validate_pmcid("PMC123456789")
+
+    def test_invalid_pmcid(self):
+        """Test invalid PMCID formats."""
+        assert not validate_pmcid("pmc5555555")  # Lowercase
+        assert not validate_pmcid("5555555")  # No prefix
+        assert not validate_pmcid("PMCABC")  # Non-numeric
+
+
+class TestOpenalexValidation:
+    """Tests for OpenAlex identifier validation."""
+
+    def test_valid_work_id(self):
+        """Test valid OpenAlex Work IDs."""
+        assert validate_openalex_work("W2741809807")
+        assert validate_openalex_work("W123")
+
+    def test_valid_author_id(self):
+        """Test valid OpenAlex Author IDs."""
+        assert validate_openalex_author("A5023888391")
+        assert validate_openalex_author("A123")
+
+    def test_invalid_openalex(self):
+        """Test invalid OpenAlex IDs."""
+        assert not validate_openalex_work("A123")  # Wrong prefix for work
+        assert not validate_openalex_author("W123")  # Wrong prefix for author
+        assert not validate_openalex_work("W")  # No number
+
+
+class TestScopusValidation:
+    """Tests for Scopus Author ID validation."""
+
+    def test_valid_scopus_id(self):
+        """Test valid Scopus Author IDs (10-12 digits)."""
+        assert validate_scopus_author("1234567890")  # 10 digits
+        assert validate_scopus_author("12345678901")  # 11 digits
+        assert validate_scopus_author("123456789012")  # 12 digits
+
+    def test_invalid_scopus_id(self):
+        """Test invalid Scopus Author IDs."""
+        assert not validate_scopus_author("123456789")  # 9 digits
+        assert not validate_scopus_author("0123456789")  # Leading zero
+        assert not validate_scopus_author("1234567890123")  # 13 digits
+
+
+class TestGoogleScholarValidation:
+    """Tests for Google Scholar ID validation."""
+
+    def test_valid_gs_id(self):
+        """Test valid Google Scholar IDs (12 chars)."""
+        assert validate_google_scholar("aB3_cD4-eF5g")
+        assert validate_google_scholar("123456789012")
+
+    def test_invalid_gs_id(self):
+        """Test invalid Google Scholar IDs."""
+        assert not validate_google_scholar("too_short")
+        assert not validate_google_scholar("this_is_too_long")
+
+
+class TestResolutionPriority:
+    """Tests for identifier resolution priority."""
+
+    def test_doi_takes_precedence(self):
+        """Test that DOI has highest priority."""
+        ids = {
+            "doi": {"value": "10.1234/x"},
+            "arxiv_id": {"value": "2401.00001"},
+            "internal_id": {"field_name": "x", "value": "123"},
+        }
+        id_type, value = resolve_primary_identifier(ids)
+        assert id_type == "doi"
+        assert value == "10.1234/x"
+
+    def test_arxiv_before_internal(self):
+        """Test that arXiv has priority over internal_id."""
+        ids = {
+            "arxiv_id": {"value": "2401.00001"},
+            "internal_id": {"field_name": "x", "value": "123"},
+        }
+        id_type, value = resolve_primary_identifier(ids)
+        assert id_type == "arxiv_id"
+        assert value == "2401.00001"
+
+    def test_internal_id_fallback(self):
+        """Test internal_id used as fallback."""
+        ids = {"internal_id": {"field_name": "hotcrp_pid", "value": "42"}}
+        id_type, value = resolve_primary_identifier(ids)
+        assert id_type == "internal_id"
+        assert value == "42"
+
+    def test_permalink_resolution(self):
+        """Test permalink (string value) resolution."""
+        ids = {"permalink": "https://example.com/paper/123"}
+        id_type, value = resolve_primary_identifier(ids)
+        assert id_type == "permalink"
+        assert value == "https://example.com/paper/123"
+
+    def test_empty_identifiers(self):
+        """Test empty identifiers returns unknown."""
+        id_type, value = resolve_primary_identifier({})
+        assert id_type == "unknown"
+        assert value is None
+
+    def test_priority_order_complete(self):
+        """Test the complete priority order list."""
+        expected = [
+            "doi",
+            "arxiv_id",
+            "s2cid",
+            "pubmed_id",
+            "pmcid",
+            "openalex_id",
+            "permalink",
+            "internal_id",
+        ]
+        assert IDENTIFIER_PRIORITY == expected
+
+
+class TestCanonicalWorkId:
+    """Tests for canonical work ID generation."""
+
+    def test_doi_canonical_id(self):
+        """Test canonical ID from DOI."""
+        ids = {"doi": {"value": "10.1234/example"}}
+        assert generate_canonical_work_id(ids) == "doi:10.1234/example"
+
+    def test_arxiv_canonical_id(self):
+        """Test canonical ID from arXiv."""
+        ids = {"arxiv_id": {"value": "2401.12345"}}
+        assert generate_canonical_work_id(ids) == "arxiv_id:2401.12345"
+
+    def test_internal_canonical_id(self):
+        """Test canonical ID from internal_id."""
+        ids = {"internal_id": {"field_name": "pid", "value": "42"}}
+        assert generate_canonical_work_id(ids) == "internal_id:42"
+
+    def test_empty_returns_unknown(self):
+        """Test empty identifiers returns unknown."""
+        assert generate_canonical_work_id({}) == "unknown:unidentified"
+
+
+class TestResolverUrl:
+    """Tests for resolver URL generation."""
+
+    def test_doi_resolver(self):
+        """Test DOI resolver URL."""
+        url = build_resolver_url("doi", "10.1234/example")
+        assert url == "https://doi.org/10.1234/example"
+
+    def test_arxiv_resolver(self):
+        """Test arXiv resolver URL."""
+        url = build_resolver_url("arxiv_id", "2401.12345")
+        assert url == "https://arxiv.org/abs/2401.12345"
+
+    def test_pubmed_resolver(self):
+        """Test PubMed resolver URL."""
+        url = build_resolver_url("pubmed_id", "12345678")
+        assert url == "https://pubmed.ncbi.nlm.nih.gov/12345678"
+
+    def test_pmcid_resolver(self):
+        """Test PMCID resolver URL."""
+        url = build_resolver_url("pmcid", "PMC5555555")
+        assert url == "https://pmc.ncbi.nlm.nih.gov/articles/PMC5555555"
+
+    def test_openalex_resolver(self):
+        """Test OpenAlex resolver URL."""
+        url = build_resolver_url("openalex_id", "W12345")
+        assert url == "https://openalex.org/W12345"
+
+    def test_s2cid_resolver(self):
+        """Test Semantic Scholar resolver URL."""
+        url = build_resolver_url("s2cid", "12345678")
+        assert url == "https://api.semanticscholar.org/CorpusID:12345678"
+
+    def test_orcid_resolver(self):
+        """Test ORCID resolver URL."""
+        url = build_resolver_url("orcid", "0000-0001-5000-0007")
+        assert url == "https://orcid.org/0000-0001-5000-0007"
+
+    def test_unknown_type_returns_none(self):
+        """Test unknown identifier type returns None."""
+        assert build_resolver_url("unknown_type", "value") is None
+
+
+class TestBuildWorkIdentifiers:
+    """Tests for work identifiers construction."""
+
+    def test_build_doi_only(self):
+        """Test building identifiers with DOI only."""
+        ids = build_work_identifiers(doi="10.1234/example")
+        assert ids["doi"]["value"] == "10.1234/example"
+        assert ids["doi"]["hyperlink"] == "https://doi.org/10.1234/example"
+
+    def test_build_multiple_identifiers(self):
+        """Test building with multiple identifiers."""
+        ids = build_work_identifiers(
+            doi="10.1234/example",
+            arxiv_id="2401.12345",
+            pubmed_id="12345678",
+        )
+        assert "doi" in ids
+        assert "arxiv_id" in ids
+        assert "pubmed_id" in ids
+        assert ids["arxiv_id"]["hyperlink"] == "https://arxiv.org/abs/2401.12345"
+
+    def test_build_with_internal_id(self):
+        """Test building with internal_id."""
+        ids = build_work_identifiers(internal_field_name="hotcrp_pid", internal_value="42")
+        assert ids["internal_id"]["field_name"] == "hotcrp_pid"
+        assert ids["internal_id"]["value"] == "42"
+
+    def test_build_with_permalink(self):
+        """Test building with permalink."""
+        ids = build_work_identifiers(permalink="https://example.com/paper/123")
+        assert ids["permalink"] == "https://example.com/paper/123"
+
+    def test_build_empty_raises(self):
+        """Test that building with no identifiers raises."""
+        with pytest.raises(ValueError, match="At least one identifier"):
+            build_work_identifiers()
+
+    def test_build_valency_ids(self):
+        """Test building with Valency IDs (no hyperlinks)."""
+
+
+class TestContentHashing:
+    """Tests for content hash computation."""
+
+    def test_sha256_hash(self):
+        """Test SHA-256 hash computation."""
+        content = b"Hello, World!"
+        result = compute_content_hash(content, "sha256")
+        assert len(result) == 64  # SHA-256 produces 64 hex chars
+        # Known hash for "Hello, World!"
+        assert result == "dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f"
+
+    def test_sha512_hash(self):
+        """Test SHA-512 hash computation."""
+        content = b"Hello, World!"
+        result = compute_content_hash(content, "sha512")
+        assert len(result) == 128  # SHA-512 produces 128 hex chars
+
+    def test_unsupported_algorithm_raises(self):
+        """Test that unsupported algorithm raises ValueError."""
+        with pytest.raises(ValueError, match="Unsupported hash algorithm"):
+            compute_content_hash(b"test", "sha1")
+
+    def test_md5_unsupported(self):
+        """Test that MD5 is no longer supported (security concern)."""
+        with pytest.raises(ValueError, match="Unsupported hash algorithm"):
+            compute_content_hash(b"test", "md5")
+
+    def test_build_content_hash_object(self):
+        """Test building content_hash object for schema."""
+        content = b"test content"
+        result = build_content_hash(content, "sha256")
+        assert result["algorithm"] == "sha256"
+        assert "value" in result
+        assert len(result["value"]) == 64
+
+
+class TestResolversDict:
+    """Tests for resolver URL dictionary."""
+
+    def test_all_expected_resolvers_present(self):
+        """Test that all expected resolvers are defined."""
+        expected_keys = {"doi", "arxiv_id", "pubmed_id", "pmcid", "openalex_id", "s2cid", "orcid"}
+        assert expected_keys.issubset(set(RESOLVERS.keys()))
+
+    def test_resolver_urls_are_valid(self):
+        """Test that resolver URLs have valid format."""
+        for key, url in RESOLVERS.items():
+            assert url.startswith("https://") or url.startswith("http://"), (
+                f"Resolver {key} URL should be HTTPS/HTTP"
+            )

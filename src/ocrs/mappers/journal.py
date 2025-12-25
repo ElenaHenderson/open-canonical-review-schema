@@ -10,6 +10,33 @@ from typing import Any
 from ..util import first_paragraph, now_iso
 
 
+def _build_target_identifiers(payload: dict[str, Any]) -> dict[str, Any]:
+    """Build structured identifiers from journal payload."""
+    from ..identifiers import DOI_PATTERN
+
+    identifiers: dict[str, Any] = {}
+
+    # DOI is primary for journal articles
+    doi = payload.get("doi")
+    if isinstance(doi, str) and doi and DOI_PATTERN.match(doi):
+        identifiers["doi"] = {"value": doi, "hyperlink": f"https://doi.org/{doi}"}
+
+    # Manuscript ID as internal_id
+    ms_id = payload.get("manuscript_id")
+    if isinstance(ms_id, str) and ms_id:
+        identifiers["internal_id"] = {
+            "field_name": "manuscript_id",
+            "value": ms_id,
+        }
+    elif payload.get("work_id"):
+        identifiers["internal_id"] = {
+            "field_name": "work_id",
+            "value": str(payload["work_id"]),
+        }
+
+    return identifiers
+
+
 def from_journal_narrative(
     payload: dict[str, Any],
     *,
@@ -47,7 +74,8 @@ def from_journal_narrative(
             "human_referee": {},
         },
         "target": {
-            "work_id": work_id,
+            "identifiers": _build_target_identifiers(payload),
+            "work_id": work_id,  # Keep for backward compatibility
             "work_type": "article",
             "venue": venue,
         },

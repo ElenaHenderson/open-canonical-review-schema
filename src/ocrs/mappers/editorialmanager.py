@@ -11,9 +11,9 @@ from ..catalog import alias_map, load_catalog
 from ..util import (
     first_paragraph,
     map_recommendation_from_text,
-    normalize_linear,
     now_iso,
     parse_date_flexible,
+    parse_labeled_score,
 )
 
 # Editorial Manager recommendation codes
@@ -51,6 +51,53 @@ def _get_work_id(payload: dict[str, Any]) -> str:
         if v is not None:
             return str(v)
     return "unknown"
+
+
+def _build_target_identifiers(payload: dict[str, Any]) -> dict[str, Any]:
+    """Build structured identifiers from Editorial Manager payload."""
+    from ..identifiers import DOI_PATTERN
+
+    identifiers: dict[str, Any] = {}
+
+    # DOI if present
+    doi = payload.get("doi")
+    if isinstance(doi, str) and doi and DOI_PATTERN.match(doi):
+        identifiers["doi"] = {"value": doi, "hyperlink": f"https://doi.org/{doi}"}
+
+    # Manuscript ID as internal_id
+    ms_id = _get_work_id(payload)
+    if ms_id != "unknown":
+        identifiers["internal_id"] = {
+            "field_name": "manuscriptId",
+            "value": ms_id,
+        }
+
+    return identifiers
+
+
+def _build_human_referee(payload: dict[str, Any]) -> dict[str, Any]:
+    """Build human_referee object with identity fields."""
+    from ..identifiers import normalize_orcid
+
+    human_referee: dict[str, Any] = {}
+
+    # Check for ORCID
+    orcid = payload.get("reviewerOrcid") or payload.get("orcid")
+    if orcid and isinstance(orcid, str):
+        normalized = normalize_orcid(orcid)
+        if normalized:
+            human_referee["orcid"] = normalized
+
+    # Name and affiliation
+    name = payload.get("reviewerName") or payload.get("reviewer_name")
+    if name and isinstance(name, str):
+        human_referee["name"] = name
+
+    affiliation = payload.get("reviewerAffiliation") or payload.get("affiliation")
+    if affiliation and isinstance(affiliation, str):
+        human_referee["affiliation"] = affiliation
+
+    return human_referee
 
 
 def _get_review_id(payload: dict[str, Any]) -> str:
@@ -91,7 +138,13 @@ def _map_ratings_to_metrics(
     catalog: dict[str, Any],
     amap: dict[str, str],
 ) -> list[dict[str, Any]]:
-    """Convert Editorial Manager ratings array to canonical metrics."""
+    """Convert Editorial Manager ratings array to canonical metrics.
+
+    Ensures that:
+    - metric.value is always numeric
+    - Text labels (from 'label' field or parsed from score) go into metric.justification
+    - Proper normalization is applied based on the source scale
+    """
     metrics = []
     idx = {m["key"].casefold(): m for m in catalog.get("metrics", [])}
 
@@ -104,6 +157,19 @@ def _map_ratings_to_metrics(
         max_score = rating.get("maxScore") or rating.get("max_score") or 5
 
         if score is None:
+            continue
+
+        # Parse score which may be labeled (e.g., "4. Good")
+        parsed = parse_labeled_score(
+            score,
+            system="editorialmanager",
+            metric_type=question.lower(),
+            expected_min=1,
+            expected_max=int(max_score),
+        )
+
+        # If no numeric value, skip this rating
+        if parsed["numeric"] is None:
             continue
 
         # Map question to metric key
@@ -131,25 +197,27 @@ def _map_ratings_to_metrics(
                     aspect = m.get("aspect", "other")
                     break
 
-        scale = {"type": "ordinal", "min": 1, "max": int(max_score)}
-        norm = normalize_linear(score, scale)
-
         metric: dict[str, Any] = {
             "key": key,
             "label": question,
             "aspect": aspect,
-            "scale": scale,
-            "value": score,
+            "scale": parsed["scale"],
+            "value": parsed["numeric"],  # Always numeric
         }
-        if norm is not None:
+        if parsed["normalized"] is not None:
             metric["normalized"] = {
-                "value_0_1": float(max(0.0, min(1.0, norm))),
+                "value_0_1": float(max(0.0, min(1.0, parsed["normalized"]))),
                 "method": "linear_to_unit_interval",
             }
 
-        # Add label from rating if present
+        # Combine justification from parsed label and explicit label field
+        justification_parts = []
+        if parsed["label"]:
+            justification_parts.append(parsed["label"])
         if rating.get("label"):
-            metric["justification"] = rating["label"]
+            justification_parts.append(rating["label"])
+        if justification_parts:
+            metric["justification"] = " - ".join(justification_parts)
 
         metrics.append(metric)
 
@@ -174,10 +242,11 @@ def from_editorialmanager(payload: dict[str, Any], *, keep_raw: bool = False) ->
     reviewer_id = _get_reviewer_id(payload)
     review_id = _get_review_id(payload)
 
+    human_referee = _build_human_referee(payload)
     referee: dict[str, Any] = {
         "referee_type": "human",
         "identity_mode": "confidential",
-        "human_referee": {},
+        "human_referee": human_referee if human_referee else {},
     }
     if reviewer_id:
         referee["referee_id"] = reviewer_id
@@ -197,7 +266,11 @@ def from_editorialmanager(payload: dict[str, Any], *, keep_raw: bool = False) ->
             },
         },
         "referee": referee,
-        "target": {"work_id": work_id, "work_type": "article"},
+        "target": {
+            "identifiers": _build_target_identifiers(payload),
+            "work_id": work_id,  # Keep for backward compatibility
+            "work_type": "article",
+        },
         "metric_catalog_ref": catalog.get("catalog_id"),
         "metrics": [],
         "opinion": {"summary": _best_opinion_text(payload)},

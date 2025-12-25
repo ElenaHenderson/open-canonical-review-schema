@@ -162,6 +162,123 @@ The canonical review schema captures:
 
 For AI referees, the schema supports detailed provenance including model specifications, execution traces, token usage, costs, and safety metadata.
 
+## Entity Identifiers
+
+OCRS provides comprehensive support for industry-standard scholarly identifiers, enabling integration with bibliographic databases and academic infrastructure.
+
+### Work Identifiers
+
+The `target.identifiers` field supports structured metadata for papers and other scholarly works:
+
+| Identifier | Pattern | Resolver URL | Description |
+|------------|---------|--------------|-------------|
+| DOI | `10.xxxx/suffix` | `https://doi.org/{value}` | Digital Object Identifier (Crossref, DataCite) |
+| arXiv ID | `YYMM.NNNNN(vN)` | `https://arxiv.org/abs/{value}` | arXiv preprint (modern/legacy formats) |
+| S2CID | numeric | `https://api.semanticscholar.org/CorpusID:{value}` | Semantic Scholar Corpus ID |
+| PubMed ID | numeric | `https://pubmed.ncbi.nlm.nih.gov/{value}` | PubMed/MEDLINE abstract ID |
+| PMCID | `PMCnnnnnnn` | `https://pmc.ncbi.nlm.nih.gov/articles/{value}` | PubMed Central full-text ID |
+| OpenAlex ID | `Wnnnnnnn` | `https://openalex.org/{value}` | OpenAlex Work ID |
+| Permalink | URI | — | Stable URL for the work |
+| Internal ID | `{field_name, value}` | — | System-specific ID (HotCRP pid, ScholarOne documentId, etc.) |
+
+**Resolution Priority**: When multiple identifiers are present, OCRS resolves in this order: DOI → arXiv → S2CID → PubMed → PMCID → OpenAlex → permalink → internal_id.
+
+### Reviewer Identifiers
+
+The `referee.human_referee` object supports author/reviewer identification:
+
+| Identifier | Pattern | Resolver URL | Description |
+|------------|---------|--------------|-------------|
+| ORCID | `0000-0000-0000-000X` | `https://orcid.org/{value}` | Open Researcher and Contributor ID (with checksum validation) |
+| OpenAlex Author ID | `Annnnnnn` | `https://openalex.org/{value}` | OpenAlex Author ID |
+| Scopus Author ID | 10-12 digits | — | Elsevier Scopus author identifier |
+| Google Scholar ID | 12 alphanumeric | — | Google Scholar profile ID |
+| Third-party ID | `{key, value}` | — | Other identifiers (Publons, ResearcherID, etc.) |
+
+### OpenAlex Integration
+
+[OpenAlex](https://openalex.org/) is an open catalog of the world's scholarly works. OCRS provides native support for OpenAlex entity IDs:
+
+```python
+from ocrs import build_work_identifiers, validate_openalex_work, validate_openalex_author
+
+# Build identifiers with OpenAlex Work ID
+identifiers = build_work_identifiers(
+    doi="10.1234/example.2024",
+    openalex_id="W2741809807",  # Automatically generates resolver URL
+)
+# Result: {"doi": {...}, "openalex_id": {"value": "W2741809807", "hyperlink": "https://openalex.org/W2741809807"}}
+
+# Validate OpenAlex IDs
+assert validate_openalex_work("W2741809807")   # Work IDs start with 'W'
+assert validate_openalex_author("A5023888391") # Author IDs start with 'A'
+```
+
+The schema also supports OpenAlex Author IDs for reviewer identification:
+```json
+{
+  "referee": {
+    "referee_type": "human",
+    "identity_mode": "disclosed",
+    "human_referee": {
+      "orcid": "0000-0001-5000-0007",
+      "openalex_id": "A5023888391",
+      "name": "Dr. Jane Smith"
+    }
+  }
+}
+```
+
+### ORCID Validation
+
+ORCID identifiers are validated using the ISO 7064 MOD 11-2 checksum algorithm:
+
+```python
+from ocrs import validate_orcid, normalize_orcid
+
+# Validate format and checksum
+assert validate_orcid("0000-0001-5000-0007")      # Valid
+assert not validate_orcid("0000-0001-5000-0008")  # Invalid checksum
+
+# Normalize from various formats
+normalize_orcid("https://orcid.org/0000-0001-5000-0007")  # → "0000-0001-5000-0007"
+normalize_orcid("0000000150000007")                        # → "0000-0001-5000-0007"
+```
+
+### Identifier Utilities
+
+The `ocrs.identifiers` module provides utilities for working with scholarly identifiers:
+
+```python
+from ocrs import (
+    build_work_identifiers,      # Construct workIdentifiers with hyperlinks
+    build_resolver_url,          # Generate resolver URL for any identifier type
+    resolve_primary_identifier,  # Get highest-priority identifier
+    generate_canonical_work_id,  # Create "type:value" canonical ID
+    validate_doi,                # Validate DOI format
+    validate_arxiv,              # Validate arXiv ID format
+    validate_pmcid,              # Validate PMCID format
+    compute_content_hash,        # SHA-256/512 for content verification
+)
+
+# Build identifiers with automatic hyperlinks
+ids = build_work_identifiers(
+    doi="10.1234/example",
+    arxiv_id="2401.12345",
+    internal_field_name="hotcrp_pid",
+    internal_value="42",
+)
+
+# Resolve to primary identifier
+id_type, value = resolve_primary_identifier(ids)  # → ("doi", "10.1234/example")
+
+# Generate canonical work ID
+canonical_id = generate_canonical_work_id(ids)    # → "doi:10.1234/example"
+
+# Build resolver URL
+url = build_resolver_url("arxiv_id", "2401.12345")  # → "https://arxiv.org/abs/2401.12345"
+```
+
 ## Related Review Platforms
 
 OCRS currently supports these peer review systems (see [Supported Systems](#supported-systems) for implementation details):

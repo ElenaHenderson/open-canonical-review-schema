@@ -21,6 +21,62 @@ from ..util import (
 NARR_KEYS = {"summary", "commentsToAuthors", "reviewText", "commentsToChairs"}
 
 
+def _get_work_id(payload: dict[str, Any]) -> str:
+    """Extract paper/work identifier."""
+    for k in ("paperId", "submissionId", "paper_id", "submission_id"):
+        v = payload.get(k)
+        if v is not None:
+            return str(v)
+    return "unknown"
+
+
+def _build_target_identifiers(payload: dict[str, Any]) -> dict[str, Any]:
+    """Build structured identifiers from CMT payload."""
+    from ..identifiers import DOI_PATTERN
+
+    identifiers: dict[str, Any] = {}
+
+    # DOI if present
+    doi = payload.get("doi")
+    if isinstance(doi, str) and doi and DOI_PATTERN.match(doi):
+        identifiers["doi"] = {"value": doi, "hyperlink": f"https://doi.org/{doi}"}
+
+    # Paper ID as internal_id
+    work_id = _get_work_id(payload)
+    if work_id != "unknown":
+        identifiers["internal_id"] = {
+            "field_name": "paperId",
+            "value": work_id,
+        }
+
+    return identifiers
+
+
+def _build_human_referee(payload: dict[str, Any]) -> dict[str, Any]:
+    """Build human_referee object with identity fields."""
+    from ..identifiers import normalize_orcid
+
+    human_referee: dict[str, Any] = {}
+
+    # Check for ORCID
+    orcid = payload.get("reviewerOrcid") or payload.get("orcid")
+    if orcid and isinstance(orcid, str):
+        normalized = normalize_orcid(orcid)
+        if normalized:
+            human_referee["orcid"] = normalized
+
+    # Name and affiliation
+    name = payload.get("reviewerName") or payload.get("reviewer_name")
+    if name and isinstance(name, str):
+        human_referee["name"] = name
+
+    affiliation = payload.get("reviewerAffiliation") or payload.get("affiliation")
+    if affiliation and isinstance(affiliation, str):
+        human_referee["affiliation"] = affiliation
+
+    return human_referee
+
+
 def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, Any]:
     catalog = load_catalog()
     amap = alias_map(catalog)
@@ -30,9 +86,19 @@ def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, An
         payload.get("createdAt") if isinstance(payload.get("createdAt"), str) else now_iso()
     )
 
-    work_id = str(payload.get("paperId") or payload.get("submissionId") or "unknown")
+    work_id = _get_work_id(payload)
     venue = payload.get("conferenceName")
     track = payload.get("trackName")
+
+    # Build human referee identity
+    human_referee = _build_human_referee(payload)
+    referee: dict[str, Any] = {
+        "referee_type": "human",
+        "identity_mode": "confidential",
+        "human_referee": human_referee if human_referee else {},
+    }
+    if payload.get("reviewerId") is not None:
+        referee["referee_id"] = str(payload["reviewerId"])
 
     out: dict[str, Any] = {
         "review_id": review_id,
@@ -48,24 +114,22 @@ def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, An
                 "mapper_version": "0.1.0",
             },
         },
-        "referee": {
-            "referee_type": "human",
-            "identity_mode": "confidential",
-            "referee_id": (
-                str(payload.get("reviewerId")) if payload.get("reviewerId") is not None else None
-            ),
-            "human_referee": {},
-        },
+        "referee": referee,
         "target": {
-            "work_id": work_id,
+            "identifiers": _build_target_identifiers(payload),
+            "work_id": work_id,  # Keep for backward compatibility
             "work_type": "other",
-            "venue": venue,
-            "track": track,
         },
         "metric_catalog_ref": catalog.get("catalog_id"),
         "metrics": [],
         "opinion": {"summary": "No summary provided."},
     }
+    # Add venue/track only if present
+    if venue:
+        out["target"]["venue"] = venue
+    if track:
+        out["target"]["track"] = track
+
     if keep_raw:
         out["provenance"]["raw_payload"] = payload
 

@@ -8,7 +8,17 @@ import datetime as _dt
 import re
 from typing import Any
 
-_num_prefix = re.compile(r"^\s*([+-]?\d+(?:\.\d+)?)\s*(?::|-)?\s*(.*)$")
+from .scales import (
+    ScaleDefinition,
+    get_scale_for_system,
+    infer_scale_from_value,
+    normalized_to_recommendation,
+)
+
+# Pattern to match numeric prefix with optional separator (: . -)
+# For "4. Accept", "3: Weak Accept", "6 - Borderline"
+# Note: The (?:\.\s+) ensures we don't match decimal numbers like "3.5"
+_num_prefix = re.compile(r"^\s*([+-]?\d+(?:\.\d+)?)\s*(?:(?:\.\s+)|[:\-]\s*)?\s*(.*)$")
 _bullet_pattern = re.compile(r"^\s*(?:[-*•]|\d+[.)\]])\s*", re.MULTILINE)
 
 
@@ -168,6 +178,40 @@ def split_bullet_list(text: str) -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
+def migrate_work_id_to_identifiers(
+    work_id: str, source_system: str | None = None
+) -> dict[str, Any]:
+    """Convert legacy work_id string to identifiers structure.
+
+    Auto-detects identifier type from format:
+    - DOI format (10.xxxx/...) -> doi
+    - URL format -> permalink
+    - Otherwise -> internal_id with source_system as field_name
+
+    Args:
+        work_id: Legacy work_id string
+        source_system: Source system name for internal_id field_name
+
+    Returns:
+        Dictionary matching workIdentifiers schema
+    """
+    from .identifiers import DOI_PATTERN
+
+    work_id = work_id.strip()
+
+    # Check if it's a DOI
+    if DOI_PATTERN.match(work_id):
+        return {"doi": {"value": work_id, "hyperlink": f"https://doi.org/{work_id}"}}
+
+    # Check if it's a URL
+    if work_id.startswith("http://") or work_id.startswith("https://"):
+        return {"permalink": work_id}
+
+    # Fallback to internal_id
+    field_name = source_system or "legacy_work_id"
+    return {"internal_id": {"field_name": field_name, "value": work_id}}
+
+
 def parse_date_flexible(value: str | int | float) -> str:
     """Parse various date formats to ISO 8601 datetime string.
 
@@ -212,3 +256,160 @@ def parse_date_flexible(value: str | int | float) -> str:
             continue
     # Fallback: return current time
     return now_iso()
+
+
+# =============================================================================
+# Enhanced Score Parsing and Transformation
+# =============================================================================
+
+
+def parse_labeled_score(
+    value: Any,
+    *,
+    system: str | None = None,
+    metric_type: str | None = None,
+    expected_min: int | float | None = None,
+    expected_max: int | float | None = None,
+) -> dict[str, Any]:
+    """Parse a labeled score like "3. Weak Accept" into components.
+
+    This function handles various formats:
+    - Pure numeric: 4, 3.5
+    - Numeric with text: "4. Accept", "3: Weak Accept", "6 - Borderline"
+    - Text only: "Accept", "Weak Reject" (returns None for numeric)
+
+    Args:
+        value: The score value to parse (int, float, or string)
+        system: Optional source system for scale lookup
+        metric_type: Optional metric type for scale lookup
+        expected_min: Override minimum for scale inference
+        expected_max: Override maximum for scale inference
+
+    Returns:
+        Dictionary with:
+        - numeric: The numeric value (or None if text-only)
+        - label: The text label (or None if numeric-only)
+        - scale: Inferred or looked-up scale definition as dict
+        - normalized: Normalized value in [0, 1] range
+        - justification: Text explanation (same as label, for convenience)
+    """
+    numeric, label = parse_numeric_prefix(value)
+
+    result: dict[str, Any] = {
+        "numeric": numeric,
+        "label": label,
+        "scale": None,
+        "normalized": None,
+        "justification": label,
+    }
+
+    if numeric is None:
+        return result
+
+    # Determine the scale to use
+    if expected_min is not None and expected_max is not None:
+        scale = ScaleDefinition(min_value=expected_min, max_value=expected_max)
+    elif system and metric_type:
+        scale = get_scale_for_system(system, metric_type)
+    else:
+        scale = infer_scale_from_value(numeric)
+
+    result["scale"] = scale.to_schema()
+    result["normalized"] = scale.normalize(numeric)
+
+    return result
+
+
+def build_metric_from_score(
+    key: str,
+    label: str,
+    value: Any,
+    *,
+    aspect: str | None = None,
+    system: str | None = None,
+    expected_min: int | float = 1,
+    expected_max: int | float = 5,
+) -> dict[str, Any] | None:
+    """Build a canonical metric assessment from a score value.
+
+    Ensures that:
+    - metric.value is always numeric
+    - Text labels go into metric.justification
+    - Proper normalization is applied
+
+    Args:
+        key: Metric key (e.g., "overall", "novelty")
+        label: Human-readable label for the metric
+        value: The score value (may be labeled like "4. Accept")
+        aspect: Optional aspect category
+        system: Source system for scale lookup
+        expected_min: Expected minimum value on source scale
+        expected_max: Expected maximum value on source scale
+
+    Returns:
+        Canonical metric assessment dict, or None if value cannot be parsed
+    """
+    parsed = parse_labeled_score(
+        value,
+        system=system,
+        metric_type=key,
+        expected_min=expected_min,
+        expected_max=expected_max,
+    )
+
+    if parsed["numeric"] is None:
+        return None
+
+    metric: dict[str, Any] = {
+        "key": key,
+        "label": label,
+        "scale": parsed["scale"] or {"type": "ordinal", "min": expected_min, "max": expected_max},
+        "value": parsed["numeric"],  # Always numeric
+    }
+
+    if aspect:
+        metric["aspect"] = aspect
+
+    if parsed["normalized"] is not None:
+        metric["normalized"] = {
+            "value_0_1": float(max(0.0, min(1.0, parsed["normalized"]))),
+            "method": "linear_to_unit_interval",
+        }
+
+    if parsed["label"]:
+        metric["justification"] = parsed["label"]
+
+    return metric
+
+
+def score_to_recommendation(
+    value: Any,
+    *,
+    scale_min: int | float = 1,
+    scale_max: int | float = 5,
+) -> str | None:
+    """Convert a numeric or labeled score to a recommendation string.
+
+    Uses the configured thresholds to map normalized scores to recommendations.
+
+    Args:
+        value: Score value (numeric or labeled string)
+        scale_min: Minimum value on the source scale
+        scale_max: Maximum value on the source scale
+
+    Returns:
+        Recommendation string or None if value cannot be parsed
+    """
+    parsed = parse_labeled_score(value, expected_min=scale_min, expected_max=scale_max)
+
+    # First try text-based mapping
+    if parsed["label"]:
+        text_rec = map_recommendation_from_text(parsed["label"])
+        if text_rec:
+            return text_rec
+
+    # Then try numeric-based mapping
+    if parsed["normalized"] is not None:
+        return normalized_to_recommendation(parsed["normalized"])
+
+    return None

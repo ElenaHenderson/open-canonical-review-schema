@@ -10,13 +10,11 @@ from typing import Any
 from ..catalog import alias_map, load_catalog
 from ..util import (
     first_paragraph,
-    guess_scale_from_value,
-    map_recommendation_from_numeric,
     map_recommendation_from_text,
-    normalize_linear,
     now_iso,
     parse_date_flexible,
-    parse_numeric_prefix,
+    parse_labeled_score,
+    score_to_recommendation,
     split_bullet_list,
 )
 
@@ -76,6 +74,57 @@ def _get_work_id(payload: dict[str, Any]) -> str:
         if v is not None:
             return str(v)
     return "unknown"
+
+
+def _build_target_identifiers(payload: dict[str, Any]) -> dict[str, Any]:
+    """Build structured identifiers from HotCRP payload."""
+    from ..identifiers import DOI_PATTERN
+
+    identifiers: dict[str, Any] = {}
+
+    # Check for DOI in payload
+    doi = payload.get("doi")
+    if isinstance(doi, str) and doi and DOI_PATTERN.match(doi):
+        identifiers["doi"] = {"value": doi, "hyperlink": f"https://doi.org/{doi}"}
+
+    # HotCRP paper ID as internal_id
+    work_id = _get_work_id(payload)
+    if work_id != "unknown":
+        identifiers["internal_id"] = {
+            "field_name": "hotcrp_pid",
+            "value": work_id,
+        }
+
+    return identifiers
+
+
+def _build_human_referee(payload: dict[str, Any]) -> dict[str, Any]:
+    """Build human_referee object with identity fields."""
+    from ..identifiers import normalize_orcid
+
+    human_referee: dict[str, Any] = {}
+
+    # Check for ORCID
+    reviewer = payload.get("reviewer", {})
+    orcid = None
+    if isinstance(reviewer, dict):
+        orcid = reviewer.get("orcid")
+    if not orcid:
+        orcid = payload.get("reviewerOrcid") or payload.get("orcid")
+
+    if orcid and isinstance(orcid, str):
+        normalized = normalize_orcid(orcid)
+        if normalized:
+            human_referee["orcid"] = normalized
+
+    # Name and affiliation
+    if isinstance(reviewer, dict):
+        if reviewer.get("name"):
+            human_referee["name"] = reviewer["name"]
+        if reviewer.get("affiliation"):
+            human_referee["affiliation"] = reviewer["affiliation"]
+
+    return human_referee
 
 
 def _best_opinion_text(payload: dict[str, Any]) -> str:
@@ -167,10 +216,11 @@ def from_hotcrp(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str,
     review_id = str(rid) if rid is not None else str(uuid.uuid4())
 
     # Build referee object, only adding referee_id if present
+    human_referee = _build_human_referee(payload)
     referee: dict[str, Any] = {
         "referee_type": "human",
         "identity_mode": "confidential",
-        "human_referee": {},
+        "human_referee": human_referee if human_referee else {},
     }
     if reviewer_id:
         referee["referee_id"] = reviewer_id
@@ -194,7 +244,11 @@ def from_hotcrp(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str,
         "created_at": created,
         "provenance": provenance,
         "referee": referee,
-        "target": {"work_id": work_id, "work_type": "article"},
+        "target": {
+            "identifiers": _build_target_identifiers(payload),
+            "work_id": work_id,  # Keep for backward compatibility
+            "work_type": "article",
+        },
         "metric_catalog_ref": catalog.get("catalog_id"),
         "metrics": [],
         "opinion": {"summary": _best_opinion_text(payload)},
@@ -235,83 +289,113 @@ def from_hotcrp(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str,
 
     decision: dict[str, Any] = {}
     if rec_raw is not None:
-        num, rest = parse_numeric_prefix(rec_raw)
-        if num is not None:
-            scale = guess_scale_from_value(num)
-            decision["recommendation"] = (
-                map_recommendation_from_numeric(num, scale)
-                or map_recommendation_from_text(rest or "")
-                or "borderline"
-            )
-            n01 = normalize_linear(num, scale)
-            out["metrics"].append(
-                {
-                    "key": "overall",
-                    "label": "Overall Merit",
-                    "aspect": "overall",
-                    "scale": scale,
-                    "value": num,
-                    "normalized": (
-                        {"value_0_1": n01, "method": "linear_to_unit_interval"}
-                        if n01 is not None
-                        else None
-                    ),
+        # Use enhanced parsing with proper scale handling
+        parsed = parse_labeled_score(
+            rec_raw,
+            system="hotcrp",
+            metric_type="overall_merit",
+            expected_min=1,
+            expected_max=5,  # Default HotCRP scale
+        )
+
+        if parsed["numeric"] is not None:
+            # Determine recommendation from text label first, then numeric
+            if parsed["label"]:
+                decision["recommendation"] = (
+                    map_recommendation_from_text(parsed["label"])
+                    or score_to_recommendation(parsed["numeric"], scale_min=1, scale_max=5)
+                    or "borderline"
+                )
+            else:
+                decision["recommendation"] = (
+                    score_to_recommendation(parsed["numeric"], scale_min=1, scale_max=5)
+                    or "borderline"
+                )
+
+            # Build metric with numeric value and text justification
+            metric: dict[str, Any] = {
+                "key": "overall",
+                "label": "Overall Merit",
+                "aspect": "overall",
+                "scale": parsed["scale"],
+                "value": parsed["numeric"],  # Always numeric
+            }
+            if parsed["normalized"] is not None:
+                metric["normalized"] = {
+                    "value_0_1": parsed["normalized"],
+                    "method": "linear_to_unit_interval",
                 }
-            )
+            # Store text label as justification
+            if parsed["label"]:
+                metric["justification"] = parsed["label"]
+
+            out["metrics"].append(metric)
         elif isinstance(rec_raw, str):
             decision["recommendation"] = map_recommendation_from_text(rec_raw) or "borderline"
 
     # Parse reviewer expertise
     exp_raw = payload.get("reviewer_expertise") or payload.get("expertise")
     if exp_raw is not None:
-        num, _ = parse_numeric_prefix(exp_raw)
-        if num is not None:
-            scale = guess_scale_from_value(num)
-            n01 = normalize_linear(num, scale)
-            out["metrics"].append(
-                {
-                    "key": "confidence",
-                    "label": "Reviewer Expertise",
-                    "aspect": "confidence",
-                    "scale": scale,
-                    "value": num,
-                    "normalized": (
-                        {"value_0_1": n01, "method": "linear_to_unit_interval"}
-                        if n01 is not None
-                        else None
-                    ),
+        parsed = parse_labeled_score(
+            exp_raw,
+            system="hotcrp",
+            metric_type="expertise",
+            expected_min=1,
+            expected_max=5,
+        )
+        if parsed["numeric"] is not None:
+            metric = {
+                "key": "confidence",
+                "label": "Reviewer Expertise",
+                "aspect": "confidence",
+                "scale": parsed["scale"],
+                "value": parsed["numeric"],  # Always numeric
+            }
+            if parsed["normalized"] is not None:
+                metric["normalized"] = {
+                    "value_0_1": parsed["normalized"],
+                    "method": "linear_to_unit_interval",
                 }
-            )
+            # Store text label as justification
+            if parsed["label"]:
+                metric["justification"] = parsed["label"]
+            out["metrics"].append(metric)
+
             # Also add expertise to review_context
-            level = EXPERTISE_LEVEL_MAP.get(int(num), "knowledgeable")
+            level = EXPERTISE_LEVEL_MAP.get(int(parsed["numeric"]), "knowledgeable")
             out["review_context"] = {"expertise": {"self_reported_level": level}}
 
     # Parse confidence if separate from expertise
     conf_raw = payload.get("confidence")
     if conf_raw is not None:
-        num, _ = parse_numeric_prefix(conf_raw)
-        if num is not None:
-            scale = guess_scale_from_value(num)
-            n01 = normalize_linear(num, scale)
+        parsed = parse_labeled_score(
+            conf_raw,
+            system="hotcrp",
+            metric_type="confidence",
+            expected_min=1,
+            expected_max=5,
+        )
+        if parsed["numeric"] is not None:
             # Check if we already have a confidence metric
             has_conf = any(m.get("key") == "confidence" for m in out["metrics"])
             if not has_conf:
-                out["metrics"].append(
-                    {
-                        "key": "confidence",
-                        "label": "Reviewer Confidence",
-                        "aspect": "confidence",
-                        "scale": scale,
-                        "value": num,
-                        "normalized": (
-                            {"value_0_1": n01, "method": "linear_to_unit_interval"}
-                            if n01 is not None
-                            else None
-                        ),
+                metric = {
+                    "key": "confidence",
+                    "label": "Reviewer Confidence",
+                    "aspect": "confidence",
+                    "scale": parsed["scale"],
+                    "value": parsed["numeric"],  # Always numeric
+                }
+                if parsed["normalized"] is not None:
+                    metric["normalized"] = {
+                        "value_0_1": parsed["normalized"],
+                        "method": "linear_to_unit_interval",
                     }
-                )
-            if isinstance(n01, (int, float)):
-                decision["confidence"] = float(max(0.0, min(1.0, n01)))
+                if parsed["label"]:
+                    metric["justification"] = parsed["label"]
+                out["metrics"].append(metric)
+            if parsed["normalized"] is not None:
+                decision["confidence"] = float(max(0.0, min(1.0, parsed["normalized"])))
 
     if decision:
         out["decision"] = {k: v for k, v in decision.items() if v is not None}
@@ -326,8 +410,15 @@ def from_hotcrp(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str,
     for k, v in payload.items():
         if k in skip_keys:
             continue
-        num, rest = parse_numeric_prefix(v)
-        if num is None:
+        # Use enhanced parsing with proper label extraction
+        parsed = parse_labeled_score(
+            v,
+            system="hotcrp",
+            metric_type=k,
+            expected_min=1,
+            expected_max=5,  # Default HotCRP scale
+        )
+        if parsed["numeric"] is None:
             continue
         key, _ = _metric_key_for_label(k.replace("_", " ").strip(), amap, idx)
         aspect = None
@@ -337,23 +428,22 @@ def from_hotcrp(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str,
                 break
         if aspect is None:
             aspect = "other"
-        scale = guess_scale_from_value(num)
-        norm = normalize_linear(num, scale)
-        metric: dict[str, Any] = {
+        metric_entry: dict[str, Any] = {
             "key": key,
             "label": k.replace("_", " ").strip(),
             "aspect": aspect,
-            "scale": scale,
-            "value": num,
+            "scale": parsed["scale"],
+            "value": parsed["numeric"],  # Always numeric
         }
-        if norm is not None:
-            metric["normalized"] = {
-                "value_0_1": float(max(0.0, min(1.0, norm))),
+        if parsed["normalized"] is not None:
+            metric_entry["normalized"] = {
+                "value_0_1": float(max(0.0, min(1.0, parsed["normalized"]))),
                 "method": "linear_to_unit_interval",
             }
-        if rest:
-            metric["justification"] = rest
-        out["metrics"].append(metric)
+        # Store text label as justification
+        if parsed["label"]:
+            metric_entry["justification"] = parsed["label"]
+        out["metrics"].append(metric_entry)
 
     # Clean up null normalized values
     for m in out["metrics"]:

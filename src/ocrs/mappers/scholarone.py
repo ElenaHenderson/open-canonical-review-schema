@@ -8,13 +8,16 @@ import uuid
 from typing import Any
 
 from ..catalog import alias_map, load_catalog
+from ..scales import (
+    SCHOLARONE_RECOMMENDATION,
+)
 from ..util import (
     first_paragraph,
     map_recommendation_from_numeric,
     map_recommendation_from_text,
-    normalize_linear,
     now_iso,
     parse_date_flexible,
+    parse_labeled_score,
 )
 
 # ScholarOne recommendation codes (typical configuration)
@@ -61,6 +64,53 @@ def _get_work_id(payload: dict[str, Any]) -> str:
         if v is not None:
             return str(v)
     return "unknown"
+
+
+def _build_target_identifiers(payload: dict[str, Any]) -> dict[str, Any]:
+    """Build structured identifiers from ScholarOne payload."""
+    from ..identifiers import DOI_PATTERN
+
+    identifiers: dict[str, Any] = {}
+
+    # DOI if present
+    doi = payload.get("doi")
+    if isinstance(doi, str) and doi and DOI_PATTERN.match(doi):
+        identifiers["doi"] = {"value": doi, "hyperlink": f"https://doi.org/{doi}"}
+
+    # Document ID as internal_id
+    work_id = _get_work_id(payload)
+    if work_id != "unknown":
+        identifiers["internal_id"] = {
+            "field_name": "documentId",
+            "value": work_id,
+        }
+
+    return identifiers
+
+
+def _build_human_referee(payload: dict[str, Any]) -> dict[str, Any]:
+    """Build human_referee object with identity fields."""
+    from ..identifiers import normalize_orcid
+
+    human_referee: dict[str, Any] = {}
+
+    # Check for ORCID
+    orcid = payload.get("reviewerOrcid") or payload.get("orcid")
+    if orcid and isinstance(orcid, str):
+        normalized = normalize_orcid(orcid)
+        if normalized:
+            human_referee["orcid"] = normalized
+
+    # Name and affiliation
+    name = payload.get("reviewerName") or payload.get("reviewer_name")
+    if name and isinstance(name, str):
+        human_referee["name"] = name
+
+    affiliation = payload.get("reviewerAffiliation") or payload.get("affiliation")
+    if affiliation and isinstance(affiliation, str):
+        human_referee["affiliation"] = affiliation
+
+    return human_referee
 
 
 def _get_review_id(payload: dict[str, Any]) -> str:
@@ -114,7 +164,13 @@ def _map_criteria_to_metrics(
     catalog: dict[str, Any],
     amap: dict[str, str],
 ) -> list[dict[str, Any]]:
-    """Convert ScholarOne criteriaResponses to canonical metrics."""
+    """Convert ScholarOne criteriaResponses to canonical metrics.
+
+    Ensures that:
+    - metric.value is always numeric
+    - Text labels (from 'label' field or parsed from response) go into metric.justification
+    - Proper normalization is applied based on the source scale
+    """
     metrics = []
     idx = {m["key"].casefold(): m for m in catalog.get("metrics", [])}
 
@@ -127,6 +183,19 @@ def _map_criteria_to_metrics(
         max_response = crit.get("maxResponse") or crit.get("max_response") or 5
 
         if response is None:
+            continue
+
+        # Parse response which may be labeled (e.g., "4. Good")
+        parsed = parse_labeled_score(
+            response,
+            system="scholarone",
+            metric_type=name.lower(),
+            expected_min=1,
+            expected_max=int(max_response),
+        )
+
+        # If no numeric value, skip this criterion
+        if parsed["numeric"] is None:
             continue
 
         # Map criterion name to metric key
@@ -154,25 +223,27 @@ def _map_criteria_to_metrics(
                     aspect = m.get("aspect", "other")
                     break
 
-        scale = {"type": "ordinal", "min": 1, "max": int(max_response)}
-        norm = normalize_linear(response, scale)
-
         metric: dict[str, Any] = {
             "key": key,
             "label": name,
             "aspect": aspect,
-            "scale": scale,
-            "value": response,
+            "scale": parsed["scale"],
+            "value": parsed["numeric"],  # Always numeric
         }
-        if norm is not None:
+        if parsed["normalized"] is not None:
             metric["normalized"] = {
-                "value_0_1": float(max(0.0, min(1.0, norm))),
+                "value_0_1": float(max(0.0, min(1.0, parsed["normalized"]))),
                 "method": "linear_to_unit_interval",
             }
 
-        # Add label from criterion if present
+        # Combine justification from parsed label and explicit label field
+        justification_parts = []
+        if parsed["label"]:
+            justification_parts.append(parsed["label"])
         if crit.get("label"):
-            metric["justification"] = crit["label"]
+            justification_parts.append(crit["label"])
+        if justification_parts:
+            metric["justification"] = " - ".join(justification_parts)
 
         metrics.append(metric)
 
@@ -198,10 +269,11 @@ def from_scholarone(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[
     review_id = _get_review_id(payload)
 
     # Build referee object, only adding referee_id if present
+    human_referee = _build_human_referee(payload)
     referee: dict[str, Any] = {
         "referee_type": "human",
         "identity_mode": "confidential",
-        "human_referee": {},
+        "human_referee": human_referee if human_referee else {},
     }
     if reviewer_id:
         referee["referee_id"] = reviewer_id
@@ -221,7 +293,11 @@ def from_scholarone(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[
             },
         },
         "referee": referee,
-        "target": {"work_id": work_id, "work_type": "article"},
+        "target": {
+            "identifiers": _build_target_identifiers(payload),
+            "work_id": work_id,  # Keep for backward compatibility
+            "work_type": "article",
+        },
         "metric_catalog_ref": catalog.get("catalog_id"),
         "metrics": [],
         "opinion": {"summary": _best_opinion_text(payload)},
@@ -260,23 +336,37 @@ def from_scholarone(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[
 
         # Also add overall metric if we have numeric recommendation
         rec_num = payload.get("overallRecommendation")
-        if isinstance(rec_num, int):
-            scale = {"type": "ordinal", "min": 1, "max": 5}
-            norm = normalize_linear(rec_num, scale)
-            out["metrics"].append(
-                {
+        rec_label = payload.get("overallRecommendationLabel")
+        if rec_num is not None:
+            # Note: ScholarOne uses lower=better for recommendations (1=Accept, 5=Reject)
+            # But we normalize so 1.0 = best, using the SCHOLARONE_RECOMMENDATION scale
+            parsed = parse_labeled_score(
+                rec_num,
+                system="scholarone",
+                metric_type="recommendation",
+                expected_min=1,
+                expected_max=5,
+            )
+            if parsed["numeric"] is not None:
+                metric_entry: dict[str, Any] = {
                     "key": "overall",
                     "label": "Overall Recommendation",
                     "aspect": "overall",
-                    "scale": scale,
-                    "value": rec_num,
-                    "normalized": (
-                        {"value_0_1": norm, "method": "linear_to_unit_interval"}
-                        if norm is not None
-                        else None
-                    ),
+                    "scale": parsed["scale"],
+                    "value": parsed["numeric"],  # Always numeric
                 }
-            )
+                # For recommendation codes, invert normalization (lower code = better)
+                # Use SCHOLARONE_RECOMMENDATION.normalize which handles higher_is_better=False
+                norm = SCHOLARONE_RECOMMENDATION.normalize(parsed["numeric"])
+                if norm is not None:
+                    metric_entry["normalized"] = {
+                        "value_0_1": norm,
+                        "method": "linear_to_unit_interval",
+                    }
+                # Add label as justification
+                if rec_label:
+                    metric_entry["justification"] = rec_label
+                out["metrics"].append(metric_entry)
 
     # Criteria responses -> metrics
     criteria = payload.get("criteriaResponses", [])

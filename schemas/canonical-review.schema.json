@@ -10,7 +10,6 @@
     "version",
     "created_at",
     "provenance",
-    "referee",
     "target",
     "opinion"
   ],
@@ -75,6 +74,14 @@
     "referee": {
       "$ref": "#/$defs/referee"
     },
+    "referees": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Array of referees for panel reviews or collaborative reviews. Use this instead of 'referee' when multiple reviewers are involved.",
+      "items": {
+        "$ref": "#/$defs/referee"
+      }
+    },
     "target": {
       "type": "object",
       "additionalProperties": false,
@@ -84,7 +91,12 @@
       ],
       "properties": {
         "work_id": {
-          "type": "string"
+          "type": "string",
+          "description": "Primary identifier for the work being reviewed"
+        },
+        "identifiers": {
+          "$ref": "#/$defs/workIdentifiers",
+          "description": "Optional structured identifiers with validation and resolution metadata"
         },
         "work_type": {
           "type": "string",
@@ -97,6 +109,10 @@
             "proposal",
             "other"
           ]
+        },
+        "version": {
+          "type": "string",
+          "description": "Version of the paper/work being reviewed (e.g., v1, v2)"
         },
         "venue": {
           "type": "string"
@@ -359,6 +375,12 @@
   "allOf": [
     {
       "anyOf": [
+        { "required": ["referee"] },
+        { "required": ["referees"] }
+      ]
+    },
+    {
+      "anyOf": [
         {
           "properties": {
             "opinion": {
@@ -425,6 +447,194 @@
     }
   ],
   "$defs": {
+    "identifierWithLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "An identifier value with optional hyperlink for resolution",
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hyperlink": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "internalIdentifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "System-specific internal identifier with field name context",
+      "required": ["field_name", "value"],
+      "properties": {
+        "field_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of the identifier field in the source system (e.g., 'DocumentID', 'hotcrp_pid', 'openreview_forum')"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hyperlink": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "workIdentifiers": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional structured identifiers for the work. Resolution priority: DOI > arXiv > S2CID > PubMed ID > PMCID > OpenAlex > permalink > internal_id",
+      "properties": {
+        "doi": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Digital Object Identifier (e.g., 10.1000/xyz-123)",
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^10\\.\\d{4,9}/[^\\s]+$"
+            },
+            "hyperlink": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "arxiv_id": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "arXiv identifier (e.g., 2401.12345 or 2401.12345v2 or hep-th/9901001)",
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(\\d{4}\\.\\d{4,5}(v\\d+)?|[a-z\\-]+/\\d{7})$"
+            },
+            "hyperlink": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "s2cid": {
+          "$ref": "#/$defs/identifierWithLink",
+          "description": "Semantic Scholar Corpus ID"
+        },
+        "pubmed_id": {
+          "$ref": "#/$defs/identifierWithLink",
+          "description": "PubMed ID (PMID)"
+        },
+        "pmcid": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "PubMed Central ID (e.g., PMC5555555)",
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^PMC\\d+$"
+            },
+            "hyperlink": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "openalex_id": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "OpenAlex Work ID (e.g., W2741809807)",
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^W\\d+$"
+            },
+            "hyperlink": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "permalink": {
+          "type": "string",
+          "format": "uri",
+          "description": "Stable URL for the work"
+        },
+        "internal_id": {
+          "$ref": "#/$defs/internalIdentifier",
+          "description": "System-specific internal identifier"
+        },
+        "content_hash": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Content-addressed identifier for integrity verification",
+          "required": ["algorithm", "value"],
+          "properties": {
+            "algorithm": {
+              "type": "string",
+              "enum": ["sha256", "sha512"]
+            },
+            "value": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "thirdPartyIdentifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Generic third-party identifier with namespace",
+      "required": ["key", "value"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Namespace/type (e.g., 'scopus', 'researcherid', 'publons')"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "aiRefereeReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Lightweight reference to a third-party AI referee system when full provenance is not available",
+      "required": ["third_party_id"],
+      "properties": {
+        "third_party_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique identifier from the third-party AI review system (e.g., 'newco-ai-ref-2sd4f6a')"
+        },
+        "reference_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL for more information about the AI reviewer"
+        },
+        "display_name": {
+          "type": "string",
+          "description": "Human-readable name for the AI system"
+        },
+        "version": {
+          "type": "string",
+          "description": "Version of the AI reviewer (defaults to v1)"
+        }
+      }
+    },
     "opinion": {
       "type": "object",
       "additionalProperties": false,
@@ -551,7 +761,40 @@
     "humanReferee": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Human referee identity and expertise information",
       "properties": {
+        "orcid": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$",
+          "description": "ORCID identifier (format: 0000-0000-0000-000X)"
+        },
+        "scopus_id": {
+          "type": "string",
+          "pattern": "^[1-9]\\d{9,11}$",
+          "description": "Scopus Author ID (10-12 digits, no leading zero)"
+        },
+        "openalex_id": {
+          "type": "string",
+          "pattern": "^A\\d+$",
+          "description": "OpenAlex Author ID (e.g., A5023888391)"
+        },
+        "google_scholar_id": {
+          "type": "string",
+          "pattern": "^[-_0-9A-Za-z]{12}$",
+          "description": "Google Scholar profile ID (12 alphanumeric characters)"
+        },
+        "third_party_id": {
+          "$ref": "#/$defs/thirdPartyIdentifier",
+          "description": "Other identifier (publons, researcherid, etc.)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the reviewer (may be redacted)"
+        },
+        "affiliation": {
+          "type": "string",
+          "description": "Institutional affiliation"
+        },
         "expertise": {
           "type": "object",
           "additionalProperties": false,
@@ -677,27 +920,38 @@
     "aiReferee": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "system",
-        "execution"
-      ],
-      "properties": {
-        "system": {
-          "$ref": "#/$defs/aiSystemProvenance"
+      "description": "AI referee information - either full provenance or lightweight reference",
+      "oneOf": [
+        {
+          "required": ["system", "execution"],
+          "properties": {
+            "system": {
+              "$ref": "#/$defs/aiSystemProvenance"
+            },
+            "execution": {
+              "$ref": "#/$defs/aiExecutionProvenance"
+            },
+            "inputs": {
+              "$ref": "#/$defs/aiInputsProvenance"
+            },
+            "outputs": {
+              "$ref": "#/$defs/aiOutputsProvenance"
+            },
+            "safety": {
+              "$ref": "#/$defs/aiSafetyProvenance"
+            }
+          }
         },
-        "execution": {
-          "$ref": "#/$defs/aiExecutionProvenance"
-        },
-        "inputs": {
-          "$ref": "#/$defs/aiInputsProvenance"
-        },
-        "outputs": {
-          "$ref": "#/$defs/aiOutputsProvenance"
-        },
-        "safety": {
-          "$ref": "#/$defs/aiSafetyProvenance"
+        {
+          "required": ["reference"],
+          "properties": {
+            "reference": {
+              "$ref": "#/$defs/aiRefereeReference",
+              "description": "Lightweight reference to a third-party AI system"
+            }
+          }
         }
-      }
+      ]
     },
     "aiSystemProvenance": {
       "type": "object",
