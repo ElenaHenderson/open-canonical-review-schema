@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCRS - Open Canonical Review Schema</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --card-bg: #16213e;
+            --primary: #0f3460;
+            --accent: #e94560;
+            --text: #eaeaea;
+            --text-muted: #a0a0a0;
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: var(--bg-color);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--accent), #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+        .intro {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--primary);
+        }
+        .intro p {
+            color: var(--text-muted);
+            line-height: 1.8;
+        }
+        .schemas {
+            display: grid;
+            gap: 1.5rem;
+        }
+        .schema-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid var(--primary);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .schema-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(233, 69, 96, 0.2);
+        }
+        .schema-card h2 {
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+        }
+        .schema-card h2 a {
+            color: var(--text);
+            text-decoration: none;
+        }
+        .schema-card h2 a:hover {
+            color: var(--accent);
+        }
+        .schema-card p {
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+        .badge {
+            display: inline-block;
+            background: var(--primary);
+            color: var(--accent);
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin-top: 1rem;
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .feature {
+            background: rgba(15, 52, 96, 0.3);
+            padding: 0.75rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+        .feature strong {
+            color: var(--accent);
+        }
+        footer {
+            text-align: center;
+            margin-top: 3rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>OCRS</h1>
+            <p class="subtitle">Open Canonical Review Schema - Documentation</p>
+        </header>
+
+        <div class="intro">
+            <p>
+                OCRS provides a standardized, machine-readable format for representing peer reviews
+                across different platforms and systems. It enables interoperability between review
+                systems like OpenReview, CMT, and journal workflows while preserving rich provenance
+                information for both human and AI-generated reviews.
+            </p>
+        </div>
+
+        <div class="schemas">
+            <div class="schema-card">
+                <h2><a href="canonical-review.html">Canonical Review Schema</a></h2>
+                <p>
+                    The core schema defining the structure of peer reviews in canonical form.
+                </p>
+                <div class="features">
+                    <div class="feature"><strong>Referees:</strong> Human, AI, Hybrid</div>
+                    <div class="feature"><strong>Provenance:</strong> Source tracking</div>
+                    <div class="feature"><strong>Findings:</strong> Strengths, weaknesses</div>
+                    <div class="feature"><strong>Metrics:</strong> Normalized scores</div>
+                    <div class="feature"><strong>Decisions:</strong> Recommendations</div>
+                    <div class="feature"><strong>AI Info:</strong> Models, prompts</div>
+                </div>
+                <span class="badge">JSON Schema Draft 2020-12</span>
+            </div>
+        </div>
+
+        <footer>
+            <p>
+                <a href="https://github.com/valency-oss/open-canonical-review-schema">GitHub</a>
+                &nbsp;&middot;&nbsp;
+                MIT License
+            </p>
+        </footer>
+    </div>
+</body>
+</html>
