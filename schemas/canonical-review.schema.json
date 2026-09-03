@@ -924,8 +924,30 @@
       "type": "object",
       "additionalProperties": false,
       "description": "AI referee information - either full provenance or lightweight reference",
+      "properties": {
+        "system": {
+          "$ref": "#/$defs/aiSystemProvenance"
+        },
+        "execution": {
+          "$ref": "#/$defs/aiExecutionProvenance"
+        },
+        "inputs": {
+          "$ref": "#/$defs/aiInputsProvenance"
+        },
+        "outputs": {
+          "$ref": "#/$defs/aiOutputsProvenance"
+        },
+        "safety": {
+          "$ref": "#/$defs/aiSafetyProvenance"
+        },
+        "reference": {
+          "$ref": "#/$defs/aiRefereeReference",
+          "description": "Lightweight reference to a third-party AI system"
+        }
+      },
       "oneOf": [
         {
+          "additionalProperties": false,
           "required": ["system", "execution"],
           "properties": {
             "system": {
@@ -946,6 +968,7 @@
           }
         },
         {
+          "additionalProperties": false,
           "required": ["reference"],
           "properties": {
             "reference": {

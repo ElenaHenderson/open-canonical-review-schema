@@ -138,7 +138,7 @@ openreview_note = {
         "review": "The main idea is promising...",
         "strengths": ["Good motivation", "Solid results"],
         "weaknesses": ["Proof incomplete"],
-    }
+    },
 }
 
 canonical = map_from("openreview", openreview_note, keep_raw=True)
@@ -239,8 +239,8 @@ identifiers = build_work_identifiers(
 # Result: {"doi": {...}, "openalex_id": {"value": "W2741809807", "hyperlink": "https://openalex.org/W2741809807"}}
 
 # Validate OpenAlex IDs
-assert validate_openalex_work("W2741809807")   # Work IDs start with 'W'
-assert validate_openalex_author("A5023888391") # Author IDs start with 'A'
+assert validate_openalex_work("W2741809807")  # Work IDs start with 'W'
+assert validate_openalex_author("A5023888391")  # Author IDs start with 'A'
 ```
 
 The schema also supports OpenAlex Author IDs for reviewer identification:
@@ -266,12 +266,12 @@ ORCID identifiers are validated using the ISO 7064 MOD 11-2 checksum algorithm:
 from ocrs import validate_orcid, normalize_orcid
 
 # Validate format and checksum
-assert validate_orcid("0000-0001-5000-0007")      # Valid
+assert validate_orcid("0000-0001-5000-0007")  # Valid
 assert not validate_orcid("0000-0001-5000-0008")  # Invalid checksum
 
 # Normalize from various formats
 normalize_orcid("https://orcid.org/0000-0001-5000-0007")  # → "0000-0001-5000-0007"
-normalize_orcid("0000000150000007")                        # → "0000-0001-5000-0007"
+normalize_orcid("0000000150000007")  # → "0000-0001-5000-0007"
 ```
 
 ### Identifier Utilities
@@ -280,14 +280,14 @@ The `ocrs.identifiers` module provides utilities for working with scholarly iden
 
 ```python
 from ocrs import (
-    build_work_identifiers,      # Construct workIdentifiers with hyperlinks
-    build_resolver_url,          # Generate resolver URL for any identifier type
+    build_work_identifiers,  # Construct workIdentifiers with hyperlinks
+    build_resolver_url,  # Generate resolver URL for any identifier type
     resolve_primary_identifier,  # Get highest-priority identifier
     generate_canonical_work_id,  # Create "type:value" canonical ID
-    validate_doi,                # Validate DOI format
-    validate_arxiv,              # Validate arXiv ID format
-    validate_pmcid,              # Validate PMCID format
-    compute_content_hash,        # SHA-256/512 for content verification
+    validate_doi,  # Validate DOI format
+    validate_arxiv,  # Validate arXiv ID format
+    validate_pmcid,  # Validate PMCID format
+    compute_content_hash,  # SHA-256/512 for content verification
 )
 
 # Build identifiers with automatic hyperlinks
@@ -302,7 +302,7 @@ ids = build_work_identifiers(
 id_type, value = resolve_primary_identifier(ids)  # → ("doi", "10.1234/example")
 
 # Generate canonical work ID
-canonical_id = generate_canonical_work_id(ids)    # → "doi:10.1234/example"
+canonical_id = generate_canonical_work_id(ids)  # → "doi:10.1234/example"
 
 # Build resolver URL
 url = build_resolver_url("arxiv_id", "2401.12345")  # → "https://arxiv.org/abs/2401.12345"
