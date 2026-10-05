@@ -34,6 +34,9 @@ from ..mapping import (
 from ..schema import load_schema, validate_canonical
 
 REVIEW_VERSION = "1.0.0"
+# The mapping spec every mapper here follows: schemas/mapping-spec.v1.1.0.json.
+MAPPING_SPEC_ID = "canonical-review.mapping.v1"
+MAPPING_SPEC_VERSION = "1.1.0"
 # OCRS fields that cannot apply to a review written by one AI reviewer.
 NOT_FOR_AI_REVIEWS = {
     "referees",
@@ -155,7 +158,11 @@ def build_review(run: AiRun, framework: str, mapper_version: str) -> dict[str, A
             "source_system": run.source_system,
             "source_review_id": run.review_id,
             "imported_at": iso(datetime.now(timezone.utc)),
-            "mapping": {"mapping_spec_id": framework, "mapper_version": mapper_version},
+            "mapping": {
+                "mapping_spec_id": MAPPING_SPEC_ID,
+                "mapping_spec_version": MAPPING_SPEC_VERSION,
+                "mapper_version": mapper_version,
+            },
         },
         "referee": {
             "referee_type": "ai",

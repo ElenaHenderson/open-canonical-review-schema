@@ -20,7 +20,7 @@ from ..mapping import MappingResult
 from ._ai import AiPayload, Recorder, build_review, finish
 
 FRAMEWORK = "pat"
-MAPPER_VERSION = "1.0.0"
+MAPPER_VERSION = "1.0.1"
 SEVERITY = {"critical": "critical", "major": "major", "minor": "minor"}
 IGNORED = {"reports"}
 

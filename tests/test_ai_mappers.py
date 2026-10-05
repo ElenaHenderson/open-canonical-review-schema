@@ -74,6 +74,11 @@ class TestPat:
             "commit": RUN["reviewer_commit"],
         }
         assert review["provenance"]["source_system"] == "valency"
+        assert review["provenance"]["mapping"] == {
+            "mapping_spec_id": "canonical-review.mapping.v1",
+            "mapping_spec_version": "1.1.0",
+            "mapper_version": "1.0.1",
+        }
         assert review["target"]["version"] == RUN["work_version"]
         assert review["review_context"] == {"requested_by": "valency"}
 

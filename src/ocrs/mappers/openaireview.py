@@ -25,7 +25,7 @@ from ..mapping import MappingResult
 from ._ai import AiPayload, Recorder, build_review, finish
 
 FRAMEWORK = "openaireview"
-MAPPER_VERSION = "1.0.0"
+MAPPER_VERSION = "1.0.1"
 MERGED_METHOD_PREFIX = "progressive__"
 UNMERGED_METHOD_PREFIX = "progressive_original__"
 IGNORED = {"paragraphs", f"methods.{UNMERGED_METHOD_PREFIX}*"}
