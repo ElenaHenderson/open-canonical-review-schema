@@ -17,7 +17,16 @@ from .identifiers import (
     validate_orcid,
     validate_pmcid,
 )
-from .registry import map_from, map_to, supported_sources, supported_targets
+from .mappers._ai import AiPayload, AiRun
+from .registry import (
+    map_from,
+    map_to,
+    map_with_record,
+    mapper_version,
+    supported_sources,
+    supported_targets,
+)
+from .report import render_mapping_markdown
 from .schema import load_schema, validate_canonical
 from .util import migrate_work_id_to_identifiers
 
@@ -28,6 +37,11 @@ __all__ = [
     # Registry
     "map_from",
     "map_to",
+    "map_with_record",
+    "mapper_version",
+    "AiPayload",
+    "AiRun",
+    "render_mapping_markdown",
     "supported_sources",
     "supported_targets",
     # Identifiers

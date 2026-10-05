@@ -54,7 +54,7 @@ uv run prek run --all-files
 
 ### Schema Changes
 
-When modifying the JSON schema (`schemas/canonical-review.schema.json`):
+When modifying the JSON schema (`src/ocrs/schemas/canonical-review.schema.json`):
 
 1. Ensure backwards compatibility when possible
 2. Update the version number if making breaking changes

@@ -8,9 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-CATALOG_PATH = (
-    Path(__file__).resolve().parent.parent.parent / "schemas" / "metric-catalog.core.v1.json"
-)
+CATALOG_PATH = Path(__file__).resolve().parent / "schemas" / "metric-catalog.core.v1.json"
 
 
 def load_catalog(path: str | Path | None = None) -> dict[str, Any]:

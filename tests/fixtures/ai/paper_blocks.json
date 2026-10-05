@@ -1,0 +1,49 @@
+[
+  {
+    "id": "roq70gp3d8",
+    "kind": "body",
+    "text": "Citations very often come in sets of two or more. In arXiv papers in Computer Science, Physics, Mathematics, and more , 40% of citing sentences cite two or more papers at once. These sets’ structures reflect a wide array of human epistemic judgements, from grouping the dominant approaches to an open problem, to pairing a formal theoretical claim with its subsequent empirical validations . In effect, citation sets often support a claim by providing disparate sources of evidence for it ."
+  },
+  {
+    "id": "zwl5bgbxyg",
+    "kind": "body",
+    "text": "We build on the arXiv dataset from , with splits disjoint by citing paper. Contexts are grouped into locations within each citing paper using 8-word-shingle Jaccard clustering ( \\theta = 0.5 ). We find anchors through two non-nearest routes. The clustering route uses another context assigned to the same location that targets the paper. The marker route resolves an inline citation marker within the context to the target. On the test set, both of these routes produced 69,874 and 70,357 contexts with |A(\\ell)| \\geq 1 respectively. Throughout this paper, we combine these two sets to produce 78,334 contexts. We report all three so that any dependence of anchor coverage on the extraction route will be visible."
+  },
+  {
+    "id": "ecrossimz2",
+    "kind": "body",
+    "text": "This consistency indicates that citation-set structure provides information complementary to the base retrieval signals. BM25 has the best base MRR (0.502), but the smallest structural gain (+0.102). Although we filter title overlap, we do not suppress abstract overlap. This is why the lexical baseline remains well above the null floor on the hard slice; nevertheless, the citation-set signal is still useful."
+  },
+  {
+    "id": "ci1nsfat1e",
+    "kind": "body",
+    "text": "The aggregate gain depends strongly on coverage of the co-citation graph. The graph contains a relation between the target and at least one anchor in 61.2% of headline pools, which account for most of the gains. Thus, the headline +0.118 should be interpreted as coverage-dependent (Appendix B). However, this does not affect comparisons across bases: each base benefits from the same co-citation evidence when it is available. This suggests that the textual retrievers do not fully encode this relation."
+  },
+  {
+    "id": "isdu1vvtbg",
+    "kind": "body",
+    "text": "We note that HAtten differs in architecture and dimension and, unlike the other bases, builds queries from three paragraphs that include the citing paper’s title and abstract. Its weak score in Rank but high performance in Swap is due to this input asymmetry rather than a disagreement between the probes. We also evaluate graph structure using node2vec as a control; details are reported in Appendix B."
+  },
+  {
+    "id": "qq4bhoykib",
+    "kind": "body",
+    "text": "Sequential set completion over test locations, 3 seeds, \\lambda = 4.0 . The gain persists as oracle information is removed."
+  },
+  {
+    "id": "p8oclew4di",
+    "kind": "body",
+    "text": "Anchors are not interchangeable. shows that their usefulness is primarily determined by co-citation evidence rather than topical similarity. Across cosine-similarity octiles, the highest-PPMI band has positive influence ranging from +0.23 to +0.33. Variation across PPMI bands is substantially larger than variation across cosine similarity, suggesting that anchor usefulness is more associated with co-citation evidence than with topical similarity."
+  },
+  {
+    "kind": "abstract",
+    "text": "When authors of a scientific paper cite several papers at a single point in a text, they are often not aiming to cite the exact same claim repeatedly. Citation sets include a high degree of author judgement—they are often chosen together to cover a conceptual space, reference both a problem and its main methods, or pair a method with a result it is usually compared to. Despite this, citation recommendation, as it is usually posed, ignores this set-level structure, and instead scores each target in isolation to maximize its independent semantic similarity to the citing sentence. We show that in the case of recommending a citation set , this may be the wrong approach. We introduce LOCUS, an evaluation that determines whether or not a retriever can tell which of a paper’s own citations belong at one sentence rather than another one in the text, and that looks beyond the use of topic-level similarity. A simple, training-free co-citation reranker built from past citation structure improves Mean Reciprocal Rank (MRR) by +0.102 to +0.121 across four retrievers, three of which are citation-trained. For SPECTER2, the improvement is +0.118. The gain largely comes from 62.1% of pools with target–anchor graph support. Further, once one citation is known, the retriever is 3.4× more effective at recovering the remaining members at Recall@1."
+  },
+  {
+    "kind": "reference",
+    "text": "Latour, B. (2004). Science in Action: How to Follow Scientists and Engineers Through Society (pp. chapter 1, pages 21–62)."
+  },
+  {
+    "kind": "reference",
+    "text": "MacRoberts, M. H., & MacRoberts, B. R. (1996). Problems of citation analysis. Scientometrics, 36(3), 445–444. https://doi.org/10.1007/BF02129604"
+  }
+]

@@ -26,6 +26,8 @@ OCRS provides bidirectional mappers for converting between the canonical schema 
 | **Editorial Manager** | Full | Basic | Journal manuscript system; `to_editorialmanager` is a minimal stub |
 | **ScholarOne** | Full | Basic | Clarivate journal system; `to_scholarone` is a minimal stub |
 | **Journal Narrative** | Full | Full | Minimal free-text reviews with DOI/journal metadata |
+| **PAT** | Full | – | AI reviewer (Paper Assistant Tool): `review.json` |
+| **OpenAIReview** | Full | – | AI reviewer ([ChicagoHAI/OpenAIReview](https://github.com/ChicagoHAI/OpenAIReview)): `paper.json` |
 
 **Legend:**
 - **Full**: Complete mapping with all relevant fields preserved
@@ -74,6 +76,45 @@ canonical = map_from("openreview", openreview_note, keep_raw=True)
 validate_canonical(canonical)
 
 note_like = map_to("openreview", canonical)
+```
+
+## AI reviewers
+
+The PAT and OpenAIReview mappers copy the reviewer's own output into OCRS; they never rewrite or invent text. Whatever has no OCRS field is kept, unchanged, in `extensions.<reviewer>`.
+
+`map_with_record` also returns a record of how each field was mapped and where the result falls short of OCRS:
+
+- **unmapped**: reviewer fields with no OCRS field;
+- **unfilled**: OCRS fields the review leaves empty;
+- **coerced**: reviewer values OCRS does not allow (for example an unknown severity), and what the mapper did instead;
+- **unanchored**: quotes the reviewer took from the paper that cannot be found in it.
+
+Quotes are matched against the paper, given as plain-text blocks (body, abstract, references). The record says where each quote was found, with the block's ID when it has one.
+
+```python
+from ocrs import map_with_record, render_mapping_markdown
+
+result = map_with_record(
+    "pat",
+    {
+        "output": pat_review_json,
+        "run": {
+            "review_id": "…",
+            "source_system": "valency",
+            "work_id": "…",
+            "work_version": "…",
+            "reviewer_commit": "…",
+            "model_id": "…",
+            "started_at": "…",
+            "ended_at": "…",
+            "cost_usd": 3.04,
+        },
+        "blocks": [{"id": "p1", "kind": "body", "text": "…"}, {"kind": "abstract", "text": "…"}],
+    },
+)
+result.review  # the OCRS review
+result.record.gaps  # unmapped, unfilled, coerced, unanchored
+render_mapping_markdown(result)  # the same record, for people
 ```
 
 ## Example

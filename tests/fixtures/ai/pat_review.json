@@ -1,0 +1,116 @@
+{
+  "source": "/input/paper.md",
+  "title": "Beyond Document Relevance: Evaluating Citation-Set Structure in Citation Recommendation",
+  "summary": "The paper argues that citations at a single location in a text often form deliberately composed sets: corroborating sets that restate one idea, or complementary sets whose members cover different aspects of a claim. Standard local citation recommendation, by contrast, scores each candidate independently by its similarity to the citing sentence. As motivation, the paper reports that SPECTER2's top-|A| retrieved sets are more self-similar than human citation sets (+0.014 mean pairwise cosine), with a larger gap in introductions than in methods sections. It then introduces LOCUS, an evaluation built on the arXiv split of Gu et al. Citation contexts are clustered into locations, and anchors are identified through clustering and inline-marker routes. LOCUS has two probes. LOCUS-Rank uses 10-candidate pools whose distractors are cited elsewhere in the same citing paper. LOCUS-Swap asks the system to match two contexts to two cited papers. Chance floors are given analytically (0.5 for Swap; H10/10 ≈ 0.293 MRR for Rank).\n\nThe proposed method is a training-free reranker. It adds λ times the mean smoothed PPMI between a candidate and the observed anchors, computed from a train-only same-location co-citation graph, to a standardized base score. On hard headline pools it raises Rank MRR by +0.102 to +0.121 across SPECTER2, SciNCL, HAtten and BM25 (+0.118 for SPECTER2, the pre-registered comparison). Swap accuracy rises by +0.022 to +0.033. The paper states that the gain depends on graph coverage (target–anchor support in 61.2% of pools; the abstract says 62.1%). Appendix controls cover easy vs. hard slices, other-location, random and degree-matched anchors, sibling titles, raw co-counts and node2vec.\n\nIn sequential set completion, the reranker improves Recall@20 with self-retrieved first anchors and with corpus-wide candidate retrieval. The paper argues that the first correct anchor is a bottleneck: revealing one true citation yields 3.4× higher Recall@1 under oracle prefetch. It also analyses anchor influence with a closed-form identity and a taxonomy of informative, redundant and non-co-cited anchors.",
+  "issues": [
+    {
+      "title": "Harm from distractor-supported pools is missing from the abstract, results framing, limitations and conclusion",
+      "location": "p.1 abstract; p.6 LOCUS-Rank paras 1–2; p.8 Limitations; p.9 Conclusion",
+      "category": "unsupported_claim",
+      "severity": "major",
+      "description": "The gain is described as 'substantial and consistent', and the conclusion says the reranker 'consistently improves' retrieval. Table 6, however, shows MRR falling by 0.237 in the 20.9% of pools where the graph links an anchor to a distractor (and by 0.140 across all PPMI=0 pools). The aggregate is therefore a net of large gains and large losses. The stratified breakdown is reported only for SPECTER2, so it is not shown that the four bases behave alike within strata.\n\nThe Limitations section mentions only the coverage dependence. It omits this failure mode, the restriction to the hard slice (the easy-slice gain is +0.030), and the 31.6% of gold citations that corpus-wide retrieval cannot reach.",
+      "evidence": "However, this does not affect comparisons across bases: each base benefits from the same co-citation evidence when it is available.",
+      "suggested_fix": "Report the target-seen, distractor-seen and neither strata for all four bases. In the abstract and Limitations, state that the reranker lowers MRR where the graph supports a distractor, and mention the hard-slice restriction. Limit 'consistent' to the across-base aggregate.",
+      "confidence": 0.7,
+      "segment": "",
+      "grounding": "not checked; verified against Table 6 (p.10), Table 7 (p.11) and the Limitations text on p.8"
+    },
+    {
+      "title": "Abstract coverage figure 62.1% contradicts 61.2% in the body",
+      "location": "p.1, abstract",
+      "category": "significant_typo",
+      "severity": "minor",
+      "description": "The abstract gives 62.1% of pools with target–anchor graph support. Pages 6, 8 and 10 and Table 6 give 61.2% (21,837/35,701 = 61.17%).",
+      "evidence": "The gain largely comes from 62.1% of pools with target–anchor graph support.",
+      "suggested_fix": "Change the abstract to 61.2%.",
+      "confidence": 0.92,
+      "segment": "",
+      "grounding": "not checked; verified against Table 6 counts on p.10"
+    },
+    {
+      "title": "Sequential-completion setup underspecified (base, oracle prefetch, seeds, λ=4.0, missing CI)",
+      "location": "p.6–7, Table 3",
+      "category": "clarity",
+      "severity": "minor",
+      "description": "The paper does not say:\n- which base retriever or embedding store is used;\n- how 'oracle prefetch' is defined;\n- what the 3 seeds randomize in an argmax procedure;\n- whether λ=4.0, far from the Swap values of 0.1–0.2, was selected on validation.\n\nSetting A also has no CI.",
+      "evidence": "Table 3: Sequential set completion over test locations, 3 seeds, $\\lambda = 4.0$. The gain persists as oracle information is removed.",
+      "suggested_fix": "Specify the base, the prefetch pool, what the seeds control, and the λ selection grid. Report seed spread and a CI for Setting A.",
+      "confidence": 0.55,
+      "segment": "",
+      "grounding": "not checked; quote verified on p.7"
+    },
+    {
+      "title": "Bibliographic errors in MacRoberts and Novoselov 2005 entries",
+      "location": "p.12, refs 14 and 17",
+      "category": "significant_typo",
+      "severity": "minor",
+      "description": "The MacRoberts entry has an impossible page range, 445–444 (likely 435–444). The Novoselov 2005 author list contains 'Vladimirovich, S.', which looks like a misparsed middle name.",
+      "evidence": "Scientometrics, 36(3), 445–444.",
+      "suggested_fix": "Correct the page range and remove the spurious author.",
+      "confidence": 0.5,
+      "segment": "",
+      "grounding": "not checked (search disabled); the page range is self-evidently inconsistent"
+    }
+  ],
+  "dropped": [
+    {
+      "title": "Coverage share is given as 62.1% in the abstract but 61.2% elsewhere",
+      "reason": "merged into: Abstract coverage figure 62.1% contradicts 61.2% in the body"
+    },
+    {
+      "title": "The coverage strata do not add up to the headline +0.118 gain",
+      "reason": "merged into: Table 6 coverage strata do not reproduce the headline rescored MRR or ΔMRR"
+    }
+  ],
+  "segments": [
+    {
+      "name": "Introduction, motivation and set-similarity analysis (Fig 1-2)",
+      "theme": "introduction",
+      "pages": [
+        1,
+        2,
+        3
+      ],
+      "complexity": "medium",
+      "rationale": "Mostly narrative, but it includes quantitative claims (40% multi-citation, cosine percentiles, CIs) and example citations that need checking against later results."
+    },
+    {
+      "name": "Related work and citation-trained baselines",
+      "theme": "related_work",
+      "pages": [
+        3,
+        4
+      ],
+      "complexity": "light",
+      "rationale": "Short narrative overview of LCR, SPECTER/SciNCL, co-citation and PPMI."
+    }
+  ],
+  "reports": [
+    {
+      "segment": {
+        "name": "LOCUS construction, chance floors and PPMI reranker (incl. Appendix A proof, standardization)"
+      },
+      "issues": []
+    }
+  ],
+  "cost_usd": 2.6574408,
+  "duration_s": 438.54420453899996,
+  "meta": {
+    "model": "us.anthropic.claude-opus-5-5",
+    "search": true,
+    "synthesis_cost_usd": 0.9299368,
+    "synthesis_duration_s": 209.45077857799998,
+    "synthesis_calls": 1,
+    "segments": 7,
+    "reports": 7,
+    "samples_high": 1,
+    "concurrency": 4,
+    "use_search": true,
+    "max_cost": 15.0,
+    "aborted_by_budget": false,
+    "valency": true,
+    "segmentation_cost_usd": 0.1159,
+    "review_cost_usd": 1.6117,
+    "out_dir": "/output"
+  }
+}

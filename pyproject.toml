@@ -8,7 +8,10 @@ version = "0.2.0"
 description = "Open Canonical Review Schema (OCRS) - schema + mappers for OpenReview, CMT, and narrative journal reviews."
 license = "Apache-2.0"
 requires-python = ">=3.10"
-dependencies = ["jsonschema>=4.19.0"]
+dependencies = ["jsonschema>=4.19.0", "pydantic>=2.5"]
+
+[tool.setuptools.package-data]
+ocrs = ["schemas/*.json"]
 
 [project.optional-dependencies]
 docs = ["json-schema-for-humans>=1.0.0"]

@@ -10,9 +10,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-SCHEMA_PATH = (
-    Path(__file__).resolve().parent.parent.parent / "schemas" / "canonical-review.schema.json"
-)
+SCHEMA_PATH = Path(__file__).resolve().parent / "schemas" / "canonical-review.schema.json"
 
 _validator: Draft202012Validator | None = None
 _schema: dict[str, Any] | None = None

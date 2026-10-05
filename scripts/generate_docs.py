@@ -10,7 +10,7 @@ from json_schema_for_humans.generation_configuration import GenerationConfigurat
 def main():
     """Generate HTML documentation for all schemas."""
     root = Path(__file__).parent.parent
-    schemas_dir = root / "schemas"
+    schemas_dir = root / "src" / "ocrs" / "schemas"
     docs_dir = root / "docs"
 
     # Ensure docs directory exists
