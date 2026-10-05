@@ -66,8 +66,8 @@ class Gaps(BaseModel):
     """OCRS fields this review leaves empty."""
     coerced: list[Coercion] = []
     """Reviewer values that are not allowed in OCRS, with what the mapper did instead."""
-    unanchored: list[UnanchoredQuote] = []
-    """Quotes from the paper that could not be found in it."""
+    unanchored: list[UnanchoredQuote] | None = None
+    """Quotes from the paper that could not be found in it. None when no paper was given."""
 
 
 class MappingStatus(str, Enum):

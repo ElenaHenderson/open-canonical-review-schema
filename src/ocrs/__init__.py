@@ -17,7 +17,6 @@ from .identifiers import (
     validate_orcid,
     validate_pmcid,
 )
-from .mappers._ai import AiPayload, AiRun
 from .registry import (
     map_from,
     map_to,
@@ -39,8 +38,6 @@ __all__ = [
     "map_to",
     "map_with_record",
     "mapper_version",
-    "AiPayload",
-    "AiRun",
     "render_mapping_markdown",
     "supported_sources",
     "supported_targets",

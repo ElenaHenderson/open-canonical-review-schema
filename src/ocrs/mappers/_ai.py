@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Valency Systems Inc.
 # SPDX-License-Identifier: Apache-2.0
-"""What the AI reviewer mappers share: the payload, the step recorder and the review envelope.
+"""What the AI reviewer mappers share: the step recorder and the review envelope.
 
 An AI mapper copies the reviewer's own output into OCRS. It never rewrites or
 invents text. Whatever has no OCRS field goes, unchanged, to
@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
-from pydantic import AwareDatetime, BaseModel, JsonValue
+from pydantic import JsonValue
 
 from ..anchors import Block, find_quote
 from ..gaps import count_unmapped, generic_path, leftover, unfilled_paths
@@ -50,26 +50,6 @@ NOT_FOR_AI_REVIEWS = {
 }
 
 
-class AiRun(BaseModel):
-    review_id: str
-    source_system: str
-    work_id: str
-    work_version: str | None = None
-    work_type: str = "preprint"
-    reviewer_commit: str
-    model_id: str
-    started_at: AwareDatetime
-    ended_at: AwareDatetime
-    cost_usd: float | None = None
-    requested_by: str | None = None
-
-
-class AiPayload(BaseModel):
-    output: dict[str, Any]
-    run: AiRun
-    blocks: list[Block] = []
-
-
 def ocrs_version() -> str:
     try:
         return version("ocrs")
@@ -84,11 +64,11 @@ def iso(moment: datetime) -> str:
 class Recorder:
     """Collects the steps of one mapping and the paths it read."""
 
-    def __init__(self) -> None:
+    def __init__(self, checks_quotes: bool) -> None:
         self.steps: list[Step] = []
         self.read: set[str] = set()
         self.coerced: list[Coercion] = []
-        self.unanchored: list[UnanchoredQuote] = []
+        self.unanchored: list[UnanchoredQuote] | None = [] if checks_quotes else None
         self.skipped: list[SkippedItem] = []
 
     def copy(self, source: str, target: str, value: JsonValue) -> JsonValue:
@@ -114,7 +94,7 @@ class Recorder:
         self.skipped.append(SkippedItem(source=source, reason=reason))
 
     def evidence_link(
-        self, source: str, target: str, quote: str, ref: str, blocks: list[Block]
+        self, source: str, target: str, quote: str, ref: str, blocks: list[Block] | None
     ) -> dict[str, Any]:
         """An evidence link for `quote`, and where in the paper the quote was found.
 
@@ -123,6 +103,8 @@ class Recorder:
         the document it came from.
         """
         self.copy(source, f"{target}.quote", quote)
+        if blocks is None or self.unanchored is None:
+            return {"type": "paper_section", "ref": ref, "quote": quote}
         match, best_score = find_quote(quote, blocks)
         if match is None:
             self.unanchored.append(
@@ -141,22 +123,37 @@ class Recorder:
         return {"type": "paper_section", "ref": ref, "quote": quote}
 
 
-def build_review(run: AiRun, framework: str, mapper_version: str) -> dict[str, Any]:
+def build_review(
+    *,
+    framework: str,
+    mapper_version: str,
+    review_id: str,
+    source_system: str,
+    work_id: str,
+    work_type: str,
+    reviewer_commit: str,
+    model_id: str,
+    started_at: datetime,
+    ended_at: datetime,
+    work_version: str | None = None,
+    requested_by: str | None = None,
+    cost_usd: float | None = None,
+) -> dict[str, Any]:
     """The parts of an OCRS review that come from the run, not the reviewer's output."""
     execution: dict[str, Any] = {
-        "started_at": iso(run.started_at),
-        "ended_at": iso(run.ended_at),
-        "wall_time_seconds": (run.ended_at - run.started_at).total_seconds(),
+        "started_at": iso(started_at),
+        "ended_at": iso(ended_at),
+        "wall_time_seconds": (ended_at - started_at).total_seconds(),
     }
-    if run.cost_usd is not None:
-        execution["cost"] = {"currency": "USD", "estimated_total": run.cost_usd}
+    if cost_usd is not None:
+        execution["cost"] = {"currency": "USD", "estimated_total": cost_usd}
     review: dict[str, Any] = {
-        "review_id": run.review_id,
+        "review_id": review_id,
         "version": REVIEW_VERSION,
-        "created_at": iso(run.ended_at),
+        "created_at": iso(ended_at),
         "provenance": {
-            "source_system": run.source_system,
-            "source_review_id": run.review_id,
+            "source_system": source_system,
+            "source_review_id": review_id,
             "imported_at": iso(datetime.now(timezone.utc)),
             "mapping": {
                 "mapping_spec_id": MAPPING_SPEC_ID,
@@ -171,21 +168,21 @@ def build_review(run: AiRun, framework: str, mapper_version: str) -> dict[str, A
                 "system": {
                     "critic_framework": {
                         "name": framework,
-                        "version": run.reviewer_commit[:12],
-                        "commit": run.reviewer_commit,
+                        "version": reviewer_commit[:12],
+                        "commit": reviewer_commit,
                     },
-                    "models": [{"role": "reviewer", "model_id": run.model_id}],
+                    "models": [{"role": "reviewer", "model_id": model_id}],
                 },
                 "execution": execution,
             },
         },
-        "target": {"work_id": run.work_id, "work_type": run.work_type},
+        "target": {"work_id": work_id, "work_type": work_type},
         "opinion": {},
     }
-    if run.work_version:
-        review["target"]["version"] = run.work_version
-    if run.requested_by:
-        review["review_context"] = {"requested_by": run.requested_by}
+    if work_version:
+        review["target"]["version"] = work_version
+    if requested_by:
+        review["review_context"] = {"requested_by": requested_by}
     return review
 
 

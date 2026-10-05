@@ -89,31 +89,27 @@ The PAT and OpenAIReview mappers copy the reviewer's own output into OCRS; they 
 - **coerced**: reviewer values OCRS does not allow (for example an unknown severity), and what the mapper did instead;
 - **unanchored**: quotes the reviewer took from the paper that cannot be found in it.
 
-Quotes are matched against the paper, given as plain-text blocks (body, abstract, references). The record says where each quote was found, with the block's ID when it has one.
+`output` is the reviewer's own file, unchanged. The keyword arguments are what that file doesn't say: which review and paper, who produced it, the reviewer's commit, the model, and the run's times and cost. Give the paper as plain-text `blocks` (body, abstract, references) to also check each quote against it; the record then says where each quote was found. Without `blocks`, quotes are copied but not checked.
 
 ```python
 from ocrs import map_with_record, render_mapping_markdown
 
 result = map_with_record(
     "pat",
-    {
-        "output": pat_review_json,
-        "run": {
-            "review_id": "…",
-            "source_system": "valency",
-            "work_id": "…",
-            "work_version": "…",
-            "reviewer_commit": "…",
-            "model_id": "…",
-            "started_at": "…",
-            "ended_at": "…",
-            "cost_usd": 3.04,
-        },
-        "blocks": [{"id": "p1", "kind": "body", "text": "…"}, {"kind": "abstract", "text": "…"}],
-    },
+    pat_review_json,
+    review_id="…",
+    source_system="valency",
+    work_id="…",
+    work_type="preprint",
+    work_version="…",
+    reviewer_commit="…",
+    model_id="…",
+    started_at="2026-10-03T01:00:00Z",
+    ended_at="2026-10-03T01:08:00Z",
+    cost_usd=3.04,
 )
 result.review  # the OCRS review
-result.record.gaps  # unmapped, unfilled, coerced, unanchored
+result.record.gaps  # unmapped, unfilled, coerced (and unanchored, with blocks)
 render_mapping_markdown(result)  # the same record, for people
 ```
 

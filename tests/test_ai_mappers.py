@@ -21,6 +21,7 @@ RUN = {
     "source_system": "valency",
     "requested_by": "valency",
     "work_id": "W_hvtukmgk",
+    "work_type": "preprint",
     "work_version": "4b1c7e53-ef3c-4309-99ac-f0c599cbf194",
     "reviewer_commit": "4763efa4a819c0ffee0000000000000000000000",
     "model_id": "us.anthropic.claude-opus-5-5",
@@ -31,7 +32,8 @@ RUN = {
 
 
 def _payload(output):
-    return {"output": copy.deepcopy(output), "run": RUN, "blocks": BLOCKS}
+    """map_with_record's arguments, as map_from's payload."""
+    return {"output": copy.deepcopy(output), **RUN, "blocks": BLOCKS}
 
 
 def _weaknesses(review):
@@ -40,7 +42,7 @@ def _weaknesses(review):
 
 class TestPat:
     def test_maps_and_validates(self):
-        result = map_with_record("pat", _payload(PAT))
+        result = map_with_record("pat", **_payload(PAT))
         validate_canonical(result.review)
         assert result.record.status == MappingStatus.OK
         assert len(_weaknesses(result.review)) == len(PAT["issues"])
@@ -56,7 +58,7 @@ class TestPat:
         assert (link["ref"], link["quote"]) == (issue["location"], issue["evidence"])
 
     def test_records_where_each_quote_was_found(self):
-        result = map_with_record("pat", _payload(PAT))
+        result = map_with_record("pat", **_payload(PAT))
         links = [w["evidence_links"][0] for w in _weaknesses(result.review)]
         assert {link["type"] for link in links} == {"paper_section"}
         anchored = (Rule.ANCHORED_EXACT, Rule.ANCHORED_FUZZY)
@@ -77,13 +79,13 @@ class TestPat:
         assert review["provenance"]["mapping"] == {
             "mapping_spec_id": "canonical-review.mapping.v1",
             "mapping_spec_version": "1.1.0",
-            "mapper_version": "1.0.1",
+            "mapper_version": "1.0.2",
         }
         assert review["target"]["version"] == RUN["work_version"]
         assert review["review_context"] == {"requested_by": "valency"}
 
     def test_unmapped_fields_kept_in_extensions(self):
-        result = map_with_record("pat", _payload(PAT))
+        result = map_with_record("pat", **_payload(PAT))
         kept = result.review["extensions"]["pat"]
         assert kept["issues"][0]["suggested_fix"] == PAT["issues"][0]["suggested_fix"]
         assert kept["dropped"] == PAT["dropped"]
@@ -96,7 +98,7 @@ class TestPat:
     def test_unknown_severity_is_coerced(self):
         output = copy.deepcopy(PAT)
         output["issues"][0]["severity"] = "high"
-        result = map_with_record("pat", _payload(output))
+        result = map_with_record("pat", **_payload(output))
         assert "severity" not in _weaknesses(result.review)[0]
         [coercion] = result.record.gaps.coerced
         assert (coercion.source, coercion.original, coercion.result) == (
@@ -108,7 +110,7 @@ class TestPat:
     def test_issue_without_description_is_skipped(self):
         output = copy.deepcopy(PAT)
         output["issues"][1]["description"] = ""
-        result = map_with_record("pat", _payload(output))
+        result = map_with_record("pat", **_payload(output))
         assert result.record.status == MappingStatus.PARTIAL
         assert [item.source for item in result.record.skipped] == ["issues[1]"]
         assert len(_weaknesses(result.review)) == len(PAT["issues"]) - 1
@@ -116,7 +118,7 @@ class TestPat:
 
 class TestOpenAIReview:
     def test_maps_merged_comments(self):
-        result = map_with_record("openaireview", _payload(OPENAIREVIEW))
+        result = map_with_record("openaireview", **_payload(OPENAIREVIEW))
         validate_canonical(result.review)
         [method] = [m for k, m in OPENAIREVIEW["methods"].items() if k.startswith("progressive__")]
         weaknesses = _weaknesses(result.review)
@@ -126,7 +128,7 @@ class TestOpenAIReview:
         assert result.review["opinion"]["summary"] == method["overall_feedback"]
 
     def test_gaps(self):
-        gaps = map_with_record("openaireview", _payload(OPENAIREVIEW)).record.gaps
+        gaps = map_with_record("openaireview", **_payload(OPENAIREVIEW)).record.gaps
         assert [quote.source.rsplit(".", 2)[-2] for quote in gaps.unanchored] == ["comments[1]"]
         unmapped = {field.path for field in gaps.unmapped}
         assert "methods.progressive__*.comments[].paragraph_index" in unmapped
@@ -137,14 +139,14 @@ class TestOpenAIReview:
 
 class TestRecord:
     def test_steps_name_rules(self):
-        steps = map_with_record("pat", _payload(PAT)).record.steps
+        steps = map_with_record("pat", **_payload(PAT)).record.steps
         rules = {(step.source, step.rule) for step in steps}
         assert ("issues[0].title", Rule.COPIED) in rules
         assert ("issues[0].severity", Rule.LOOKUP) in rules
         assert ("issues[2].evidence", Rule.ANCHORED_FUZZY) in rules
 
     def test_markdown(self):
-        markdown = render_mapping_markdown(map_with_record("pat", _payload(PAT)))
+        markdown = render_mapping_markdown(map_with_record("pat", **_payload(PAT)))
         assert markdown.startswith("# pat review mapped to OCRS")
         assert "| Unanchored | 0 of 4 quotes |" in markdown
         assert "`issues[].suggested_fix`" in markdown
@@ -175,4 +177,14 @@ class TestFindQuote:
 def test_run_times_need_a_timezone():
     run = {**RUN, "started_at": "2026-10-03T01:00:00"}
     with pytest.raises(ValueError):
-        map_with_record("pat", {"output": PAT, "run": run, "blocks": BLOCKS})
+        map_with_record("pat", PAT, **run, blocks=BLOCKS)
+
+
+def test_without_a_paper_quotes_are_copied_but_not_checked():
+    result = map_with_record("pat", PAT, **RUN)
+    assert result.record.gaps.unanchored is None
+    anchored = (Rule.ANCHORED_EXACT, Rule.ANCHORED_FUZZY)
+    assert not [step for step in result.record.steps if step.rule in anchored]
+    link = _weaknesses(result.review)[0]["evidence_links"][0]
+    assert (link["type"], link["quote"]) == ("paper_section", PAT["issues"][0]["evidence"])
+    assert "| Unanchored | not checked (no paper given) |" in render_mapping_markdown(result)

@@ -7,8 +7,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from pydantic import AwareDatetime, validate_call
+
+from .anchors import Block
 from .mappers import openaireview, pat
-from .mappers._ai import AiPayload
+from .mappers._ai import build_review
 from .mappers.cmt import from_cmt, to_cmt
 from .mappers.editorialmanager import from_editorialmanager, to_editorialmanager
 from .mappers.hotcrp import from_hotcrp, to_hotcrp
@@ -34,7 +37,9 @@ _FROM: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
 _MAPPER_VERSIONS = {"openaireview": openaireview.MAPPER_VERSION, "pat": pat.MAPPER_VERSION}
 
 # Sources whose mappers also return a mapping record (steps and gaps).
-_FROM_WITH_RECORD: dict[str, Callable[[AiPayload], MappingResult]] = {
+_FROM_WITH_RECORD: dict[
+    str, Callable[[dict[str, Any], dict[str, Any], list[Block] | None], MappingResult]
+] = {
     "openaireview": map_openaireview,
     "pat": map_pat,
 }
@@ -71,14 +76,49 @@ def mapper_version(source: str) -> str:
     return _MAPPER_VERSIONS[source]
 
 
-def map_with_record(source: str, payload: dict[str, Any]) -> MappingResult:
-    """Map AI reviewer output to OCRS, with a record of each step and the gaps.
+@validate_call
+def map_with_record(
+    source: str,
+    output: dict[str, Any],
+    *,
+    review_id: str,
+    source_system: str,
+    work_id: str,
+    work_type: str,
+    reviewer_commit: str,
+    model_id: str,
+    started_at: AwareDatetime,
+    ended_at: AwareDatetime,
+    work_version: str | None = None,
+    requested_by: str | None = None,
+    cost_usd: float | None = None,
+    blocks: list[Block] | None = None,
+) -> MappingResult:
+    """Map an AI reviewer's own output to OCRS, with a record of each step and the gaps.
 
-    `payload` is `{"output": <the reviewer's own file>, "run": <AiRun>, "blocks": [<Block>]}`.
+    `output` is the reviewer's file, unchanged. The keyword arguments are what that file
+    doesn't say: which review and paper, what kind of work the paper is, who produced the
+    review, the reviewer's commit, the model, the run's times and cost. `blocks` is the
+    paper, to find each quote in; without it, quotes are copied but not checked.
     """
     if source not in _FROM_WITH_RECORD:
         raise ValueError(f"No mapping record for {source}. Supported: {sorted(_FROM_WITH_RECORD)}")
-    return _FROM_WITH_RECORD[source](AiPayload.model_validate(payload))
+    review = build_review(
+        framework=source,
+        mapper_version=_MAPPER_VERSIONS[source],
+        review_id=review_id,
+        source_system=source_system,
+        work_id=work_id,
+        work_type=work_type,
+        work_version=work_version,
+        reviewer_commit=reviewer_commit,
+        model_id=model_id,
+        started_at=started_at,
+        ended_at=ended_at,
+        cost_usd=cost_usd,
+        requested_by=requested_by,
+    )
+    return _FROM_WITH_RECORD[source](output, review, blocks)
 
 
 def map_to(target: str, canonical_review: dict[str, Any]) -> dict[str, Any]:

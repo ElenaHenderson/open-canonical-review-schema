@@ -20,12 +20,13 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from ..anchors import Block
 from ..gaps import generic_path
 from ..mapping import MappingResult
-from ._ai import AiPayload, Recorder, build_review, finish
+from ._ai import Recorder, finish
 
 FRAMEWORK = "openaireview"
-MAPPER_VERSION = "1.0.1"
+MAPPER_VERSION = "1.0.2"
 MERGED_METHOD_PREFIX = "progressive__"
 UNMERGED_METHOD_PREFIX = "progressive_original__"
 IGNORED = {"paragraphs", f"methods.{UNMERGED_METHOD_PREFIX}*"}
@@ -78,7 +79,7 @@ def pick_method(methods: dict[str, Method]) -> str:
 
 
 def map_comment(
-    comment: Comment, source: str, target: str, recorder: Recorder, payload: AiPayload
+    comment: Comment, source: str, target: str, recorder: Recorder, blocks: list[Block] | None
 ) -> dict[str, Any]:
     finding: dict[str, Any] = {
         "text": recorder.copy(f"{source}.explanation", f"{target}.text", comment.explanation)
@@ -91,19 +92,19 @@ def map_comment(
         ]
     if comment.quote:
         link_target = f"{target}.evidence_links[0]"
-        link = recorder.evidence_link(
-            f"{source}.quote", link_target, comment.quote, "", payload.blocks
-        )
+        link = recorder.evidence_link(f"{source}.quote", link_target, comment.quote, "", blocks)
         finding["evidence_links"] = [link]
     return finding
 
 
-def map_openaireview(payload: AiPayload) -> MappingResult:
-    paper = PaperResult.model_validate(payload.output)
+def map_openaireview(
+    output: dict[str, Any], review: dict[str, Any], blocks: list[Block] | None
+) -> MappingResult:
+    """Fills `review`, the envelope map_with_record built, from the reviewer's output."""
+    paper = PaperResult.model_validate(output)
     key = pick_method(paper.methods)
     method, prefix = paper.methods[key], f"methods.{key}"
-    recorder = Recorder()
-    review = build_review(payload.run, FRAMEWORK, MAPPER_VERSION)
+    recorder = Recorder(checks_quotes=blocks is not None)
     if method.overall_feedback:
         review["opinion"]["summary"] = recorder.copy(
             f"{prefix}.overall_feedback", "opinion.summary", method.overall_feedback
@@ -129,13 +130,13 @@ def map_openaireview(payload: AiPayload) -> MappingResult:
             recorder.skip(source, "no explanation")
             continue
         target = f"findings.weaknesses[{len(weaknesses)}]"
-        weaknesses.append(map_comment(comment, source, target, recorder, payload))
+        weaknesses.append(map_comment(comment, source, target, recorder, blocks))
     if weaknesses:
         review["findings"] = {"weaknesses": weaknesses}
     return finish(
         review,
         recorder,
-        payload.output,
+        output,
         framework=FRAMEWORK,
         mapper_version=MAPPER_VERSION,
         ignored=IGNORED,
@@ -144,4 +145,7 @@ def map_openaireview(payload: AiPayload) -> MappingResult:
 
 
 def from_openaireview(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, Any]:
-    return map_openaireview(AiPayload.model_validate(payload)).review
+    """map_from's interface: `payload` holds map_with_record's arguments, `output` included."""
+    from ..registry import map_with_record
+
+    return map_with_record(FRAMEWORK, **payload).review

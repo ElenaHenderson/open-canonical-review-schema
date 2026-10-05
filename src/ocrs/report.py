@@ -102,7 +102,7 @@ def render_header(result: MappingResult) -> Iterator[str]:
 
 def render_gaps(result: MappingResult) -> Iterator[str]:
     gaps, framework = result.record.gaps, result.record.source_format
-    quotes = len(gaps.unanchored) + sum(
+    anchored = sum(
         step.rule in (Rule.ANCHORED_EXACT, Rule.ANCHORED_FUZZY) for step in result.record.steps
     )
     yield "## Gaps"
@@ -112,7 +112,10 @@ def render_gaps(result: MappingResult) -> Iterator[str]:
     yield f"| Unmapped | {len(gaps.unmapped)} fields | {GAP_MEANINGS['unmapped']} |"
     yield f"| Unfilled | {len(gaps.unfilled)} fields | {GAP_MEANINGS['unfilled']} |"
     yield f"| Coerced | {len(gaps.coerced)} values | {GAP_MEANINGS['coerced']} |"
-    unanchored = f"{len(gaps.unanchored)} of {quotes} quotes"
+    if gaps.unanchored is None:
+        unanchored = "not checked (no paper given)"
+    else:
+        unanchored = f"{len(gaps.unanchored)} of {len(gaps.unanchored) + anchored} quotes"
     yield f"| Unanchored | {unanchored} | {GAP_MEANINGS['unanchored']} |"
     if gaps.unmapped:
         yield ""
