@@ -118,7 +118,18 @@ A minimal canonical review in JSON:
       {"text": "Comprehensive experiments across multiple benchmarks"}
     ],
     "weaknesses": [
-      {"text": "Missing ablation study for key component", "severity": "minor"}
+      {
+        "title": "No ablation for the gating module",
+        "text": "Missing ablation study for key component",
+        "severity": "minor",
+        "evidence_links": [
+          {
+            "type": "paper_section",
+            "ref": "Section 4.2",
+            "quote": "The gating module is essential to our results."
+          }
+        ]
+      }
     ]
   }
 }
