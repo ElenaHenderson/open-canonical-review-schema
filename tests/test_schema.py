@@ -3,6 +3,9 @@
 """Tests for the canonical review schema itself."""
 
 from importlib.metadata import version
+from pathlib import Path
+
+from jsonschema import Draft202012Validator
 
 from ocrs import load_schema, validate_canonical
 
@@ -27,3 +30,17 @@ def test_an_anonymous_human_review_needs_no_human_referee():
             "opinion": {"summary": "A sound paper."},
         }
     )
+
+
+def test_the_published_copy_of_this_version_matches_the_package():
+    schemas = Path(__file__).parent.parent / "src" / "ocrs" / "schemas"
+    published = Path(__file__).parent.parent / "versions" / f"v{version('ocrs')}"
+    assert sorted(path.name for path in published.iterdir()) == sorted(
+        path.name for path in schemas.glob("*.json")
+    )
+    for path in published.iterdir():
+        assert path.read_bytes() == (schemas / path.name).read_bytes(), path.name
+
+
+def test_schema_is_valid_json_schema():
+    Draft202012Validator.check_schema(load_schema())

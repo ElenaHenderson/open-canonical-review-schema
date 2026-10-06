@@ -57,9 +57,11 @@ uv run prek run --all-files
 When modifying the JSON schema (`src/ocrs/schemas/canonical-review.schema.json`):
 
 1. Ensure backwards compatibility when possible
-2. Update the version number if making breaking changes
-3. Add tests that exercise the new schema elements
-4. Update mappers if they need to handle new fields
+2. Give the change a new version: set it in `pyproject.toml` and in the schema's `$id`
+3. Copy the files in `src/ocrs/schemas/` to `versions/v<version>/`, which GitHub Pages
+   publishes at the `$id` URL. Never change a version that is already published
+4. Add tests that exercise the new schema elements
+5. Update mappers if they need to handle new fields
 
 ### Adding a New Mapper
 

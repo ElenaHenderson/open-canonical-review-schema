@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
-"""Generate schema documentation using json-schema-for-humans."""
+"""Build the GitHub Pages site: schema docs, plus every released schema version.
 
+Each release's schema files are kept in `versions/v<version>/` and published at
+`<site>/v<version>/<file>`, the URL in that schema's `$id`.
+"""
+
+import shutil
 from pathlib import Path
 
 from json_schema_for_humans.generate import generate_from_filename
@@ -37,8 +42,12 @@ def main():
     print(f"Generating {output_file} from {schema_file}...")
     generate_from_filename(schema_path, output_path, config=config)
 
+    versions = sorted(path.name for path in (root / "versions").iterdir() if path.is_dir())
+    for version in versions:
+        shutil.copytree(root / "versions" / version, docs_dir / version, dirs_exist_ok=True)
+
     # Create the landing page
-    create_landing_page(docs_dir)
+    create_landing_page(docs_dir, versions)
 
     # Create .nojekyll to prevent GitHub Pages from using Jekyll
     (docs_dir / ".nojekyll").touch()
@@ -47,7 +56,7 @@ def main():
     print("To preview locally: python -m http.server 8000 --directory docs")
 
 
-def create_landing_page(docs_dir: Path):
+def create_landing_page(docs_dir: Path, versions: list[str]):
     """Create a landing page linking to all schema docs."""
     landing_html = """<!DOCTYPE html>
 <html lang="en">
@@ -206,21 +215,31 @@ def create_landing_page(docs_dir: Path):
                 </div>
                 <span class="badge">JSON Schema Draft 2020-12</span>
             </div>
+            <div class="schema-card">
+                <h2>Schema files</h2>
+                <ul>
+VERSION_LINKS
+                </ul>
+            </div>
         </div>
 
         <footer>
             <p>
                 <a href="https://github.com/valency-oss/open-canonical-review-schema">GitHub</a>
                 &nbsp;&middot;&nbsp;
-                MIT License
+                Apache License 2.0
             </p>
         </footer>
     </div>
 </body>
 </html>
 """
+    version_links = "\n".join(
+        f'{" " * 20}<li><a href="{version}/canonical-review.schema.json">{version}</a></li>'
+        for version in reversed(versions)
+    )
     # Write as index.html - the landing page for GitHub Pages
-    (docs_dir / "index.html").write_text(landing_html)
+    (docs_dir / "index.html").write_text(landing_html.replace("VERSION_LINKS", version_links))
 
 
 if __name__ == "__main__":
