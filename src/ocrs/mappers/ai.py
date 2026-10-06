@@ -1,12 +1,17 @@
 # Copyright (c) 2026 Valency Systems Inc.
 # SPDX-License-Identifier: Apache-2.0
-"""What the AI reviewer mappers share: the step recorder and the review envelope.
+"""Writing an AI reviewer mapper: the step recorder, the review envelope and `finish`.
 
-An AI mapper copies the reviewer's own output into OCRS. It never rewrites or
+An AI review mapper copies the reviewer's own output into OCRS. It never rewrites or
 invents text. Whatever has no OCRS field goes, unchanged, to
-`extensions.<format>`, which mirrors the reviewer's output. The run details
-(work, reviewer version, model, times, cost) come from whoever ran the
-reviewer, in `run`.
+`extensions.<name>`, which mirrors the reviewer's output. The run details
+(work, reviewer commit, model, times, cost) come from whoever ran the
+reviewer, as `map_with_record`'s keyword arguments, and are already in the
+envelope the mapper receives.
+
+A mapper is an `AIReviewMapper`: it takes the reviewer's output, the envelope and the
+paper's blocks (or None), fills the envelope through a `Recorder`, and returns
+`finish(...)`.
 """
 
 from __future__ import annotations
@@ -18,7 +23,7 @@ from typing import Any
 
 from pydantic import JsonValue
 
-from ..anchors import Block, find_quote
+from ..anchors import Block, BlockKind, find_quote
 from ..gaps import count_unmapped, generic_path, leftover, unfilled_paths
 from ..mapping import (
     Coercion,
@@ -32,6 +37,11 @@ from ..mapping import (
     UnanchoredQuote,
 )
 from ..schema import load_schema, validate_canonical
+
+__all__ = ["AIReviewMapper", "Block", "BlockKind", "MappingResult", "Recorder", "finish"]
+
+AIReviewMapper = Callable[[dict[str, Any], dict[str, Any], list[Block] | None], MappingResult]
+"""(reviewer's output, envelope, paper blocks or None) → the filled review and its record."""
 
 REVIEW_VERSION = "1.0.0"
 # The mapping spec every mapper here follows: schemas/mapping-spec.v1.1.0.json.
@@ -191,12 +201,16 @@ def finish(
     recorder: Recorder,
     output: dict[str, Any],
     *,
-    framework: str,
-    mapper_version: str,
     ignored: set[str],
     generic: Callable[[str], str] = generic_path,
 ) -> MappingResult:
-    """Put what was not mapped in `extensions`, validate, and record the gaps."""
+    """Put what was not mapped in `extensions`, validate, and record the gaps.
+
+    `ignored` lists output paths that are deliberately not kept (`*` matches
+    any key). `generic` turns an output path into the form gaps are summed by.
+    """
+    framework = review["referee"]["ai_referee"]["system"]["critic_framework"]["name"]
+    mapper_version = review["provenance"]["mapping"]["mapper_version"]
     left = leftover(output, recorder.read, ignored, generic)
     if left:
         review["extensions"] = {framework: left}

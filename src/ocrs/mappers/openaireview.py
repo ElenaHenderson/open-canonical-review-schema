@@ -23,9 +23,8 @@ from pydantic import BaseModel
 from ..anchors import Block
 from ..gaps import generic_path
 from ..mapping import MappingResult
-from ._ai import Recorder, finish
+from .ai import Recorder, finish
 
-FRAMEWORK = "openaireview"
 MAPPER_VERSION = "1.0.2"
 MERGED_METHOD_PREFIX = "progressive__"
 UNMERGED_METHOD_PREFIX = "progressive_original__"
@@ -137,15 +136,6 @@ def map_openaireview(
         review,
         recorder,
         output,
-        framework=FRAMEWORK,
-        mapper_version=MAPPER_VERSION,
         ignored=IGNORED,
         generic=method_wildcard(list(paper.methods)),
     )
-
-
-def from_openaireview(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, Any]:
-    """map_from's interface: `payload` holds map_with_record's arguments, `output` included."""
-    from ..registry import map_with_record
-
-    return map_with_record(FRAMEWORK, **payload).review

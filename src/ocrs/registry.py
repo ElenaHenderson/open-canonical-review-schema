@@ -11,38 +11,31 @@ from pydantic import AwareDatetime, validate_call
 
 from .anchors import Block
 from .mappers import openaireview, pat
-from .mappers._ai import build_review
+from .mappers.ai import AIReviewMapper, build_review
 from .mappers.cmt import from_cmt, to_cmt
 from .mappers.editorialmanager import from_editorialmanager, to_editorialmanager
 from .mappers.hotcrp import from_hotcrp, to_hotcrp
 from .mappers.journal import from_journal_narrative, to_journal_narrative
-from .mappers.openaireview import from_openaireview, map_openaireview
 from .mappers.openreview import from_openreview, to_openreview
-from .mappers.pat import from_pat, map_pat
 from .mappers.scholarone import from_scholarone, to_scholarone
 from .mapping import MappingResult
 from .schema import validate_canonical
 
-_FROM: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+_FROM: dict[str, Callable[..., dict[str, Any]]] = {
     "cmt": from_cmt,
     "editorialmanager": from_editorialmanager,
     "hotcrp": from_hotcrp,
     "journal_narrative": from_journal_narrative,
-    "openaireview": from_openaireview,
     "openreview": from_openreview,
-    "pat": from_pat,
     "scholarone": from_scholarone,
 }
 
-_MAPPER_VERSIONS = {"openaireview": openaireview.MAPPER_VERSION, "pat": pat.MAPPER_VERSION}
-
-# Sources whose mappers also return a mapping record (steps and gaps).
-_FROM_WITH_RECORD: dict[
-    str, Callable[[dict[str, Any], dict[str, Any], list[Block] | None], MappingResult]
-] = {
-    "openaireview": map_openaireview,
-    "pat": map_pat,
+# AI reviewer sources: their mappers also return a mapping record (steps and gaps).
+_FROM_WITH_RECORD: dict[str, AIReviewMapper] = {
+    "openaireview": openaireview.map_openaireview,
+    "pat": pat.map_pat,
 }
+_MAPPER_VERSIONS = {"openaireview": openaireview.MAPPER_VERSION, "pat": pat.MAPPER_VERSION}
 
 _TO: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "cmt": to_cmt,
@@ -55,7 +48,7 @@ _TO: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
 
 
 def supported_sources():
-    return sorted(_FROM.keys())
+    return sorted([*_FROM, *_FROM_WITH_RECORD])
 
 
 def supported_targets():
@@ -63,9 +56,16 @@ def supported_targets():
 
 
 def map_from(source: str, payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, Any]:
-    if source not in _FROM:
+    """Map a review to OCRS. For an AI reviewer, `payload` holds map_with_record's arguments,
+    `output` included."""
+    if source in _FROM_WITH_RECORD:
+        out = map_with_record(source, **payload).review
+        if keep_raw:
+            out["provenance"]["raw_payload"] = payload["output"]
+    elif source in _FROM:
+        out = _FROM[source](payload, keep_raw=keep_raw)
+    else:
         raise ValueError(f"Unsupported source: {source}. Supported: {supported_sources()}")
-    out = _FROM[source](payload, keep_raw=keep_raw)
     validate_canonical(out)
     return out
 

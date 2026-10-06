@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.org/schemas/canonical-review.schema.json",
+  "$id": "https://valency-oss.github.io/open-canonical-review-schema/v0.4.0/canonical-review.schema.json",
   "$comment": "Copyright (c) 2026 Valency Systems Inc. Licensed under Apache-2.0.",
   "title": "Open Canonical Review Schema",
   "description": "One peer review of one scholarly work, in a form shared by journals, conferences and AI reviewers",
@@ -792,7 +792,7 @@
           "type": "string"
         },
         "human_referee": {
-          "description": "The human reviewer's identity and expertise",
+          "description": "The human reviewer's identity and expertise. Optional: a fully anonymous review can leave it out",
           "$ref": "#/$defs/humanReferee"
         },
         "ai_referee": {
@@ -809,20 +809,6 @@
         }
       },
       "allOf": [
-        {
-          "if": {
-            "properties": {
-              "referee_type": {
-                "const": "human"
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "human_referee"
-            ]
-          }
-        },
         {
           "if": {
             "properties": {

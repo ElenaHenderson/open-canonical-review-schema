@@ -356,9 +356,6 @@ class TestBuildWorkIdentifiers:
         with pytest.raises(ValueError, match="At least one identifier"):
             build_work_identifiers()
 
-    def test_build_valency_ids(self):
-        """Test building with Valency IDs (no hyperlinks)."""
-
 
 class TestContentHashing:
     """Tests for content hash computation."""

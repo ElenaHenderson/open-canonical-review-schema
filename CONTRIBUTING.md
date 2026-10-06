@@ -70,6 +70,23 @@ To add support for a new source format:
 3. Register the mapper in `src/ocrs/registry.py`
 4. Add tests in `tests/test_roundtrip.py`
 
+### AI Reviewer Mappers
+
+An AI reviewer mapper belongs in OCRS only if the reviewer's output format is public, as
+OpenAIReview's is.
+
+A mapper takes the reviewer's output, the review envelope that `map_with_record` built from its
+keyword arguments, and the paper's blocks (or `None`). It fills the envelope through a
+`Recorder` and returns `finish(...)`, both from `ocrs.mappers.ai`. Add it and its version to
+`_FROM_WITH_RECORD` and `_MAPPER_VERSIONS` in `src/ocrs/registry.py`, and its tests to
+`tests/test_ai_mappers.py`. See `src/ocrs/mappers/openaireview.py` for a complete mapper.
+
+The mapper copies the reviewer's text and never rewrites or invents it. `Recorder.copy` copies
+a value, `Recorder.lookup` maps it through a table and records a coercion when the value is
+not in it, and `Recorder.evidence_link` copies a quote and, given the paper, records where it
+was found. `finish` keeps whatever the mapper did not read in `extensions.<name>`, validates
+the review, and records the gaps.
+
 ## Submitting Changes
 
 1. Create a feature branch from `main`

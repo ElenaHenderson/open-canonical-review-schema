@@ -18,9 +18,8 @@ from pydantic import BaseModel
 
 from ..anchors import Block
 from ..mapping import MappingResult
-from ._ai import Recorder, finish
+from .ai import Recorder, finish
 
-FRAMEWORK = "pat"
 MAPPER_VERSION = "1.0.2"
 SEVERITY = {"critical": "critical", "major": "major", "minor": "minor"}
 IGNORED = {"reports"}
@@ -92,14 +91,5 @@ def map_pat(
         review,
         recorder,
         output,
-        framework=FRAMEWORK,
-        mapper_version=MAPPER_VERSION,
         ignored=IGNORED,
     )
-
-
-def from_pat(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, Any]:
-    """map_from's interface: `payload` holds map_with_record's arguments, `output` included."""
-    from ..registry import map_with_record
-
-    return map_with_record(FRAMEWORK, **payload).review
