@@ -1,0 +1,23 @@
+name: Propose a schema change
+description: A new field, a changed rule, or a fix to the schema
+labels: ["schema"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What can't you express today?
+      description: The review data you have, and where OCRS has no place for it or gets it wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should change?
+      description: The fields or rules you propose, with a JSON example if you can.
+    validations:
+      required: true
+  - type: textarea
+    id: users
+    attributes:
+      label: Who needs it?
+      description: The review systems, venues or AI reviewers that produce this data.

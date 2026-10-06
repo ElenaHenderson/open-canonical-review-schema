@@ -1,0 +1,31 @@
+name: Tell us how you use OCRS
+description: Share what you use OCRS for, so we can learn from it and list you as an adopter
+labels: ["adoption"]
+body:
+  - type: input
+    id: who
+    attributes:
+      label: Who are you?
+      description: Your organization, venue, journal or project.
+    validations:
+      required: true
+  - type: textarea
+    id: use
+    attributes:
+      label: How do you use OCRS?
+      description: For example, storing reviews, exchanging them between systems, or recording AI reviews.
+    validations:
+      required: true
+  - type: textarea
+    id: gaps
+    attributes:
+      label: What's missing or hard?
+  - type: dropdown
+    id: listing
+    attributes:
+      label: May we list you in ADOPTERS.md?
+      options:
+        - "Yes"
+        - "No"
+    validations:
+      required: true

@@ -24,5 +24,5 @@ jobs:
             --exclude '\{value\}'
             --exclude '^https://example\.com/'
             --exclude '^https://github\.com/valency-oss/open-canonical-review-schema'
-            README.md CONTRIBUTING.md CLA.md examples/README.md tests/fixtures/ai/README.md
+            README.md CONTRIBUTING.md CLA.md ADOPTERS.md CHANGELOG.md CODE_OF_CONDUCT.md examples/README.md tests/fixtures/ai/README.md
           fail: true

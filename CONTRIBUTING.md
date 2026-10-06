@@ -119,9 +119,7 @@ For feature requests:
 
 ## Code of Conduct
 
-- Be respectful and inclusive
-- Focus on constructive feedback
-- Help others learn and grow
+This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
 
 ## Questions?
 
