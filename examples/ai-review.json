@@ -1,0 +1,129 @@
+{
+  "review_id": "ai-review-1",
+  "version": "1.0.0",
+  "created_at": "2026-10-03T01:08:00Z",
+  "provenance": {
+    "source_system": "example-platform",
+    "source_review_id": "ai-review-1",
+    "imported_at": "2026-10-03T01:09:00Z",
+    "mapping": {
+      "mapping_spec_id": "canonical-review.mapping.v1",
+      "mapping_spec_version": "1.1.0",
+      "mapper_version": "1.0.2"
+    }
+  },
+  "referee": {
+    "referee_type": "ai",
+    "identity_mode": "open",
+    "ai_referee": {
+      "system": {
+        "critic_framework": {
+          "name": "openaireview",
+          "version": "27740f8434cf",
+          "commit": "27740f8434cf18bd2d66d228291d9dcc3e046bc2"
+        },
+        "models": [
+          {
+            "role": "reviewer",
+            "model_id": "us.anthropic.claude-opus-5-5"
+          }
+        ]
+      },
+      "execution": {
+        "started_at": "2026-10-03T01:00:00Z",
+        "ended_at": "2026-10-03T01:08:00Z",
+        "wall_time_seconds": 480.0
+      },
+      "outputs": {
+        "token_usage": {
+          "input_tokens": 125024,
+          "output_tokens": 46844
+        }
+      }
+    }
+  },
+  "target": {
+    "work_id": "paper-citation-sets",
+    "work_type": "preprint",
+    "version": "v1"
+  },
+  "opinion": {
+    "summary": "This paper makes a timely and well-motivated point: citation sets carry set-level structure that per-document similarity scoring ignores. The corroborating-versus-complementary framing gives that point useful intuition. However, the opening sections leave the core contribution blurry.\n\n**Inconsistent task definition.** The abstract describes LOCUS as a test of whether a retriever can assign a paper's *own* citations to the right sentence, which is a within-paper discrimination task. The introduction instead formalizes set completion as $P(c \\mid \\ell, A)$, conditioned on already-observed anchors. These are different problems with different baselines. The paper should state precisely:\n- how candidate pools are built;\n- whether the co-citation reranker requires a gold anchor at query time;\n- whether the baselines receive the same information.\n\nIf the reranker conditions on $A$ while SPECTER2 and the other retrievers see only $\\ell$, then the reported +0.10–0.12 MRR gains partly measure access to extra signal rather than better modeling. A fair comparison would give the dense retrievers anchor information too, for example via query expansion with the anchor's text.\n\n**Possible leakage.** The reranker is built from \"past citation structure,\" so the temporal cutoff and exclusion of the test paper's own co-citations need to be explicit to rule out leakage.\n\n**Concentration of the gains.** The note that gains \"largely come from\" the 62.1% of pools with target–anchor graph support suggests the method mostly helps where co-citation history already exists. This deserves direct discussion: the cases that matter most for the paper's diversity and homogenization argument, such as new, interdisciplinary, or rarely co-cited work, are precisely those lacking graph support. A popularity-reinforcing reranker could worsen homogenization rather than counter it.\n\n**Unsurprising BM25 result.** BM25 beating dense models is interesting, but it may simply reflect that within-paper pools are topically homogeneous by construction. If so, it would be an artifact of the evaluation design rather than evidence about \"topical smoothing.\"\n\n**Unsupported functional taxonomy.** The corroborating/complementary distinction rests on two hand-picked examples. It needs systematic annotation or a quantitative operationalization before it can support claims about calibrating set diversity.\n\n**Unclear headline statistic.** The \"3.4× at Recall@1\" figure needs its baseline stated.\n\n**Presentation problems.** There are visible citation-rendering errors:\n- ref-9 is cited both for arXiv statistics and as SphereFace.\n- Latour 2004 appears inside a physics example.\n- The footnote markers [^2]–[^6] stand in for actual references.\n\nThese undermine confidence and must be fixed.\n\n**Motivation not tested.** The broader societal claims about attribution homogenization are plausible motivation, but the experiments do not test them. They should be framed accordingly."
+  },
+  "review_context": {
+    "requested_by": "example-platform"
+  },
+  "findings": {
+    "weaknesses": [
+      {
+        "text": "It is good that the authors acknowledge the hard slice filters only title overlap. However, \"This is why\" is a causal claim with no supporting ablation, such as BM25 with abstract-overlap terms removed. It also conflicts with the Introduction. There, BM25's lead (0.502 vs. 0.466–0.478 for the dense models) is read as evidence that \"topical smoothing\" in dense models obscures \"fine-grained lexical distinctions necessary to distinguish complementary papers.\" No analysis tests that smoothing hypothesis. If BM25's advantage mainly reflects residual abstract-token overlap, it is closer to a leakage effect than a substantive finding about lexical resolution. Separately, every base retriever sits well above the 0.293 floor, so being above the floor does not single out BM25. The authors should either test the explanations or soften and reconcile both claims.",
+        "title": "Causal attribution of BM25's strength to abstract overlap is unsupported and conflicts with the Introduction",
+        "tags": [
+          "logical"
+        ],
+        "evidence_links": [
+          {
+            "type": "paper_section",
+            "ref": "",
+            "quote": "Although we filter title overlap, we do not suppress abstract overlap. This is why the lexical baseline remains well above the null floor on the hard slice; nevertheless, the citation-set signal is still useful."
+          }
+        ]
+      },
+      {
+        "text": "These examples are meant to show what corroborating and complementary citation sets look like, so readers need to identify the papers.\n\n- Both examples link to ref-9, ref-10 and ref-11, and the quantum-annealing example also links to \"Latour 2004\". Elsewhere ref-9 is the Gu et al. LCR dataset and ref-12 is Latour, which plainly are not the cited papers. The bracket markers were likely copied from the original citing sentences and resolved against this paper's bibliography by mistake.\n- The follow-up sentence uses five footnote markers ([^2]–[^6]) to describe four citations, and [^2] appears to serve both as a footnote and as a paper.\n\nA reader cannot tell which paper plays which role, or which papers were embedded for the percentile claims that follow.",
+        "title": "Citation markers in the worked examples collide with bibliography entries and footnote mapping is unclear",
+        "tags": [
+          "logical"
+        ],
+        "evidence_links": [
+          {
+            "type": "paper_section",
+            "ref": "",
+            "quote": "it has been recognized that “nonstochastic” effect improves the performance [ref-9](#ref-ref-9); [ref-10](#ref-ref-10); [ref-11](#ref-ref-11); [Latour 2004](#ref-ref-12).*\n\nHere each citation contributes a different aspect of the claim’s support. [^2] [^3] is the original proposal of the idea, [^4] is a theory paper that defines the key concept the claim depends on, [^5] is a theoretical analysis proving the improvement, and [^6] is a set of computer experiments that demonstrate it in practice.[^2]"
+          }
+        ]
+      },
+      {
+        "text": "The reranker's anchor term is the mean of PPMI over anchors, and cosine similarity never enters the score. Influence will therefore track PPMI rather than cosine by construction. The finding describes the scorer, not citation sets in general. The text should frame it as a property of the PPMI-based reranker, or test a scorer that could also use topical similarity.",
+        "title": "Anchor-influence analysis is partly mechanical given the reranker's form",
+        "tags": [
+          "logical"
+        ],
+        "evidence_links": [
+          {
+            "type": "paper_section",
+            "ref": "",
+            "quote": "Figure 4 shows that their usefulness is primarily determined by co-citation evidence rather than topical similarity."
+          }
+        ]
+      }
+    ]
+  },
+  "extensions": {
+    "openaireview": {
+      "slug": "paper",
+      "title": "Beyond Document Relevance: Evaluating Citation-Set Structure in Citation Recommendation [MD]",
+      "methods": {
+        "progressive__us.anthropic.claude-opus-5-5": {
+          "label": "Progressive (us.anthropic.claude-opus-5-5)",
+          "model": "us.anthropic.claude-opus-5-5",
+          "comments": [
+            {
+              "id": "progressive__us.anthropic.claude-opus-5-5_1",
+              "paragraph_index": 29
+            },
+            {
+              "id": "progressive__us.anthropic.claude-opus-5-5_2",
+              "paragraph_index": 12
+            },
+            {
+              "id": "progressive__us.anthropic.claude-opus-5-5_12",
+              "paragraph_index": 46
+            }
+          ],
+          "cost_usd": 1.7962
+        }
+      }
+    }
+  }
+}

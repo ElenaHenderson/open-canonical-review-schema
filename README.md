@@ -114,6 +114,8 @@ render_mapping_markdown(result)  # the same record, for people
 
 ## Example
 
+For complete human, AI and hybrid reviews, see [examples/](examples/).
+
 A minimal canonical review in JSON:
 
 ```json

@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from ocrs import validate_canonical
+from ocrs.catalog import load_catalog
 
 ROOT = Path(__file__).parent.parent
 DOCS = ["README.md", "CONTRIBUTING.md"]
@@ -62,3 +63,19 @@ def test_python_example_runs(code):
 def test_json_example_validates(text):
     example = json.loads(text)
     validate_canonical(example if "review_id" in example else {**MINIMAL_REVIEW, **example})
+
+
+@pytest.mark.parametrize(
+    "path", sorted((ROOT / "examples").glob("*.json")), ids=lambda path: path.name
+)
+def test_example_review_validates(path):
+    validate_canonical(json.loads(path.read_text()))
+
+
+@pytest.mark.parametrize(
+    "path", sorted((ROOT / "examples").glob("*.json")), ids=lambda path: path.name
+)
+def test_example_metrics_use_catalog_keys(path):
+    keys = {metric["key"] for metric in load_catalog()["metrics"]}
+    for metric in json.loads(path.read_text()).get("metrics", []):
+        assert metric["key"] in keys
