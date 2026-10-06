@@ -283,7 +283,10 @@ identifiers = build_work_identifiers(
     doi="10.1234/example.2024",
     openalex_id="W2741809807",  # Automatically generates resolver URL
 )
-# Result: {"doi": {...}, "openalex_id": {"value": "W2741809807", "hyperlink": "https://openalex.org/W2741809807"}}
+assert identifiers["openalex_id"] == {
+    "value": "W2741809807",
+    "hyperlink": "https://openalex.org/W2741809807",
+}
 
 # Validate OpenAlex IDs
 assert validate_openalex_work("W2741809807")  # Work IDs start with 'W'
@@ -295,7 +298,7 @@ The schema also supports OpenAlex Author IDs for reviewer identification:
 {
   "referee": {
     "referee_type": "human",
-    "identity_mode": "disclosed",
+    "identity_mode": "open",
     "human_referee": {
       "orcid": "0000-0001-5000-0007",
       "openalex_id": "A5023888391",
@@ -317,8 +320,8 @@ assert validate_orcid("0000-0001-5000-0007")  # Valid
 assert not validate_orcid("0000-0001-5000-0008")  # Invalid checksum
 
 # Normalize from various formats
-normalize_orcid("https://orcid.org/0000-0001-5000-0007")  # → "0000-0001-5000-0007"
-normalize_orcid("0000000150000007")  # → "0000-0001-5000-0007"
+assert normalize_orcid("https://orcid.org/0000-0001-5000-0007") == "0000-0001-5000-0007"
+assert normalize_orcid("0000000150000007") == "0000-0001-5000-0007"
 ```
 
 ### Identifier Utilities
@@ -346,13 +349,13 @@ ids = build_work_identifiers(
 )
 
 # Resolve to primary identifier
-id_type, value = resolve_primary_identifier(ids)  # → ("doi", "10.1234/example")
+assert resolve_primary_identifier(ids) == ("doi", "10.1234/example")
 
 # Generate canonical work ID
-canonical_id = generate_canonical_work_id(ids)  # → "doi:10.1234/example"
+assert generate_canonical_work_id(ids) == "doi:10.1234/example"
 
 # Build resolver URL
-url = build_resolver_url("arxiv_id", "2401.12345")  # → "https://arxiv.org/abs/2401.12345"
+assert build_resolver_url("arxiv_id", "2401.12345") == "https://arxiv.org/abs/2401.12345"
 ```
 
 ## Related Review Platforms

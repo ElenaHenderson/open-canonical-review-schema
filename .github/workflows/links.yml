@@ -1,0 +1,28 @@
+name: Links
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check links in the docs
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --no-progress
+            --accept '200..=299,403,429'
+            --exclude '\{value\}'
+            --exclude '^https://example\.com/'
+            --exclude '^https://github\.com/valency-oss/open-canonical-review-schema'
+            README.md CONTRIBUTING.md CLA.md tests/fixtures/ai/README.md
+          fail: true

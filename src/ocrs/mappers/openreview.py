@@ -203,7 +203,6 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
         "created_at": created,
         "provenance": {
             "source_system": "openreview",
-            "source_review_id": note.get("id") if isinstance(note.get("id"), str) else None,
             "imported_at": now_iso(),
             "mapping": {
                 "mapping_spec_id": "canonical-review.mapping.v1",
@@ -214,7 +213,6 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
         "referee": {
             "referee_type": "human",
             "identity_mode": "confidential",
-            "referee_id": signer,
             "human_referee": {},
         },
         "target": _build_target(note, work_id, content),
@@ -223,6 +221,10 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
         "opinion": {"summary": _best_text_opinion(content) or "No summary provided."},
     }
 
+    if isinstance(note.get("id"), str):
+        out["provenance"]["source_review_id"] = note["id"]
+    if signer:
+        out["referee"]["referee_id"] = signer
     if keep_raw:
         out["provenance"]["raw_payload"] = note
 

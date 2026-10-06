@@ -66,3 +66,9 @@ def test_journal_narrative_minimal():
     assert canon["opinion"]["summary"]
     back = map_to("journal_narrative", canon)
     assert back["full_text"]
+
+
+def test_openreview_note_without_id_or_signature():
+    canon = map_from("openreview", {"forum": "or_forum_123", "content": {"summary": "Fine."}})
+    assert "referee_id" not in canon["referee"]
+    assert "source_review_id" not in canon["provenance"]
