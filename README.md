@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/ci.yml/badge.svg)](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/ci.yml)
 
+**Status: v0.4.0, a draft. Feedback wanted:** [tell us how you use OCRS](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=adoption-story.yml) or [propose a schema change](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=schema-change.yml).
+
 A standardized JSON schema and Python mapping utilities for peer review data. OCRS enables interoperability between different peer review systems by providing a canonical representation that preserves rich metadata including reviewer information, decision recommendations, structured findings, metrics, and AI provenance tracking.
 
 ## Why OCRS?
@@ -32,40 +34,21 @@ OCRS provides bidirectional mappers for converting between the canonical schema 
 - **Full**: Complete mapping with all relevant fields preserved
 - **Basic**: Lossy stub that produces valid output but may not preserve all fields
 
-## Quickstart
-```bash
-uv sync
-uv run pytest -q
+## Use the schema
+
+The schema is at a permanent URL, one per version:
+
+```
+https://valency-oss.github.io/open-canonical-review-schema/v0.4.0/canonical-review.schema.json
 ```
 
-## Development
+Validate a review with any JSON Schema (draft 2020-12) validator, for example [check-jsonschema](https://github.com/python-jsonschema/check-jsonschema):
 
-### Setup
 ```bash
-uv sync
+uvx check-jsonschema --schemafile https://valency-oss.github.io/open-canonical-review-schema/v0.4.0/canonical-review.schema.json review.json
 ```
 
-### Install git hooks (prek)
-Prek is a pre-commit-compatible runner that reads `.pre-commit-config.yaml`.
-```bash
-uv run prek install
-```
-
-### Run hooks on all files
-```bash
-uv run prek run --all-files
-```
-
-### Lint and format
-```bash
-uv run ruff check .
-uv run ruff format .
-```
-
-### Tests
-```bash
-uv run pytest -q
-```
+For complete reviews, see [examples/](examples/). The Python package below also maps reviews from other systems to OCRS.
 
 ## API
 ```python
@@ -369,6 +352,35 @@ OCRS currently supports these peer review systems (see [Supported Systems](#supp
 - [HotCRP](https://hotcrp.com/) - Conference review software
 - [Editorial Manager](https://www.ariessys.com/software/editorial-manager/) - Journal manuscript management (Aries Systems)
 - [ScholarOne](https://clarivate.com/products/scientific-and-academic-research/research-publishing-solutions/scholarone/) - Manuscript submission and peer review (Clarivate)
+
+## Development
+
+### Setup
+```bash
+uv sync
+```
+
+### Install git hooks (prek)
+Prek is a pre-commit-compatible runner that reads `.pre-commit-config.yaml`.
+```bash
+uv run prek install
+```
+
+### Run hooks on all files
+```bash
+uv run prek run --all-files
+```
+
+### Lint and format
+```bash
+uv run ruff check .
+uv run ruff format .
+```
+
+### Tests
+```bash
+uv run pytest -q
+```
 
 ## Contributing
 
