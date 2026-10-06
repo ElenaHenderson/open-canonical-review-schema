@@ -375,9 +375,6 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
-docs = [
-    { name = "json-schema-for-humans" },
-]
 
 [package.metadata]
 requires-dist = [
@@ -393,7 +390,6 @@ dev = [
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "ruff", specifier = ">=0.14.0" },
 ]
-docs = [{ name = "json-schema-for-humans", specifier = ">=1.0.0" }]
 
 [[package]]
 name = "packaging"

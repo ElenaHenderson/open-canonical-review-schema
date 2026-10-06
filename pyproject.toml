@@ -18,7 +18,6 @@ docs = ["json-schema-for-humans>=1.0.0"]
 
 [dependency-groups]
 dev = ["pytest>=8.0.0", "ruff>=0.14.0", "prek>=0.2.0"]
-docs = ["json-schema-for-humans>=1.0.0"]
 
 [tool.ruff]
 target-version = "py310"

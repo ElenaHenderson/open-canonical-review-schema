@@ -16,10 +16,6 @@ def load_catalog(path: str | Path | None = None) -> dict[str, Any]:
     return json.loads(p.read_text())
 
 
-def metric_index(catalog: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {m["key"]: m for m in catalog.get("metrics", [])}
-
-
 def alias_map(catalog: dict[str, Any]) -> dict[str, str]:
     amap: dict[str, str] = {}
     for m in catalog.get("metrics", []):

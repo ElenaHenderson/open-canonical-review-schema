@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Valency Systems Inc.
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for the PAT and OpenAIReview mappers, their mapping records and gaps."""
+"""Tests for the OpenAIReview mapper, its mapping records and gaps."""
 
 import copy
 import json
@@ -16,17 +16,17 @@ from ocrs import (
     validate_canonical,
 )
 from ocrs.anchors import Block, BlockKind, find_quote
+from ocrs.mappers.ai import Recorder
 from ocrs.mapping import MappingStatus, Rule
 
 FIXTURES = Path(__file__).parent / "fixtures" / "ai"
-PAT = json.loads((FIXTURES / "pat_review.json").read_text())
 OPENAIREVIEW = json.loads((FIXTURES / "openaireview_paper.json").read_text())
 BLOCKS = json.loads((FIXTURES / "paper_blocks.json").read_text())
 RUN = {
     "review_id": "3152f8d9-a9e9-4d97-80be-e6b0d7290d42",
     "source_system": "example-platform",
     "requested_by": "example-platform",
-    "work_id": "W_hvtukmgk",
+    "work_id": "paper-1",
     "work_type": "preprint",
     "work_version": "4b1c7e53-ef3c-4309-99ac-f0c599cbf194",
     "reviewer_commit": "27740f8434cfc0ffee0000000000000000000000",
@@ -45,47 +45,6 @@ def _payload(output):
 
 def _weaknesses(review):
     return review["findings"]["weaknesses"]
-
-
-class TestPat:
-    def test_maps_and_validates(self):
-        result = map_with_record("pat", **_payload(PAT))
-        validate_canonical(result.review)
-        assert result.record.status == MappingStatus.OK
-        assert len(_weaknesses(result.review)) == len(PAT["issues"])
-
-    def test_copies_issue_fields(self):
-        finding = _weaknesses(map_from("pat", _payload(PAT)))[0]
-        issue = PAT["issues"][0]
-        assert finding["title"] == issue["title"]
-        assert finding["text"] == issue["description"]
-        assert finding["severity"] == issue["severity"]
-        assert finding["tags"] == [issue["category"]]
-        link = finding["evidence_links"][0]
-        assert (link["ref"], link["quote"]) == (issue["location"], issue["evidence"])
-
-    def test_unmapped_fields_kept_in_extensions(self):
-        result = map_with_record("pat", **_payload(PAT))
-        kept = result.review["extensions"]["pat"]
-        assert kept["issues"][0]["suggested_fix"] == PAT["issues"][0]["suggested_fix"]
-        assert kept["dropped"] == PAT["dropped"]
-        assert "reports" not in kept
-        assert not {"title", "description"} & set(kept["issues"][0])
-        unmapped = {field.path: field.count for field in result.record.gaps.unmapped}
-        assert unmapped["issues[].suggested_fix"] == 4
-        assert "issues[].title" not in unmapped
-
-    def test_unknown_severity_is_coerced(self):
-        output = copy.deepcopy(PAT)
-        output["issues"][0]["severity"] = "high"
-        result = map_with_record("pat", **_payload(output))
-        assert "severity" not in _weaknesses(result.review)[0]
-        [coercion] = result.record.gaps.coerced
-        assert (coercion.source, coercion.original, coercion.result) == (
-            "issues[0].severity",
-            "high",
-            None,
-        )
 
 
 class TestOpenAIReview:
@@ -216,4 +175,22 @@ def test_map_from_keeps_the_raw_output_when_asked():
 
 
 def test_ai_reviewers_are_sources():
-    assert {"openaireview", "pat"} <= set(supported_sources())
+    assert "openaireview" in supported_sources()
+
+
+class TestRecorder:
+    def test_lookup_maps_a_known_value(self):
+        recorder = Recorder(checks_quotes=False)
+        table = {"high": "major"}
+        assert recorder.lookup("x.level", "y.severity", "high", table) == "major"
+        assert [(step.source, step.rule) for step in recorder.steps] == [("x.level", Rule.LOOKUP)]
+
+    def test_lookup_records_an_unknown_value_as_coerced(self):
+        recorder = Recorder(checks_quotes=False)
+        assert recorder.lookup("x.level", "y.severity", "cosmetic", {"high": "major"}) is None
+        [coercion] = recorder.coerced
+        assert (coercion.source, coercion.original, coercion.result) == (
+            "x.level",
+            "cosmetic",
+            None,
+        )

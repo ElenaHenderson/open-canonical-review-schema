@@ -142,20 +142,6 @@ HOTCRP_OVERALL_MERIT_1_5 = ScaleDefinition(
     description="HotCRP overall merit (1-5 scale)",
 )
 
-HOTCRP_OVERALL_MERIT_1_6 = ScaleDefinition(
-    min_value=1,
-    max_value=6,
-    anchors={
-        1: "Strong Reject",
-        2: "Reject",
-        3: "Weak Reject",
-        4: "Weak Accept",
-        5: "Accept",
-        6: "Strong Accept",
-    },
-    description="HotCRP overall merit (1-6 scale)",
-)
-
 HOTCRP_EXPERTISE_1_5 = ScaleDefinition(
     min_value=1,
     max_value=5,

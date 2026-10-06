@@ -10,7 +10,7 @@ from typing import Any
 from pydantic import AwareDatetime, validate_call
 
 from .anchors import Block
-from .mappers import openaireview, pat
+from .mappers import openaireview
 from .mappers.ai import AIReviewMapper, build_review
 from .mappers.cmt import from_cmt, to_cmt
 from .mappers.editorialmanager import from_editorialmanager, to_editorialmanager
@@ -33,9 +33,8 @@ _FROM: dict[str, Callable[..., dict[str, Any]]] = {
 # AI reviewer sources: their mappers also return a mapping record (steps and gaps).
 _FROM_WITH_RECORD: dict[str, AIReviewMapper] = {
     "openaireview": openaireview.map_openaireview,
-    "pat": pat.map_pat,
 }
-_MAPPER_VERSIONS = {"openaireview": openaireview.MAPPER_VERSION, "pat": pat.MAPPER_VERSION}
+_MAPPER_VERSIONS = {"openaireview": openaireview.MAPPER_VERSION}
 
 _TO: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "cmt": to_cmt,

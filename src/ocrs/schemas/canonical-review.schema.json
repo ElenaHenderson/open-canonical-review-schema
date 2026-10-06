@@ -42,7 +42,7 @@
       ],
       "properties": {
         "source_system": {
-          "description": "The system the review was taken from (e.g., 'hotcrp', 'scholarone', 'openreview', 'pat')",
+          "description": "The system the review was taken from (e.g., 'hotcrp', 'scholarone', 'openreview', 'openaireview')",
           "type": "string"
         },
         "source_review_id": {
@@ -431,7 +431,7 @@
       }
     },
     "extensions": {
-      "description": "Data with no OCRS field, kept under one key per source format (e.g., extensions.pat)",
+      "description": "Data with no OCRS field, kept under one key per source format (e.g., extensions.openaireview)",
       "type": "object"
     },
     "written_report": {
@@ -1095,7 +1095,7 @@
       ],
       "properties": {
         "critic_framework": {
-          "description": "The review software that ran the models (e.g., PAT, OpenAIReview)",
+          "description": "The review software that ran the models (e.g., OpenAIReview)",
           "type": "object",
           "additionalProperties": false,
           "required": [

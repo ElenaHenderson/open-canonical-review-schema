@@ -26,7 +26,6 @@ OCRS provides bidirectional mappers for converting between the canonical schema 
 | **Editorial Manager** | Full | Basic | Journal manuscript system; `to_editorialmanager` is a minimal stub |
 | **ScholarOne** | Full | Basic | Clarivate journal system; `to_scholarone` is a minimal stub |
 | **Journal Narrative** | Full | Full | Minimal free-text reviews with DOI/journal metadata |
-| **PAT** | Full | – | AI reviewer (Paper Assistant Tool): `review.json` |
 | **OpenAIReview** | Full | – | AI reviewer ([ChicagoHAI/OpenAIReview](https://github.com/ChicagoHAI/OpenAIReview)): `paper.json` |
 
 **Legend:**
@@ -80,7 +79,7 @@ note_like = map_to("openreview", canonical)
 
 ## AI reviewers
 
-The PAT and OpenAIReview mappers copy the reviewer's own output into OCRS; they never rewrite or invent text. Whatever has no OCRS field is kept, unchanged, in `extensions.<reviewer>`.
+The OpenAIReview mapper copies the reviewer's own output into OCRS; it never rewrites or invents text. Whatever has no OCRS field is kept, unchanged, in `extensions.<reviewer>`.
 
 `map_with_record` also returns a record of how each field was mapped and where the result falls short of OCRS:
 
@@ -95,10 +94,10 @@ The PAT and OpenAIReview mappers copy the reviewer's own output into OCRS; they 
 from ocrs import map_with_record, render_mapping_markdown
 
 result = map_with_record(
-    "pat",
-    pat_review_json,
+    "openaireview",
+    openaireview_paper_json,
     review_id="…",
-    source_system="valency",
+    source_system="example-platform",
     work_id="…",
     work_type="preprint",
     work_version="…",
