@@ -76,6 +76,8 @@
         "title": "Validation reuses calibration stations",
         "text": "The 94% accuracy is measured on the stations used to calibrate the model, so it overstates accuracy elsewhere.",
         "severity": "major",
+        "probability": 0.9,
+        "credence": 0.7,
         "evidence_links": [
           {
             "type": "paper_section",

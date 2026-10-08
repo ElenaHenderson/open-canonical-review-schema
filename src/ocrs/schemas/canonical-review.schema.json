@@ -1913,7 +1913,24 @@
           "items": {
             "$ref": "#/$defs/evidenceLink"
           }
+        },
+        "probability": {
+          "description": "How likely the reviewer thinks the point holds (for a weakness, that the problem is real), from 0 (certainly not) to 1 (certainly). Optional, but we strongly encourage it: even a rough estimate helps readers know how much weight to give the point",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "credence": {
+          "description": "How confident the reviewer is in their probability, from 0 (a guess) to 1 (certain of it). Credence is about the estimate, not the statement: a reviewer can think something very likely (probability 0.9) and hold that view loosely (credence 0.3). Optional, but we strongly encourage it alongside probability, which it needs: it helps readers tell a firm judgement from a tentative one",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         }
+      },
+      "dependentRequired": {
+        "credence": [
+          "probability"
+        ]
       }
     },
     "actionItem": {
@@ -2084,7 +2101,24 @@
           "items": {
             "$ref": "#/$defs/evidenceLink"
           }
+        },
+        "probability": {
+          "description": "How likely the reviewer thinks the claim is true, from 0 (certainly false) to 1 (certainly true). Optional, but we strongly encourage it: even a rough estimate helps readers know how much weight to give the point",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "credence": {
+          "description": "How confident the reviewer is in their probability, from 0 (a guess) to 1 (certain of it). Credence is about the estimate, not the statement: a reviewer can think something very likely (probability 0.9) and hold that view loosely (credence 0.3). Optional, but we strongly encourage it alongside probability, which it needs: it helps readers tell a firm judgement from a tentative one",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         }
+      },
+      "dependentRequired": {
+        "credence": [
+          "probability"
+        ]
       }
     },
     "artifactAssessment": {

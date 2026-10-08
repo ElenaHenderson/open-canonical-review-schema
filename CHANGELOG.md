@@ -8,6 +8,7 @@ The first public version.
 
 - `$id` is `https://valency-oss.github.io/open-canonical-review-schema/v0.4.0/canonical-review.schema.json`, and each version is published at its own URL.
 - A human review no longer needs a `human_referee` object.
+- Findings and claim assessments take optional `probability` (how likely the statement is true, 0–1) and `credence` (how confident the reviewer is in that probability, 0–1). `credence` needs `probability`.
 
 ### Python package
 
