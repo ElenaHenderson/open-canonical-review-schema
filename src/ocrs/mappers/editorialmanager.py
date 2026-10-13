@@ -14,6 +14,8 @@ from ..util import (
     now_iso,
     parse_date_flexible,
     parse_labeled_score,
+    source_decision,
+    split_decision,
 )
 
 # Editorial Manager recommendation codes
@@ -305,7 +307,7 @@ def from_editorialmanager(payload: dict[str, Any], *, keep_raw: bool = False) ->
     # Decision
     rec = _parse_recommendation(payload)
     if rec:
-        out["decision"] = {"recommendation": rec}
+        out["decision"] = split_decision({"recommendation": rec})
 
     # Revision number -> round
     rev = payload.get("revisionNumber")
@@ -362,7 +364,7 @@ def to_editorialmanager(canonical: dict[str, Any]) -> dict[str, Any]:
         out["confidentialCommentsToEditor"] = nar["confidential_to_editors"]
 
     # Map recommendation
-    dec = canonical.get("decision", {}) or {}
+    dec = source_decision(canonical.get("decision", {}) or {})
     if isinstance(dec.get("recommendation"), str):
         out["recommendation"] = dec["recommendation"].replace("_", " ").title()
 

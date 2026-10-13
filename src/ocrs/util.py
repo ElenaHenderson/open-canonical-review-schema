@@ -129,7 +129,7 @@ def map_recommendation_from_numeric(num: int | float, scale: dict[str, Any]) -> 
 def map_recommendation_from_text(s: str) -> str | None:
     if not s:
         return None
-    x = s.casefold()
+    x = s.casefold().replace("_", " ")
     # Common phrases - order matters for overlapping matches
     if "strong accept" in x:
         return "strong_accept"
@@ -413,3 +413,34 @@ def score_to_recommendation(
         return normalized_to_recommendation(parsed["normalized"])
 
     return None
+
+
+def split_decision(decision: dict[str, Any]) -> dict[str, Any]:
+    """Separate source revision labels without inferring an acceptance judgment."""
+    result = {key: value for key, value in decision.items() if value is not None}
+    revision = {
+        "minor_revision": "minor",
+        "major_revision": "major",
+        "revise": "unspecified",
+    }.get(result.get("recommendation"))
+    if revision:
+        result.pop("recommendation")
+        result["revision_requirement"] = revision
+    return result
+
+
+def source_decision(decision: dict[str, Any]) -> dict[str, Any]:
+    """Join decisions for single-field exports, prioritizing requested revision.
+
+    This is lossy when an independent acceptance judgment is also present.
+    An explicit no-revision requirement leaves the acceptance judgment unchanged.
+    """
+    result = dict(decision)
+    recommendation = {
+        "minor": "minor_revision",
+        "major": "major_revision",
+        "unspecified": "revise",
+    }.get(result.get("revision_requirement"))
+    if recommendation:
+        result["recommendation"] = recommendation
+    return result

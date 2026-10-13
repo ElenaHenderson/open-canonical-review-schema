@@ -25,7 +25,7 @@ def test_scholarone_minimal():
     assert canon["provenance"]["source_system"] == "scholarone"
     assert canon["target"]["work_id"] == "DOC-123456"
     assert canon["opinion"]["summary"]
-    assert canon["decision"]["recommendation"] == "major_revision"
+    assert canon["decision"] == {"revision_requirement": "major"}
 
 
 def test_scholarone_realistic():
@@ -49,7 +49,7 @@ def test_scholarone_realistic():
     assert canon["narrative"].get("confidential_to_editors")
 
     # Check decision
-    assert canon["decision"]["recommendation"] == "minor_revision"
+    assert canon["decision"] == {"revision_requirement": "minor"}
 
     # Check metrics from criteria responses
     assert len(canon["metrics"]) >= 6
@@ -66,11 +66,11 @@ def test_scholarone_realistic():
 def test_scholarone_recommendation_codes():
     """Test recommendation code mapping."""
     for code, expected in [
-        (1, "accept"),
-        (2, "minor_revision"),
-        (3, "major_revision"),
-        (4, "reject"),
-        (5, "revise"),
+        (1, {"recommendation": "accept"}),
+        (2, {"revision_requirement": "minor"}),
+        (3, {"revision_requirement": "major"}),
+        (4, {"recommendation": "reject"}),
+        (5, {"revision_requirement": "unspecified"}),
     ]:
         payload = {
             "documentId": f"DOC-{code}",
@@ -80,16 +80,16 @@ def test_scholarone_recommendation_codes():
         }
         canon = from_scholarone(payload)
         validate_canonical(canon)
-        assert canon["decision"]["recommendation"] == expected
+        assert canon["decision"] == expected
 
 
 def test_scholarone_text_recommendation():
     """Test text-based recommendation label parsing."""
     test_cases = [
-        ("Accept", "accept"),
-        ("Minor Revision", "minor_revision"),
-        ("Major Revision", "major_revision"),
-        ("Reject", "reject"),
+        ("Accept", {"recommendation": "accept"}),
+        ("Minor Revision", {"revision_requirement": "minor"}),
+        ("Major Revision", {"revision_requirement": "major"}),
+        ("Reject", {"recommendation": "reject"}),
     ]
     for label, expected in test_cases:
         payload = {
@@ -100,7 +100,7 @@ def test_scholarone_text_recommendation():
         }
         canon = from_scholarone(payload)
         validate_canonical(canon)
-        assert canon["decision"]["recommendation"] == expected
+        assert canon["decision"] == expected
 
 
 def test_scholarone_criteria_normalization():

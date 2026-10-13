@@ -18,6 +18,8 @@ from ..util import (
     now_iso,
     parse_date_flexible,
     parse_labeled_score,
+    source_decision,
+    split_decision,
 )
 
 # ScholarOne recommendation codes (typical configuration)
@@ -332,7 +334,7 @@ def from_scholarone(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[
     # Decision
     rec = _parse_recommendation(payload)
     if rec:
-        out["decision"] = {"recommendation": rec}
+        out["decision"] = split_decision({"recommendation": rec})
 
         # Also add overall metric if we have numeric recommendation
         rec_num = payload.get("overallRecommendation")
@@ -440,7 +442,7 @@ def to_scholarone(canonical: dict[str, Any]) -> dict[str, Any]:
         out["commentsToEditor"] = nar["confidential_to_editors"]
 
     # Map recommendation
-    dec = canonical.get("decision", {}) or {}
+    dec = source_decision(canonical.get("decision", {}) or {})
     if isinstance(dec.get("recommendation"), str):
         rec = dec["recommendation"]
         # Reverse map to numeric

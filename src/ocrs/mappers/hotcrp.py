@@ -15,7 +15,9 @@ from ..util import (
     parse_date_flexible,
     parse_labeled_score,
     score_to_recommendation,
+    source_decision,
     split_bullet_list,
+    split_decision,
 )
 
 # Common HotCRP text field names that should not be treated as metrics
@@ -398,7 +400,7 @@ def from_hotcrp(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str,
                 decision["confidence"] = float(max(0.0, min(1.0, parsed["normalized"])))
 
     if decision:
-        out["decision"] = {k: v for k, v in decision.items() if v is not None}
+        out["decision"] = split_decision(decision)
 
     # Additional numeric fields as metrics
     skip_keys = (
@@ -507,7 +509,7 @@ def to_hotcrp(canonical: dict[str, Any]) -> dict[str, Any]:
             )
 
     # Map recommendation
-    dec = canonical.get("decision", {}) or {}
+    dec = source_decision(canonical.get("decision", {}) or {})
     if isinstance(dec.get("recommendation"), str):
         # Find overall metric to get numeric value
         for m in canonical.get("metrics", []) or []:

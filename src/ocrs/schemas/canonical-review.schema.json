@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://valency-oss.github.io/open-canonical-review-schema/v0.4.0/canonical-review.schema.json",
+  "$id": "https://valency-oss.github.io/open-canonical-review-schema/v0.5.0/canonical-review.schema.json",
   "$comment": "Copyright (c) 2026 Valency Systems Inc. Licensed under Apache-2.0.",
   "title": "Open Canonical Review Schema",
   "description": "One peer review of one scholarly work, in a form shared by journals, conferences and AI reviewers",
@@ -226,7 +226,7 @@
       "additionalProperties": false,
       "properties": {
         "recommendation": {
-          "description": "Recommended outcome, from strong accept to strong reject, or a kind of revision",
+          "description": "Recommended acceptance outcome, independent of any required revision",
           "type": "string",
           "enum": [
             "strong_accept",
@@ -235,11 +235,13 @@
             "borderline",
             "weak_reject",
             "reject",
-            "strong_reject",
-            "revise",
-            "major_revision",
-            "minor_revision"
+            "strong_reject"
           ]
+        },
+        "revision_requirement": {
+          "description": "Revision required independently of the acceptance recommendation: none, minor, major, or unspecified when revision is requested without its extent. Omit when unknown or not provided",
+          "type": "string",
+          "enum": ["none", "minor", "major", "unspecified"]
         },
         "confidence": {
           "description": "How sure the reviewer is of the recommendation, from 0 (not at all) to 1 (certain)",
@@ -1721,8 +1723,8 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "confidence": {
-              "description": "Confidence in the score, from 0 to 1",
+            "credence": {
+              "description": "Overall confidence in the score given from 0 to 1, with 0 being not at all confident, and 1 being certain",
               "type": "number",
               "minimum": 0,
               "maximum": 1
@@ -2052,6 +2054,54 @@
         "quote": {
           "description": "Text quoted from that place",
           "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/evidenceLocation",
+          "description": "Structured location in a specific version of the referenced work or artifact"
+        }
+      }
+    },
+    "evidenceLocation": {
+      "description": "A section, page, or exact text anchor in the referenced document; page numbers start at 1",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "section": {
+          "description": "Section identifier or heading (e.g., '3.2 Methods')",
+          "type": "string",
+          "minLength": 1
+        },
+        "page": {
+          "description": "One-based page number in the referenced document",
+          "type": "integer",
+          "minimum": 1
+        },
+        "version": {
+          "description": "Version of the referenced work or artifact to which the location applies",
+          "type": "string",
+          "minLength": 1
+        },
+        "text_anchor": {
+          "description": "Exact text with optional immediately surrounding text to distinguish repeated passages",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["exact"],
+          "properties": {
+            "exact": {
+              "description": "Exact sentence or passage being referenced",
+              "type": "string",
+              "minLength": 1
+            },
+            "prefix": {
+              "description": "Text immediately before the exact passage",
+              "type": "string"
+            },
+            "suffix": {
+              "description": "Text immediately after the exact passage",
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -2169,6 +2219,13 @@
             "not_applicable",
             "not_evaluated"
           ]
+        },
+        "evidence_links": {
+          "description": "Places in the work or artifact the assessment refers to",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidenceLink"
+          }
         },
         "reproducibility_notes": {
           "description": "What the reviewer found when trying to reproduce results with it",

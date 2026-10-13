@@ -25,7 +25,7 @@ def test_editorialmanager_minimal():
     assert canon["provenance"]["source_system"] == "editorialmanager"
     assert canon["target"]["work_id"] == "MS-2024-0042"
     assert canon["opinion"]["summary"]
-    assert canon["decision"]["recommendation"] == "major_revision"
+    assert canon["decision"] == {"revision_requirement": "major"}
 
 
 def test_editorialmanager_realistic():
@@ -47,7 +47,7 @@ def test_editorialmanager_realistic():
     assert canon["narrative"].get("confidential_to_editors")
 
     # Check decision
-    assert canon["decision"]["recommendation"] == "major_revision"
+    assert canon["decision"] == {"revision_requirement": "major"}
 
     # Check round (revisionNumber 0 -> round 1)
     assert canon["review_context"]["round"] == 1
@@ -80,11 +80,11 @@ def test_editorialmanager_revision():
 def test_editorialmanager_recommendation_code():
     """Test recommendation code mapping."""
     for code, expected in [
-        (1, "accept"),
-        (2, "minor_revision"),
-        (3, "major_revision"),
-        (4, "reject"),
-        (5, "revise"),
+        (1, {"recommendation": "accept"}),
+        (2, {"revision_requirement": "minor"}),
+        (3, {"revision_requirement": "major"}),
+        (4, {"recommendation": "reject"}),
+        (5, {"revision_requirement": "unspecified"}),
     ]:
         payload = {
             "reviewId": f"test_{code}",
@@ -94,17 +94,17 @@ def test_editorialmanager_recommendation_code():
         }
         canon = from_editorialmanager(payload)
         validate_canonical(canon)
-        assert canon["decision"]["recommendation"] == expected
+        assert canon["decision"] == expected
 
 
 def test_editorialmanager_text_recommendation():
     """Test text-based recommendation parsing."""
     test_cases = [
-        ("Accept", "accept"),
-        ("Minor Revision", "minor_revision"),
-        ("Major Revision", "major_revision"),
-        ("Reject", "reject"),
-        ("Reject and Encourage Resubmission", "revise"),
+        ("Accept", {"recommendation": "accept"}),
+        ("Minor Revision", {"revision_requirement": "minor"}),
+        ("Major Revision", {"revision_requirement": "major"}),
+        ("Reject", {"recommendation": "reject"}),
+        ("Reject and Encourage Resubmission", {"revision_requirement": "unspecified"}),
     ]
     for text, expected in test_cases:
         payload = {
@@ -115,7 +115,7 @@ def test_editorialmanager_text_recommendation():
         }
         canon = from_editorialmanager(payload)
         validate_canonical(canon)
-        assert canon["decision"]["recommendation"] == expected
+        assert canon["decision"] == expected
 
 
 def test_editorialmanager_ratings_normalization():

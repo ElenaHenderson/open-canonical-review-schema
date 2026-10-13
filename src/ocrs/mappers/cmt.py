@@ -16,6 +16,8 @@ from ..util import (
     normalize_linear,
     now_iso,
     parse_numeric_prefix,
+    source_decision,
+    split_decision,
 )
 
 NARR_KEYS = {"summary", "commentsToAuthors", "reviewText", "commentsToChairs"}
@@ -158,8 +160,8 @@ def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, An
         if num is not None:
             scale = guess_scale_from_value(num)
             dec["recommendation"] = (
-                map_recommendation_from_numeric(num, scale)
-                or map_recommendation_from_text(rest or "")
+                map_recommendation_from_text(rest or "")
+                or map_recommendation_from_numeric(num, scale)
                 or "borderline"
             )
             n01 = normalize_linear(num, scale)
@@ -202,7 +204,7 @@ def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, An
             if n01 is not None:
                 dec["confidence"] = float(max(0.0, min(1.0, n01)))
     if dec:
-        out["decision"] = {k: v for k, v in dec.items() if v is not None}
+        out["decision"] = split_decision(dec)
 
     # Metrics from remaining numeric fields
     for k, v in payload.items():
@@ -276,7 +278,7 @@ def to_cmt(canonical: dict[str, Any]) -> dict[str, Any]:
         out["commentsToChairs"] = nar["confidential_to_editors"]
 
     # decision + metrics
-    dec = canonical.get("decision", {}) or {}
+    dec = source_decision(canonical.get("decision", {}) or {})
     if isinstance(dec.get("recommendation"), str):
         out["recommendation"] = dec["recommendation"]
     # store overall/confidence metrics explicitly if available
@@ -284,7 +286,11 @@ def to_cmt(canonical: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(m, dict):
             continue
         if m.get("key") == "overall":
-            out.setdefault("overallEvaluation", m.get("value"))
+            if dec.get("revision_requirement") in {"minor", "major", "unspecified"}:
+                label = dec["recommendation"].replace("_", " ").title()
+                out.setdefault("overallEvaluation", f"{m.get('value')}: {label}")
+            else:
+                out.setdefault("overallEvaluation", m.get("value"))
         if m.get("key") == "confidence":
             out.setdefault("confidence", m.get("value"))
     return out

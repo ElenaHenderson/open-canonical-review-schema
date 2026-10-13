@@ -17,6 +17,8 @@ from ..util import (
     normalize_linear,
     now_iso,
     parse_numeric_prefix,
+    source_decision,
+    split_decision,
 )
 
 KNOWN_TEXT_KEYS = {
@@ -328,7 +330,7 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
             if isinstance(n01, (int, float)):
                 decision["confidence"] = float(max(0.0, min(1.0, n01)))
     if decision:
-        out["decision"] = {k: v for k, v in decision.items() if v is not None}
+        out["decision"] = split_decision(decision)
 
     # Additional structured metric fields from content
     for k, v in content.items():
@@ -408,7 +410,7 @@ def to_openreview(canonical: dict[str, Any]) -> dict[str, Any]:
             ]
 
     # Decision recommendation
-    dec = canonical.get("decision", {}) or {}
+    dec = source_decision(canonical.get("decision", {}) or {})
     if isinstance(dec.get("recommendation"), str):
         content["recommendation"] = dec["recommendation"].replace("_", " ").title()
 

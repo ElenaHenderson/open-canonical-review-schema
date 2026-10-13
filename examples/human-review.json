@@ -34,7 +34,7 @@
     "stance": "mixed"
   },
   "decision": {
-    "recommendation": "major_revision",
+    "revision_requirement": "major",
     "confidence": 0.8,
     "summary_rationale": "The dataset is valuable; the validation needs ground stations outside the training region."
   },

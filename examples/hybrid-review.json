@@ -60,7 +60,7 @@
     "stance": "positive"
   },
   "decision": {
-    "recommendation": "minor_revision"
+    "revision_requirement": "minor"
   },
   "findings": {
     "weaknesses": [

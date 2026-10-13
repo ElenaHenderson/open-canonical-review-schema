@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/ci.yml/badge.svg)](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/ci.yml)
 
-**Status: v0.4.0, a draft. Feedback wanted:** [tell us how you use OCRS](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=adoption-story.yml) or [propose a schema change](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=schema-change.yml).
+**Status: v0.5.0, a draft. Feedback wanted:** [tell us how you use OCRS](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=adoption-story.yml) or [propose a schema change](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=schema-change.yml).
 
 A standardized JSON schema and Python mapping utilities for peer review data. OCRS enables interoperability between different peer review systems by providing a canonical representation that preserves rich metadata including reviewer information, decision recommendations, structured findings, metrics, and AI provenance tracking.
 
@@ -39,13 +39,13 @@ OCRS provides bidirectional mappers for converting between the canonical schema 
 The schema is at a permanent URL, one per version:
 
 ```
-https://valency-oss.github.io/open-canonical-review-schema/v0.4.0/canonical-review.schema.json
+https://valency-oss.github.io/open-canonical-review-schema/v0.5.0/canonical-review.schema.json
 ```
 
 Validate a review with any JSON Schema (draft 2020-12) validator, for example [check-jsonschema](https://github.com/python-jsonschema/check-jsonschema):
 
 ```bash
-uvx check-jsonschema --schemafile https://valency-oss.github.io/open-canonical-review-schema/v0.4.0/canonical-review.schema.json review.json
+uvx check-jsonschema --schemafile https://valency-oss.github.io/open-canonical-review-schema/v0.5.0/canonical-review.schema.json review.json
 ```
 
 For complete reviews, see [examples/](examples/). The Python package below also maps reviews from other systems to OCRS.
@@ -187,7 +187,7 @@ The canonical review schema captures:
 | `referee` | Human, AI, or hybrid reviewer with identity mode and expertise |
 | `target` | Work being reviewed (article, preprint, dataset, etc.) |
 | `opinion` | Summary text and overall stance |
-| `decision` | Recommendation (accept/reject/revise) with confidence |
+| `decision` | Acceptance recommendation, independent revision requirement, and confidence |
 | `metrics` | Structured assessments (soundness, clarity, novelty, etc.) |
 | `findings` | Strengths, weaknesses, questions, required changes |
 | `ethics_and_risk` | Ethical concerns and required mitigations |
@@ -393,3 +393,91 @@ Apache License 2.0 - see [LICENSE](LICENSE) for details.
 ## Acknowledgments
 
 The initial version of OCRS was created by [Valency Systems Inc.](https://valency.io)
+
+### Acceptance and revision requirements
+
+`decision.recommendation` describes acceptance, while `decision.revision_requirement`
+independently describes required revision (`none`, `minor`, `major`, or `unspecified`
+when a revision is requested without stating its extent). Omission means the source
+provided no revision requirement; it does not mean `none`.
+
+```json
+{
+  "decision": {
+    "recommendation": "weak_accept",
+    "revision_requirement": "minor"
+  }
+}
+```
+
+Migrating from v0.4.0: move `minor_revision` and `major_revision` from
+`decision.recommendation` to `decision.revision_requirement` as `minor` and `major`.
+Move `revise` to `revision_requirement: "unspecified"`. Leave `recommendation` absent
+unless the source separately states an acceptance judgment. The mappers perform
+this split on import. Export to a source with one decision field prioritizes a
+requested revision over acceptance and is lossy when both are present.
+
+### Linking assessments to passages
+
+Claims, findings, metrics, and artifact assessments share `evidence_links`.
+Each link retains the required `type` and free-text `ref`; its optional `location`
+adds `section`, a one-based `page`, the referenced document's `version`, and a
+`text_anchor`. An anchor requires `exact` text and can include the immediately
+surrounding `prefix` and `suffix` to distinguish repeated sentences. Consumers
+resolve the anchor against that document version; schema validation checks the
+structure, not whether the passage exists. Existing links remain valid.
+
+```json
+{
+  "artifact_assessments": [
+    {
+      "artifact_type": "code",
+      "availability": "public",
+      "assessment": "adequate",
+      "ref": "https://example.com/code",
+      "evidence_links": [
+        {
+          "type": "paper_section",
+          "ref": "Section 3.2, page 5, implementation details",
+          "location": {
+            "section": "3.2 Methods",
+            "page": 5,
+            "version": "v2",
+            "text_anchor": {
+              "exact": "We release the training code.",
+              "prefix": "Implementation details. ",
+              "suffix": " See Appendix A."
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Confidence in a metric score
+
+Use `metrics[].uncertainty.credence` for overall confidence in a score, from 0 to 1.
+Migrating from v0.4.0 requires renaming `uncertainty.confidence` to
+`uncertainty.credence`; the surrounding `uncertainty` object, `interval`, and
+`rationale` are unchanged. This also applies to metrics within claim assessments.
+`decision.confidence` and finding/claim `probability` and `credence` are unchanged.
+
+```json
+{
+  "metrics": [
+    {
+      "key": "overall",
+      "label": "Overall",
+      "scale": {"type": "ordinal", "min": 1, "max": 5},
+      "value": 4,
+      "uncertainty": {
+        "credence": 0.8,
+        "interval": {"low": 3, "high": 5},
+        "rationale": "The evaluation leaves some open questions."
+      }
+    }
+  ]
+}
+```

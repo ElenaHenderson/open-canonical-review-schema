@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0
+
+- Renamed metric `uncertainty.confidence` to `uncertainty.credence`, retaining the
+  0–1 bounds, interval, and rationale. Existing records must rename this nested key.
+
+- Added shared structured evidence locations with section, one-based page, document
+  version, and exact text anchors with surrounding context. Artifact assessments now
+  support the same `evidence_links` as claims, findings, and metrics.
+
+- Split acceptance recommendations from `decision.revision_requirement`, with `none`,
+  `minor`, `major`, and `unspecified` options. Revision-only source decisions no longer
+  imply an acceptance judgment. This replaces the revision values in the old enum.
+- Updated decision mappers, examples, and migration guidance. Published v0.4.0 is unchanged.
+
 ## 0.4.0
 
 The first public version.
