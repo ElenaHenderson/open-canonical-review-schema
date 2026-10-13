@@ -481,3 +481,12 @@ Migrating from v0.4.0 requires renaming `uncertainty.confidence` to
   ]
 }
 ```
+
+### Review-run seeds
+
+Review-run seeds belong in `referee.reproducibility.seed` and
+`referee.reproducibility.seeds`, including for AI reviewers. These describe the
+review process, not experiments in the reviewed work. An explicit stage seed
+overrides the whole-review seed for that stage. When migrating from v0.4.0, move
+`referee.ai_referee.execution.seed` and `seeds` to `referee.reproducibility`;
+if both locations were populated, resolve conflicts using the actual run configuration.

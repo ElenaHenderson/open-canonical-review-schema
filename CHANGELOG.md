@@ -13,6 +13,9 @@
   `minor`, `major`, and `unspecified` options. Revision-only source decisions no longer
   imply an acceptance judgment. This replaces the revision values in the old enum.
 - Updated decision mappers, examples, and migration guidance. Published v0.4.0 is unchanged.
+- Removed duplicate `seed` and `seeds` fields from `ai_referee.execution`.
+  Review-run seeds live in `referee.reproducibility`; explicit stage seeds override
+  the whole-review seed. Existing records must move execution seeds to that location.
 
 ## 0.4.0
 

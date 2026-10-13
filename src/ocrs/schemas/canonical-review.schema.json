@@ -918,7 +918,7 @@
       "additionalProperties": false,
       "properties": {
         "seed": {
-          "description": "Random seed for the whole review",
+          "description": "Random seed for reproducing the review process, not the reviewed work; used for stages without an explicit stage seed",
           "oneOf": [
             {
               "type": "integer"
@@ -929,7 +929,7 @@
           ]
         },
         "seeds": {
-          "description": "Random seeds per stage, when stages use different seeds",
+          "description": "Explicit seeds for review stages (e.g., retrieval or generation), overriding the whole-review seed for those stages",
           "type": "array",
           "items": {
             "type": "object",
@@ -1274,46 +1274,6 @@
           "description": "GPU time used, in seconds",
           "type": "number",
           "minimum": 0
-        },
-        "seed": {
-          "description": "Random seed for the whole run",
-          "oneOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "string"
-            }
-          ]
-        },
-        "seeds": {
-          "description": "Random seeds per stage, when stages use different seeds",
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "stage",
-              "seed"
-            ],
-            "properties": {
-              "stage": {
-                "description": "The stage this seed is for",
-                "type": "string"
-              },
-              "seed": {
-                "description": "Random seed for the stage",
-                "oneOf": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            }
-          }
         },
         "compute_environment": {
           "description": "Where the run executed",
