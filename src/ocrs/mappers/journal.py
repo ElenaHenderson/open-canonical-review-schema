@@ -7,6 +7,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from ..identifiers import generate_canonical_work_id, parse_canonical_work_id
 from ..util import first_paragraph, now_iso
 
 
@@ -48,9 +49,7 @@ def from_journal_narrative(
     )
     full_text = payload.get("full_text") if isinstance(payload.get("full_text"), str) else ""
 
-    work_id = str(
-        payload.get("doi") or payload.get("manuscript_id") or payload.get("work_id") or "unknown"
-    )
+    identifiers = _build_target_identifiers(payload)
     venue = payload.get("journal") or payload.get("venue")
 
     out: dict[str, Any] = {
@@ -74,8 +73,8 @@ def from_journal_narrative(
             "human_referee": {},
         },
         "target": {
-            "identifiers": _build_target_identifiers(payload),
-            "work_id": work_id,  # Keep for backward compatibility
+            "identifiers": identifiers,
+            "work_id": generate_canonical_work_id(identifiers),
             "work_type": "article",
             "venue": venue,
         },
@@ -100,7 +99,12 @@ def from_journal_narrative(
 
 def to_journal_narrative(canonical: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
-    out["doi"] = canonical.get("target", {}).get("work_id")
+    target = canonical.get("target", {})
+    doi = ((target.get("identifiers") or {}).get("doi") or {}).get("value")
+    if not doi:
+        parsed = parse_canonical_work_id(str(target.get("work_id", "")))
+        doi = parsed[2] if parsed and parsed[0] == "doi" else None
+    out["doi"] = doi
     out["journal"] = canonical.get("target", {}).get("venue")
     out["review_id"] = canonical.get("review_id")
     out["created_at"] = canonical.get("created_at")

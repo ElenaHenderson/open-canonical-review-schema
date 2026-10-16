@@ -23,7 +23,7 @@ def test_cmt_minimal():
     validate_canonical(canon)
 
     assert canon["provenance"]["source_system"] == "cmt"
-    assert canon["target"]["work_id"] == "42"
+    assert canon["target"]["work_id"] == "internal_id:paperId:42"
     assert canon["opinion"]["summary"]
 
 
@@ -37,7 +37,7 @@ def test_cmt_realistic():
     assert canon["provenance"]["source_system"] == "cmt"
     assert canon["provenance"]["source_review_id"] == "ICML2024_Rev_3847"
     assert canon["provenance"]["raw_payload"] == payload
-    assert canon["target"]["work_id"] == "2847"
+    assert canon["target"]["work_id"] == "internal_id:paperId:2847"
     assert canon["target"]["venue"] == "ICML 2024"
     assert canon["target"]["track"] == "Main Conference"
 
@@ -77,8 +77,8 @@ def test_cmt_identifiers_extraction():
     assert identifiers["internal_id"]["field_name"] == "paperId"
     assert identifiers["internal_id"]["value"] == "42"
 
-    # work_id should still be populated for backward compatibility
-    assert canon["target"]["work_id"] == "42"
+    # work_id is the primary identifier, so the DOI wins over the CMT paper ID
+    assert canon["target"]["work_id"] == "doi:10.1234/test.2024"
 
 
 def test_cmt_identifiers_without_doi():
@@ -198,7 +198,7 @@ def test_cmt_work_id_from_submission_id():
     canon = from_cmt(payload)
     validate_canonical(canon)
 
-    assert canon["target"]["work_id"] == "SUB-2024-001"
+    assert canon["target"]["work_id"] == "internal_id:paperId:SUB-2024-001"
     assert canon["target"]["identifiers"]["internal_id"]["value"] == "SUB-2024-001"
 
 
@@ -233,7 +233,7 @@ def test_cmt_to_stub():
             },
         },
         "referee": {"referee_type": "human", "identity_mode": "confidential"},
-        "target": {"work_id": "42", "work_type": "other"},
+        "target": {"work_id": "internal_id:paperId:42", "work_type": "other"},
         "opinion": {"summary": "Good paper."},
         "narrative": {
             "summary": "Paper summary here.",

@@ -43,8 +43,14 @@
     }
   },
   "target": {
-    "work_id": "paper-citation-sets",
+    "work_id": "internal_id:example-platform:paper-citation-sets",
     "work_type": "preprint",
+    "identifiers": {
+      "internal_id": {
+        "field_name": "example-platform",
+        "value": "paper-citation-sets"
+      }
+    },
     "version": "v1"
   },
   "opinion": {

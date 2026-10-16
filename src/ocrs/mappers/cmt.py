@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 from ..catalog import alias_map, load_catalog
+from ..identifiers import generate_canonical_work_id
 from ..util import (
     first_paragraph,
     guess_scale_from_value,
@@ -17,6 +18,7 @@ from ..util import (
     now_iso,
     parse_numeric_prefix,
     source_decision,
+    source_work_id,
     split_decision,
 )
 
@@ -88,7 +90,7 @@ def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, An
         payload.get("createdAt") if isinstance(payload.get("createdAt"), str) else now_iso()
     )
 
-    work_id = _get_work_id(payload)
+    identifiers = _build_target_identifiers(payload)
     venue = payload.get("conferenceName")
     track = payload.get("trackName")
 
@@ -118,8 +120,8 @@ def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, An
         },
         "referee": referee,
         "target": {
-            "identifiers": _build_target_identifiers(payload),
-            "work_id": work_id,  # Keep for backward compatibility
+            "identifiers": identifiers,
+            "work_id": generate_canonical_work_id(identifiers),
             "work_type": "other",
         },
         "metric_catalog_ref": catalog.get("catalog_id"),
@@ -260,7 +262,7 @@ def to_cmt(canonical: dict[str, Any]) -> dict[str, Any]:
     # Lossy dict approximating a CMT export row
     out: dict[str, Any] = {}
     out["reviewId"] = canonical.get("review_id")
-    out["paperId"] = canonical.get("target", {}).get("work_id")
+    out["paperId"] = source_work_id(canonical.get("target", {}))
     out["conferenceName"] = canonical.get("target", {}).get("venue")
     out["trackName"] = canonical.get("target", {}).get("track")
     out["reviewerId"] = canonical.get("referee", {}).get("referee_id")

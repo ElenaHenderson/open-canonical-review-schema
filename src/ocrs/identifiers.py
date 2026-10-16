@@ -83,6 +83,42 @@ IDENTIFIER_PRIORITY = [
 ]
 # issn is left out: it identifies the journal or series, not the work.
 
+# target.work_id: "{type}:{value}" for a key in IDENTIFIER_PRIORITY, with
+# "internal_id:{field_name}:{value}" for internal IDs, or "unknown".
+UNKNOWN_WORK_ID = "unknown"
+CANONICAL_WORK_ID_PATTERN = re.compile(
+    r"^(("
+    + "|".join(t for t in IDENTIFIER_PRIORITY if t != "internal_id")
+    + r"):\S.*|internal_id:[^:\s]+:\S.*)$"
+)
+
+# target.relations[].type: Crossref's intra-work relation types (relations.xsd),
+# plus DataCite's IsNewVersionOf / IsPreviousVersionOf, in snake_case.
+WORK_RELATION_TYPES = [
+    "is_new_version_of",
+    "is_previous_version_of",
+    "is_version_of",
+    "has_version",
+    "is_preprint_of",
+    "has_preprint",
+    "is_manuscript_of",
+    "has_manuscript",
+    "replaces",
+    "is_replaced_by",
+    "is_same_as",
+    "is_identical_to",
+    "is_translation_of",
+    "has_translation",
+    "is_variant_form_of",
+    "is_original_form_of",
+    "is_format_of",
+    "has_format",
+    "is_expression_of",
+    "has_expression",
+    "is_manifestation_of",
+    "has_manifestation",
+]
+
 # =============================================================================
 # Resolver URLs
 # =============================================================================
@@ -414,20 +450,45 @@ def resolve_primary_identifier(
 
 
 def generate_canonical_work_id(identifiers: dict[str, Any]) -> str:
-    """Generate a canonical work ID string from identifiers.
+    """Generate the canonical work ID (target.work_id) from identifiers.
 
-    Creates a prefixed identifier string for consistent referencing.
+    The type is the primary identifier's key in identifiers, following
+    IDENTIFIER_PRIORITY. An internal_id also carries its field_name, so IDs
+    from different systems don't collide.
 
     Args:
         identifiers: Dictionary matching the workIdentifiers schema
 
     Returns:
-        Canonical ID in format "{type}:{value}" (e.g., "doi:10.1234/example")
+        "{type}:{value}" (e.g., "doi:10.1234/example"),
+        "internal_id:{field_name}:{value}" (e.g., "internal_id:openreview_forum:abc123"),
+        or "unknown" if no identifier is found
     """
     id_type, value = resolve_primary_identifier(identifiers)
-    if value:
-        return f"{id_type}:{value}"
-    return "unknown:unidentified"
+    if not value:
+        return UNKNOWN_WORK_ID
+    if id_type == "internal_id":
+        return f"internal_id:{identifiers['internal_id']['field_name']}:{value}"
+    return f"{id_type}:{value}"
+
+
+def parse_canonical_work_id(work_id: str) -> tuple[str, str | None, str] | None:
+    """Split a canonical work ID into its type, field name and value.
+
+    Args:
+        work_id: Canonical work ID (e.g., "doi:10.1234/x" or "internal_id:paperId:42")
+
+    Returns:
+        (type, field_name, value), where field_name is set only for internal_id,
+        or None if work_id is not a canonical work ID
+    """
+    if not CANONICAL_WORK_ID_PATTERN.match(work_id):
+        return None
+    id_type, _, rest = work_id.partition(":")
+    if id_type == "internal_id":
+        field_name, _, value = rest.partition(":")
+        return (id_type, field_name, value)
+    return (id_type, None, rest)
 
 
 def build_resolver_url(id_type: str, value: str) -> str | None:

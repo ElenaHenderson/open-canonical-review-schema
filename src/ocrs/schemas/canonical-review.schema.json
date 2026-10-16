@@ -99,7 +99,7 @@
       }
     },
     "target": {
-      "description": "The work under review",
+      "description": "The work under review: the exact version the reviewer read. Other versions and forms of it go in relations",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -109,11 +109,12 @@
       "properties": {
         "work_id": {
           "type": "string",
-          "description": "Primary identifier for the work being reviewed"
+          "description": "The work's primary identifier, as '<type>:<value>', where <type> is its key in identifiers (e.g., 'doi:10.7554/eLife.112155.1'). An internal ID also names its field: 'internal_id:<field_name>:<value>' (e.g., 'internal_id:openreview_forum:2dnO3LLiJ1'). It is the identifier that comes first in the resolution priority of identifiers, or 'unknown' if the source names none",
+          "pattern": "^(unknown|(doi|arxiv_id|s2cid|pubmed_id|pmcid|openalex_id|handle|ark|isbn|ecli|accession|purl|permalink|uuid):\\S.*|internal_id:[^:\\s]+:\\S.*)$"
         },
         "identifiers": {
           "$ref": "#/$defs/workIdentifiers",
-          "description": "Optional structured identifiers with validation and resolution metadata"
+          "description": "Structured identifiers of the reviewed version, with validation and resolution metadata"
         },
         "work_type": {
           "description": "Kind of work under review",
@@ -132,6 +133,13 @@
           "type": "string",
           "description": "Version of the paper/work being reviewed (e.g., v1, v2)"
         },
+        "relations": {
+          "description": "Other versions and forms of the reviewed work, each with how it relates to the reviewed version (e.g., the reviewed version is_new_version_of an earlier one, or is_version_of a preprint)",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/workRelation"
+          }
+        },
         "venue": {
           "description": "Journal, conference or platform the work was submitted to",
           "type": "string"
@@ -141,8 +149,9 @@
           "type": "string"
         },
         "revision_of": {
-          "description": "Identifier of the earlier version this work revises",
-          "type": "string"
+          "description": "Deprecated: use relations with type 'is_new_version_of'. Identifier of the earlier version this work revises",
+          "type": "string",
+          "deprecated": true
         },
         "language": {
           "description": "Language of the work (e.g., 'en')",
@@ -553,6 +562,51 @@
           "description": "URL of the work in the source system",
           "type": "string",
           "format": "uri"
+        }
+      }
+    },
+    "workRelation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Another version or form of the reviewed work, and how it relates to the reviewed version",
+      "required": ["type", "identifiers"],
+      "properties": {
+        "type": {
+          "description": "How the reviewed version relates to this one, read as '<reviewed version> <type> <this work>'. Crossref's intra-work relation types (relations.xsd), plus DataCite's IsNewVersionOf and IsPreviousVersionOf, in snake_case",
+          "type": "string",
+          "enum": [
+            "is_new_version_of",
+            "is_previous_version_of",
+            "is_version_of",
+            "has_version",
+            "is_preprint_of",
+            "has_preprint",
+            "is_manuscript_of",
+            "has_manuscript",
+            "replaces",
+            "is_replaced_by",
+            "is_same_as",
+            "is_identical_to",
+            "is_translation_of",
+            "has_translation",
+            "is_variant_form_of",
+            "is_original_form_of",
+            "is_format_of",
+            "has_format",
+            "is_expression_of",
+            "has_expression",
+            "is_manifestation_of",
+            "has_manifestation"
+          ]
+        },
+        "identifiers": {
+          "$ref": "#/$defs/workIdentifiers",
+          "description": "Identifiers of this version or form",
+          "minProperties": 1
+        },
+        "version": {
+          "description": "Its version label (e.g., v1)",
+          "type": "string"
         }
       }
     },

@@ -52,8 +52,27 @@
     }
   },
   "target": {
-    "work_id": "preprint-77",
-    "work_type": "preprint"
+    "work_id": "internal_id:preprint_id:preprint-77v2",
+    "identifiers": {
+      "internal_id": {
+        "field_name": "preprint_id",
+        "value": "preprint-77v2"
+      }
+    },
+    "work_type": "preprint",
+    "version": "v2",
+    "relations": [
+      {
+        "type": "is_new_version_of",
+        "identifiers": {
+          "internal_id": {
+            "field_name": "preprint_id",
+            "value": "preprint-77v1"
+          }
+        },
+        "version": "v1"
+      }
+    ]
   },
   "opinion": {
     "summary": "The method is sound; the comparison with the strongest baseline is missing.",

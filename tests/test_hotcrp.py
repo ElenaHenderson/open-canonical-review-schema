@@ -23,7 +23,7 @@ def test_hotcrp_minimal():
     validate_canonical(canon)
 
     assert canon["provenance"]["source_system"] == "hotcrp"
-    assert canon["target"]["work_id"] == "42"
+    assert canon["target"]["work_id"] == "internal_id:hotcrp_pid:42"
     assert canon["opinion"]["summary"]
 
 
@@ -37,7 +37,7 @@ def test_hotcrp_realistic():
     assert canon["provenance"]["source_system"] == "hotcrp"
     assert canon["provenance"]["source_review_id"] == "4527"
     assert canon["provenance"]["raw_payload"] == payload
-    assert canon["target"]["work_id"] == "183"
+    assert canon["target"]["work_id"] == "internal_id:hotcrp_pid:183"
 
     # Check narrative
     assert "narrative" in canon
@@ -179,7 +179,7 @@ def test_hotcrp_to_stub():
             },
         },
         "referee": {"referee_type": "human", "identity_mode": "confidential"},
-        "target": {"work_id": "42", "work_type": "article"},
+        "target": {"work_id": "internal_id:hotcrp_pid:42", "work_type": "article"},
         "opinion": {"summary": "Good paper."},
         "narrative": {
             "summary": "Paper summary here.",

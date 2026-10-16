@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 from ..catalog import alias_map, load_catalog
+from ..identifiers import generate_canonical_work_id
 from ..scales import (
     SCHOLARONE_RECOMMENDATION,
 )
@@ -19,6 +20,7 @@ from ..util import (
     parse_date_flexible,
     parse_labeled_score,
     source_decision,
+    source_work_id,
     split_decision,
 )
 
@@ -266,7 +268,7 @@ def from_scholarone(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[
     amap = alias_map(catalog)
 
     created = _extract_time(payload)
-    work_id = _get_work_id(payload)
+    identifiers = _build_target_identifiers(payload)
     reviewer_id = _get_reviewer_id(payload)
     review_id = _get_review_id(payload)
 
@@ -296,8 +298,8 @@ def from_scholarone(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[
         },
         "referee": referee,
         "target": {
-            "identifiers": _build_target_identifiers(payload),
-            "work_id": work_id,  # Keep for backward compatibility
+            "identifiers": identifiers,
+            "work_id": generate_canonical_work_id(identifiers),
             "work_type": "article",
         },
         "metric_catalog_ref": catalog.get("catalog_id"),
@@ -416,7 +418,7 @@ def to_scholarone(canonical: dict[str, Any]) -> dict[str, Any]:
             rid = parts[0]
 
     out: dict[str, Any] = {
-        "documentId": canonical.get("target", {}).get("work_id"),
+        "documentId": source_work_id(canonical.get("target", {})),
     }
 
     if reviewer_num:

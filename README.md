@@ -71,7 +71,7 @@ The OpenAIReview mapper copies the reviewer's own output into OCRS; it never rew
 - **coerced**: reviewer values OCRS does not allow (for example an unknown severity), and what the mapper did instead;
 - **unanchored**: quotes the reviewer took from the paper that cannot be found in it.
 
-`output` is the reviewer's own file, unchanged. The keyword arguments are what that file doesn't say: which review and paper, who produced it, the reviewer's commit, the model, and the run's times and cost. Give the paper as plain-text `blocks` (body, abstract, references) to also check each quote against it; the record then says where each quote was found. Without `blocks`, quotes are copied but not checked.
+`output` is the reviewer's own file, unchanged. The keyword arguments are what that file doesn't say: which review and paper, who produced it, the reviewer's commit, the model, and the run's times and cost. `work_id` can be a DOI, a URL, a canonical work ID such as `doi:10.1234/abc`, or the platform's own ID, which is kept as an `internal_id` named after `source_system`. Give the paper as plain-text `blocks` (body, abstract, references) to also check each quote against it; the record then says where each quote was found. Without `blocks`, quotes are copied but not checked.
 
 ```python
 from ocrs import map_with_record, render_mapping_markdown
@@ -121,7 +121,10 @@ A minimal canonical review in JSON:
     }
   },
   "target": {
-    "work_id": "paper_xyz789",
+    "work_id": "internal_id:openreview_forum:xyz789",
+    "identifiers": {
+      "internal_id": {"field_name": "openreview_forum", "value": "xyz789"}
+    },
     "work_type": "preprint",
     "venue": "NeurIPS 2025"
   },
@@ -185,7 +188,7 @@ The canonical review schema captures:
 |---------|-------------|
 | `provenance` | Source system, original IDs, import timestamps, raw payload |
 | `referee` | Human, AI, or hybrid reviewer with identity mode and expertise |
-| `target` | Work being reviewed (article, preprint, dataset, etc.) |
+| `target` | The version of the work being reviewed: `work_id` as `<type>:<value>` (e.g. `doi:10.1234/abc`), its identifiers, and `relations` to its other versions and forms |
 | `opinion` | Summary text and overall stance |
 | `decision` | Acceptance recommendation, independent revision requirement, and confidence |
 | `metrics` | Structured assessments (soundness, clarity, novelty, etc.) |

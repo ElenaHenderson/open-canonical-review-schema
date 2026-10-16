@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 from ..catalog import alias_map, load_catalog
+from ..identifiers import generate_canonical_work_id
 from ..util import (
     epoch_ms_to_iso,
     first_paragraph,
@@ -18,6 +19,7 @@ from ..util import (
     now_iso,
     parse_numeric_prefix,
     source_decision,
+    source_work_id,
     split_decision,
 )
 
@@ -56,19 +58,6 @@ def _get_signer(note: dict[str, Any]) -> str | None:
     if isinstance(sig, list) and sig:
         if isinstance(sig[0], str):
             return sig[0]
-    return None
-
-
-def _target_work_id(note: dict[str, Any]) -> str | None:
-    for k in ("forum", "id", "note_id"):
-        v = note.get(k)
-        if isinstance(v, str) and v:
-            return v
-    c = _get_content(note)
-    for k in ("paper_id", "submission_id", "work_id"):
-        v = c.get(k)
-        if isinstance(v, str) and v:
-            return v
     return None
 
 
@@ -116,15 +105,23 @@ def _build_target_identifiers(note: dict[str, Any]) -> dict[str, Any]:
                 "value": note_id,
                 "hyperlink": f"https://openreview.net/forum?id={note_id}",
             }
+        else:
+            # Fallback to a paper ID in the review form
+            for k in ("paper_id", "submission_id", "work_id"):
+                v = content.get(k)
+                if isinstance(v, str) and v:
+                    identifiers["internal_id"] = {"field_name": k, "value": v}
+                    break
 
     return identifiers
 
 
-def _build_target(note: dict[str, Any], work_id: str, content: dict[str, Any]) -> dict[str, Any]:
+def _build_target(note: dict[str, Any], content: dict[str, Any]) -> dict[str, Any]:
     """Build target object with identifiers."""
+    identifiers = _build_target_identifiers(note)
     target: dict[str, Any] = {
-        "identifiers": _build_target_identifiers(note),
-        "work_id": work_id,  # Keep for backward compatibility
+        "identifiers": identifiers,
+        "work_id": generate_canonical_work_id(identifiers),
         "work_type": "preprint",
     }
 
@@ -194,7 +191,6 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
     created = _extract_time(note)
     content = _get_content(note)
 
-    work_id = _target_work_id(note) or "unknown"
     signer = _get_signer(note)
 
     review_id = note.get("id") if isinstance(note.get("id"), str) else str(uuid.uuid4())
@@ -217,7 +213,7 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
             "identity_mode": "confidential",
             "human_referee": {},
         },
-        "target": _build_target(note, work_id, content),
+        "target": _build_target(note, content),
         "metric_catalog_ref": catalog.get("catalog_id"),
         "metrics": [],
         "opinion": {"summary": _best_text_opinion(content) or "No summary provided."},
@@ -433,7 +429,7 @@ def to_openreview(canonical: dict[str, Any]) -> dict[str, Any]:
 
     note = {
         "id": canonical.get("review_id"),
-        "forum": canonical.get("target", {}).get("work_id"),
+        "forum": source_work_id(canonical.get("target", {})),
         "content": content,
         "signatures": (
             [canonical.get("referee", {}).get("referee_id")]

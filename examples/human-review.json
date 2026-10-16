@@ -21,7 +21,13 @@
     }
   },
   "target": {
-    "work_id": "manuscript-2041",
+    "work_id": "internal_id:manuscript_id:manuscript-2041",
+    "identifiers": {
+      "internal_id": {
+        "field_name": "manuscript_id",
+        "value": "manuscript-2041"
+      }
+    },
     "work_type": "article",
     "venue": "Example Journal of Earth Sciences"
   },

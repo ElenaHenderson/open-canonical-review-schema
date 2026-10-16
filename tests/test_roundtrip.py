@@ -2,7 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for roundtrip conversion between source formats and canonical schema."""
 
-from ocrs import map_from, map_to, validate_canonical
+import json
+from pathlib import Path
+
+import pytest
+
+from ocrs import generate_canonical_work_id, map_from, map_to, validate_canonical
 
 
 def test_openreview_to_canonical_and_back():
@@ -72,3 +77,43 @@ def test_openreview_note_without_id_or_signature():
     canon = map_from("openreview", {"forum": "or_forum_123", "content": {"summary": "Fine."}})
     assert "referee_id" not in canon["referee"]
     assert "source_review_id" not in canon["provenance"]
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+# Each source's field for the paper ID, as map_to writes it back
+SOURCE_ID_FIELD = {
+    "openreview": "forum",
+    "cmt": "paperId",
+    "hotcrp": "pid",
+    "scholarone": "documentId",
+    "editorialmanager": "manuscriptId",
+}
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    sorted(p for source in SOURCE_ID_FIELD for p in (FIXTURES / source).glob("*.json")),
+    ids=lambda p: f"{p.parent.name}/{p.name}",
+)
+def test_work_id_is_canonical_and_maps_back_to_the_source_id(fixture: Path) -> None:
+    source = fixture.parent.name
+    canon = map_from(source, json.loads(fixture.read_text()))
+    target = canon["target"]
+    assert target["work_id"] == generate_canonical_work_id(target["identifiers"])
+    source_id = target["identifiers"]["internal_id"]["value"]
+    assert map_to(source, canon)[SOURCE_ID_FIELD[source]] == source_id
+
+
+def test_journal_narrative_maps_the_doi_back() -> None:
+    canon = map_from(
+        "journal_narrative",
+        {
+            "review_id": "r1",
+            "doi": "10.1234/abc",
+            "manuscript_id": "MS-1",
+            "journal": "Example Journal",
+            "full_text": "Fine.",
+        },
+    )
+    assert canon["target"]["work_id"] == "doi:10.1234/abc"
+    assert map_to("journal_narrative", canon)["doi"] == "10.1234/abc"

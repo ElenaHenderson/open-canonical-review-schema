@@ -23,7 +23,7 @@ def test_editorialmanager_minimal():
     validate_canonical(canon)
 
     assert canon["provenance"]["source_system"] == "editorialmanager"
-    assert canon["target"]["work_id"] == "MS-2024-0042"
+    assert canon["target"]["work_id"] == "internal_id:manuscriptId:MS-2024-0042"
     assert canon["opinion"]["summary"]
     assert canon["decision"] == {"revision_requirement": "major"}
 
@@ -38,7 +38,7 @@ def test_editorialmanager_realistic():
     assert canon["provenance"]["source_system"] == "editorialmanager"
     assert canon["provenance"]["source_review_id"] == "REV-2024-78543"
     assert canon["provenance"]["raw_payload"] == payload
-    assert canon["target"]["work_id"] == "MS-2024-001234"
+    assert canon["target"]["work_id"] == "internal_id:manuscriptId:MS-2024-001234"
     assert canon["target"]["venue"] == "Journal of Coastal Research"
 
     # Check narrative
@@ -178,7 +178,7 @@ def test_editorialmanager_to_stub():
         },
         "referee": {"referee_type": "human", "identity_mode": "confidential"},
         "target": {
-            "work_id": "MS-2024-TEST",
+            "work_id": "internal_id:manuscriptId:MS-2024-TEST",
             "work_type": "article",
             "venue": "Test Journal",
         },

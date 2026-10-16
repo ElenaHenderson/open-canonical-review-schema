@@ -20,7 +20,11 @@ def _review(finding):
             "identity_mode": "confidential",
             "human_referee": {},
         },
-        "target": {"work_id": "paper_123", "work_type": "preprint", "version": "v2"},
+        "target": {
+            "work_id": "internal_id:manuscript_id:paper_123",
+            "work_type": "preprint",
+            "version": "v2",
+        },
         "opinion": {"summary": "Test review."},
         "findings": {"weaknesses": [finding]},
     }

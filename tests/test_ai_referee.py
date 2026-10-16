@@ -39,7 +39,7 @@ def _review(referee):
         "created_at": "2025-01-15T14:30:00Z",
         "provenance": {"source_system": "test"},
         "referee": referee,
-        "target": {"work_id": "paper_123", "work_type": "article"},
+        "target": {"work_id": "internal_id:manuscript_id:paper_123", "work_type": "article"},
         "opinion": {"summary": "Test review."},
     }
 

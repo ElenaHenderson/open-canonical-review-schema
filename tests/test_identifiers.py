@@ -4,7 +4,9 @@
 
 import pytest
 
+from ocrs import load_schema
 from ocrs.identifiers import (
+    CANONICAL_WORK_ID_PATTERN,
     IDENTIFIER_PRIORITY,
     RESOLVERS,
     build_content_hash,
@@ -13,6 +15,7 @@ from ocrs.identifiers import (
     compute_content_hash,
     generate_canonical_work_id,
     normalize_orcid,
+    parse_canonical_work_id,
     resolve_primary_identifier,
     validate_ark,
     validate_arxiv,
@@ -30,6 +33,7 @@ from ocrs.identifiers import (
     validate_scopus_author,
     validate_uuid,
 )
+from ocrs.util import migrate_work_id_to_identifiers, source_work_id
 
 
 class TestOrcidValidation:
@@ -368,13 +372,52 @@ class TestCanonicalWorkId:
         assert generate_canonical_work_id(ids) == "arxiv_id:2401.12345"
 
     def test_internal_canonical_id(self):
-        """Test canonical ID from internal_id."""
+        """Test canonical ID from internal_id keeps the field name."""
         ids = {"internal_id": {"field_name": "pid", "value": "42"}}
-        assert generate_canonical_work_id(ids) == "internal_id:42"
+        assert generate_canonical_work_id(ids) == "internal_id:pid:42"
 
     def test_empty_returns_unknown(self):
         """Test empty identifiers returns unknown."""
-        assert generate_canonical_work_id({}) == "unknown:unidentified"
+        assert generate_canonical_work_id({}) == "unknown"
+
+    def test_parse_canonical_work_id(self):
+        """Test splitting canonical IDs into type, field name and value."""
+        assert parse_canonical_work_id("doi:10.1234/a:b") == ("doi", None, "10.1234/a:b")
+        assert parse_canonical_work_id("internal_id:pid:42") == ("internal_id", "pid", "42")
+        assert parse_canonical_work_id("unknown") is None
+        assert parse_canonical_work_id("paper-1") is None
+        assert parse_canonical_work_id("issn:2050-084X") is None
+
+    def test_canonical_ids_round_trip_through_parse(self):
+        """Test that every generated ID parses back to its identifier."""
+        for ids, expected in [
+            ({"doi": {"value": "10.1234/x"}}, ("doi", None, "10.1234/x")),
+            ({"purl": "https://purl.org/x"}, ("purl", None, "https://purl.org/x")),
+            ({"internal_id": {"field_name": "pid", "value": "4:2"}}, ("internal_id", "pid", "4:2")),
+        ]:
+            assert parse_canonical_work_id(generate_canonical_work_id(ids)) == expected
+
+    @pytest.mark.parametrize(
+        "work_id",
+        [
+            "doi:10.1234/x",
+            "internal_id:paperId:42",
+            "uuid:123e4567-e89b-12d3-a456-426614174000",
+            "unknown",
+            "paper-1",
+            "internal_id:42",
+            "issn:2050-084X",
+            "doi:",
+            "doi: 10.1234/x",
+        ],
+    )
+    def test_schema_pattern_matches_python_pattern(self, work_id):
+        """Test that the schema's work_id pattern agrees with CANONICAL_WORK_ID_PATTERN."""
+        import re
+
+        schema_pattern = load_schema()["properties"]["target"]["properties"]["work_id"]["pattern"]
+        in_python = work_id == "unknown" or bool(CANONICAL_WORK_ID_PATTERN.match(work_id))
+        assert bool(re.match(schema_pattern, work_id)) == in_python
 
 
 class TestResolverUrl:
@@ -541,3 +584,44 @@ class TestResolversDict:
             assert url.startswith("https://") or url.startswith("http://"), (
                 f"Resolver {key} URL should be HTTPS/HTTP"
             )
+
+
+class TestWorkIdHelpers:
+    """Tests for reading identifiers back out of a work ID."""
+
+    def test_migrate_reads_canonical_ids(self):
+        """Test that a canonical work ID becomes that identifier, not an internal_id."""
+        assert migrate_work_id_to_identifiers("doi:10.1234/x") == {
+            "doi": {"value": "10.1234/x", "hyperlink": "https://doi.org/10.1234/x"}
+        }
+        assert migrate_work_id_to_identifiers("internal_id:pid:42") == {
+            "internal_id": {"field_name": "pid", "value": "42"}
+        }
+        assert migrate_work_id_to_identifiers("purl:https://purl.org/x") == {
+            "purl": "https://purl.org/x"
+        }
+
+    def test_migrate_still_reads_bare_ids(self):
+        """Test the existing DOI, URL and fallback detection."""
+        assert "doi" in migrate_work_id_to_identifiers("10.1234/x")
+        assert migrate_work_id_to_identifiers("paper-1", "example-platform") == {
+            "internal_id": {"field_name": "example-platform", "value": "paper-1"}
+        }
+
+    def test_source_work_id_prefers_internal_id(self):
+        """Test that the source system's own ID comes from identifiers.internal_id."""
+        target = {
+            "work_id": "doi:10.1234/x",
+            "identifiers": {
+                "doi": {"value": "10.1234/x"},
+                "internal_id": {"field_name": "paperId", "value": "42"},
+            },
+        }
+        assert source_work_id(target) == "42"
+
+    def test_source_work_id_from_work_id(self):
+        """Test falling back to the value in work_id, or a pre-0.5 free-form work_id."""
+        assert source_work_id({"work_id": "internal_id:pid:42"}) == "42"
+        assert source_work_id({"work_id": "doi:10.1234/x"}) == "10.1234/x"
+        assert source_work_id({"work_id": "paper-1"}) == "paper-1"
+        assert source_work_id({"work_id": "unknown"}) is None

@@ -28,7 +28,7 @@ def test_an_anonymous_human_review_needs_no_human_referee():
             "created_at": "2026-10-06T12:00:00Z",
             "provenance": {"source_system": "example-journal"},
             "referee": {"referee_type": "human", "identity_mode": "double_blind"},
-            "target": {"work_id": "paper-1", "work_type": "article"},
+            "target": {"work_id": "internal_id:manuscript_id:paper-1", "work_type": "article"},
             "opinion": {"summary": "A sound paper."},
         }
     )
@@ -55,7 +55,11 @@ def _review_of(identifiers: dict) -> dict:
         "created_at": "2026-10-15T12:00:00Z",
         "provenance": {"source_system": "example-journal"},
         "referee": {"referee_type": "human", "identity_mode": "double_blind"},
-        "target": {"work_id": "paper-1", "work_type": "article", "identifiers": identifiers},
+        "target": {
+            "work_id": "internal_id:manuscript_id:paper-1",
+            "work_type": "article",
+            "identifiers": identifiers,
+        },
         "opinion": {"summary": "A sound paper."},
     }
 
@@ -105,7 +109,7 @@ def _review_with(finding: dict, claim: dict) -> dict:
         "created_at": "2026-10-07T12:00:00Z",
         "provenance": {"source_system": "example-journal"},
         "referee": {"referee_type": "human", "identity_mode": "double_blind"},
-        "target": {"work_id": "paper-1", "work_type": "article"},
+        "target": {"work_id": "internal_id:manuscript_id:paper-1", "work_type": "article"},
         "opinion": {"summary": "A sound paper."},
         "findings": {"weaknesses": [finding]},
         "claim_assessments": [claim],
@@ -141,3 +145,68 @@ def test_credence_needs_a_probability() -> None:
         validate_canonical(_review_with({**FINDING, "credence": 0.5}, CLAIM))
     with pytest.raises(jsonschema.ValidationError):
         validate_canonical(_review_with(FINDING, {**CLAIM, "credence": 0.5}))
+
+
+def _review_of_target(target: dict) -> dict:
+    return {**_review_of({}), "target": {"work_type": "article", **target}}
+
+
+@pytest.mark.parametrize(
+    "work_id", ["doi:10.7554/eLife.112155.1", "internal_id:openreview_forum:2dnO3LLiJ1", "unknown"]
+)
+def test_work_id_is_type_and_value(work_id: str) -> None:
+    validate_canonical(_review_of_target({"work_id": work_id}))
+
+
+@pytest.mark.parametrize("work_id", ["paper-1", "internal_id:42", "issn:2050-084X", "doi:"])
+def test_work_id_rejects_free_form_values(work_id: str) -> None:
+    with pytest.raises(jsonschema.ValidationError):
+        validate_canonical(_review_of_target({"work_id": work_id}))
+
+
+def test_target_relations_name_other_versions_and_forms():
+    validate_canonical(
+        _review_of_target(
+            {
+                "work_id": "doi:10.7554/eLife.112155.1",
+                "identifiers": {"doi": {"value": "10.7554/eLife.112155.1"}},
+                "version": "1",
+                "relations": [
+                    {
+                        "type": "is_version_of",
+                        "identifiers": {"doi": {"value": "10.64898/2026.06.08.730955"}},
+                    },
+                    {
+                        "type": "is_same_as",
+                        "identifiers": {"doi": {"value": "10.7554/eLife.112155"}},
+                    },
+                    {
+                        "type": "is_new_version_of",
+                        "identifiers": {"internal_id": {"field_name": "ms", "value": "MS-1"}},
+                        "version": "v1",
+                    },
+                ],
+            }
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "relation",
+    [
+        {"type": "isVersionOf", "identifiers": {"doi": {"value": "10.1234/x"}}},
+        {"type": "is_review_of", "identifiers": {"doi": {"value": "10.1234/x"}}},
+        {"type": "is_version_of", "identifiers": {}},
+        {"type": "is_version_of"},
+        {"type": "is_version_of", "identifiers": {"doi": {"value": "not-a-doi"}}},
+    ],
+)
+def test_target_relations_reject_unknown_types_and_missing_identifiers(relation: dict) -> None:
+    with pytest.raises(jsonschema.ValidationError):
+        validate_canonical(_review_of_target({"work_id": "doi:10.1234/y", "relations": [relation]}))
+
+
+def test_revision_of_is_deprecated_but_still_valid():
+    target = load_schema()["properties"]["target"]["properties"]["revision_of"]
+    assert target["deprecated"] is True
+    validate_canonical(_review_of_target({"work_id": "doi:10.1234/y", "revision_of": "MS-1"}))

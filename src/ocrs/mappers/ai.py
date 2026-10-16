@@ -25,6 +25,7 @@ from pydantic import JsonValue
 
 from ..anchors import Block, BlockKind, find_quote
 from ..gaps import count_unmapped, generic_path, leftover, unfilled_paths
+from ..identifiers import generate_canonical_work_id
 from ..mapping import (
     Coercion,
     Gaps,
@@ -37,6 +38,7 @@ from ..mapping import (
     UnanchoredQuote,
 )
 from ..schema import load_schema, validate_canonical
+from ..util import migrate_work_id_to_identifiers
 
 __all__ = ["AIReviewMapper", "Block", "BlockKind", "MappingResult", "Recorder", "finish"]
 
@@ -149,7 +151,12 @@ def build_review(
     requested_by: str | None = None,
     cost_usd: float | None = None,
 ) -> dict[str, Any]:
-    """The parts of an OCRS review that come from the run, not the reviewer's output."""
+    """The parts of an OCRS review that come from the run, not the reviewer's output.
+
+    `work_id` is any identifier of the paper: a canonical work ID, a DOI, a URL, or the
+    platform's own ID, which becomes an internal_id named after `source_system`.
+    """
+    identifiers = migrate_work_id_to_identifiers(work_id, source_system)
     execution: dict[str, Any] = {
         "started_at": iso(started_at),
         "ended_at": iso(ended_at),
@@ -186,7 +193,11 @@ def build_review(
                 "execution": execution,
             },
         },
-        "target": {"work_id": work_id, "work_type": work_type},
+        "target": {
+            "work_id": generate_canonical_work_id(identifiers),
+            "work_type": work_type,
+            "identifiers": identifiers,
+        },
         "opinion": {},
     }
     if work_version:

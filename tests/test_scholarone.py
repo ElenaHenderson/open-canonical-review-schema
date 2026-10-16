@@ -23,7 +23,7 @@ def test_scholarone_minimal():
     validate_canonical(canon)
 
     assert canon["provenance"]["source_system"] == "scholarone"
-    assert canon["target"]["work_id"] == "DOC-123456"
+    assert canon["target"]["work_id"] == "internal_id:documentId:DOC-123456"
     assert canon["opinion"]["summary"]
     assert canon["decision"] == {"revision_requirement": "major"}
 
@@ -37,7 +37,7 @@ def test_scholarone_realistic():
     # Check basic structure
     assert canon["provenance"]["source_system"] == "scholarone"
     assert canon["provenance"]["raw_payload"] == payload
-    assert canon["target"]["work_id"] == "DOC-2024-789012"
+    assert canon["target"]["work_id"] == "internal_id:documentId:DOC-2024-789012"
     assert canon["target"]["venue"] == "Neurology AI"
 
     # Check reviewer ID construction
@@ -207,7 +207,7 @@ def test_scholarone_to_stub():
         },
         "referee": {"referee_type": "human", "identity_mode": "confidential"},
         "target": {
-            "work_id": "DOC-TEST",
+            "work_id": "internal_id:documentId:DOC-TEST",
             "work_type": "article",
             "venue": "Test Journal",
         },

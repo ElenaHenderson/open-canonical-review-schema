@@ -184,6 +184,7 @@ def migrate_work_id_to_identifiers(
     """Convert legacy work_id string to identifiers structure.
 
     Auto-detects identifier type from format:
+    - Canonical work ID ("doi:10.xxxx/...", "internal_id:paperId:42") -> that identifier
     - DOI format (10.xxxx/...) -> doi
     - URL format -> permalink
     - Otherwise -> internal_id with source_system as field_name
@@ -195,9 +196,22 @@ def migrate_work_id_to_identifiers(
     Returns:
         Dictionary matching workIdentifiers schema
     """
-    from .identifiers import DOI_PATTERN
+    from .identifiers import DOI_PATTERN, build_resolver_url, parse_canonical_work_id
 
     work_id = work_id.strip()
+
+    parsed = parse_canonical_work_id(work_id)
+    if parsed:
+        id_type, field_name, value = parsed
+        if id_type == "internal_id":
+            return {"internal_id": {"field_name": field_name, "value": value}}
+        if id_type in ("permalink", "purl"):
+            return {id_type: value}
+        identifier = {"value": value}
+        hyperlink = build_resolver_url(id_type, value)
+        if hyperlink:
+            identifier["hyperlink"] = hyperlink
+        return {id_type: identifier}
 
     # Check if it's a DOI
     if DOI_PATTERN.match(work_id):
@@ -210,6 +224,25 @@ def migrate_work_id_to_identifiers(
     # Fallback to internal_id
     field_name = source_system or "legacy_work_id"
     return {"internal_id": {"field_name": field_name, "value": work_id}}
+
+
+def source_work_id(target: dict[str, Any]) -> str | None:
+    """The source system's own ID for the reviewed work, for mapping back to it.
+
+    Uses identifiers.internal_id, then the value in a canonical work_id. A work_id
+    that is not canonical (from a record made before work_id had a format) is
+    returned as is.
+    """
+    from .identifiers import parse_canonical_work_id
+
+    internal = (target.get("identifiers") or {}).get("internal_id")
+    if isinstance(internal, dict) and internal.get("value"):
+        return str(internal["value"])
+    work_id = target.get("work_id")
+    if not isinstance(work_id, str) or work_id == "unknown":
+        return None
+    parsed = parse_canonical_work_id(work_id)
+    return parsed[2] if parsed else work_id
 
 
 def parse_date_flexible(value: str | int | float) -> str:

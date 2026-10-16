@@ -20,7 +20,7 @@ def _minimal_review(**overrides):
             "identity_mode": "double_blind",
             "human_referee": {},
         },
-        "target": {"work_id": "paper_123", "work_type": "article"},
+        "target": {"work_id": "internal_id:manuscript_id:paper_123", "work_type": "article"},
         "opinion": {"summary": "Test review."},
     }
     review.update(overrides)

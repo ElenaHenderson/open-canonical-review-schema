@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 from ..catalog import alias_map, load_catalog
+from ..identifiers import generate_canonical_work_id
 from ..util import (
     first_paragraph,
     map_recommendation_from_text,
@@ -15,6 +16,7 @@ from ..util import (
     parse_date_flexible,
     parse_labeled_score,
     source_decision,
+    source_work_id,
     split_decision,
 )
 
@@ -240,7 +242,7 @@ def from_editorialmanager(payload: dict[str, Any], *, keep_raw: bool = False) ->
     amap = alias_map(catalog)
 
     created = _extract_time(payload)
-    work_id = _get_work_id(payload)
+    identifiers = _build_target_identifiers(payload)
     reviewer_id = _get_reviewer_id(payload)
     review_id = _get_review_id(payload)
 
@@ -269,8 +271,8 @@ def from_editorialmanager(payload: dict[str, Any], *, keep_raw: bool = False) ->
         },
         "referee": referee,
         "target": {
-            "identifiers": _build_target_identifiers(payload),
-            "work_id": work_id,  # Keep for backward compatibility
+            "identifiers": identifiers,
+            "work_id": generate_canonical_work_id(identifiers),
             "work_type": "article",
         },
         "metric_catalog_ref": catalog.get("catalog_id"),
@@ -341,7 +343,7 @@ def to_editorialmanager(canonical: dict[str, Any]) -> dict[str, Any]:
 
     out: dict[str, Any] = {
         "reviewId": rid,
-        "manuscriptId": canonical.get("target", {}).get("work_id"),
+        "manuscriptId": source_work_id(canonical.get("target", {})),
     }
 
     # Map venue
