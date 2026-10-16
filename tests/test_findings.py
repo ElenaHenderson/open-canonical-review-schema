@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Valency Systems Inc.
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for finding titles."""
+"""Tests for finding titles and requested changes."""
 
 import pytest
 from jsonschema import ValidationError
@@ -10,6 +10,11 @@ from ocrs import validate_canonical
 
 def _review(finding):
     """Create a minimal valid review with one weakness."""
+    return _review_with_findings({"weaknesses": [finding]})
+
+
+def _review_with_findings(findings):
+    """Create a minimal valid review with the given findings."""
     return {
         "review_id": "test_finding_001",
         "version": "1.0.0",
@@ -26,7 +31,7 @@ def _review(finding):
             "version": "v2",
         },
         "opinion": {"summary": "Test review."},
-        "findings": {"weaknesses": [finding]},
+        "findings": findings,
     }
 
 
@@ -41,3 +46,22 @@ def test_title():
 def test_empty_title_is_rejected():
     with pytest.raises(ValidationError):
         validate_canonical(_review({"title": "", "text": "Missing ablation."}))
+
+
+@pytest.mark.parametrize("priority", ["critical", "major", "minor", "trivial"])
+def test_change_priority(priority):
+    change = {"text": "Fix the proof of Lemma 2.", "priority": priority}
+    validate_canonical(_review_with_findings({"changes": [change]}))
+
+
+@pytest.mark.parametrize("priority", ["low", "medium", "high", "blocking"])
+def test_old_priorities_are_rejected(priority):
+    change = {"text": "Fix the proof of Lemma 2.", "priority": priority}
+    with pytest.raises(ValidationError):
+        validate_canonical(_review_with_findings({"changes": [change]}))
+
+
+@pytest.mark.parametrize("old_name", ["required_changes", "optional_suggestions"])
+def test_required_and_optional_changes_are_rejected(old_name):
+    with pytest.raises(ValidationError):
+        validate_canonical(_review_with_findings({old_name: [{"text": "Add an ablation."}]}))

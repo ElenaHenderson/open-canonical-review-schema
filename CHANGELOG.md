@@ -52,6 +52,12 @@
   `replaces`, `is_same_as`, …) and DataCite's `is_new_version_of` and
   `is_previous_version_of`, in snake_case. `target.revision_of` is deprecated: use a
   relation of type `is_new_version_of`.
+- Replaced `findings.required_changes` and `findings.optional_suggestions` with one
+  `findings.changes` list. A change's `priority` is now `critical`, `major`, `minor`, or
+  `trivial` (was `low`, `medium`, `high`, or `blocking`) and says how serious the problem
+  is, not whether the reviewer requires the change; `decision.revision_requirement` still
+  records that. The new values also apply to `ethics_and_risk.required_mitigations`.
+  Existing records must move both lists into `changes` and map each priority to a new value.
 
 ## 0.4.0
 

@@ -192,7 +192,7 @@ The canonical review schema captures:
 | `opinion` | Summary text and overall stance |
 | `decision` | Acceptance recommendation, independent revision requirement, and confidence |
 | `metrics` | Structured assessments (soundness, clarity, novelty, etc.) |
-| `findings` | Strengths, weaknesses, questions, required changes |
+| `findings` | Strengths, weaknesses, questions, and requested changes with priority (critical, major, minor, trivial) |
 | `ethics_and_risk` | Ethical concerns and required mitigations |
 | `written_report` | Optional uploaded report document (PDF, Word, Markdown, TXT) |
 

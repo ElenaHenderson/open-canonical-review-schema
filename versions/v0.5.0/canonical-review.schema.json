@@ -311,15 +311,8 @@
             "$ref": "#/$defs/finding"
           }
         },
-        "required_changes": {
-          "description": "Changes the work needs before it can be accepted",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/actionItem"
-          }
-        },
-        "optional_suggestions": {
-          "description": "Changes that would improve the work but are not required",
+        "changes": {
+          "description": "Changes the reviewer asks for, each with a priority that says how serious the problem is",
           "type": "array",
           "items": {
             "$ref": "#/$defs/actionItem"
@@ -2122,13 +2115,13 @@
           "type": "string"
         },
         "priority": {
-          "description": "How important the change is; blocking means the work cannot be accepted without it",
+          "description": "How serious the problem the change fixes is: critical, it invalidates the work's main conclusions, such as a fatal flaw in the method or results that do not hold; major, it substantially weakens the conclusions or how well they are supported, such as a missing analysis or an unjustified claim; minor, it does not affect the main conclusions, such as a missing reference or a small error that leaves the results unchanged; trivial, it is cosmetic, such as typos, clarity issues, formatting or wording",
           "type": "string",
           "enum": [
-            "low",
-            "medium",
-            "high",
-            "blocking"
+            "critical",
+            "major",
+            "minor",
+            "trivial"
           ]
         },
         "scope": {
