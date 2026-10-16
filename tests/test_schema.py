@@ -210,3 +210,34 @@ def test_revision_of_is_deprecated_but_still_valid():
     target = load_schema()["properties"]["target"]["properties"]["revision_of"]
     assert target["deprecated"] is True
     validate_canonical(_review_of_target({"work_id": "doi:10.1234/y", "revision_of": "MS-1"}))
+
+
+def _review_with_provenance(provenance: dict) -> dict:
+    return {
+        "review_id": "review-1",
+        "version": "1.0.0",
+        "created_at": "2026-10-15T12:00:00Z",
+        "provenance": {"source_system": "example-journal", **provenance},
+        "referee": {"referee_type": "human", "identity_mode": "double_blind"},
+        "target": {"work_id": "internal_id:manuscript_id:paper-1", "work_type": "article"},
+        "opinion": {"summary": "A sound paper."},
+    }
+
+
+def test_provenance_takes_an_optional_review_doi() -> None:
+    validate_canonical(_review_with_provenance({"review_doi": "10.5555/review.2041"}))
+    validate_canonical(_review_with_provenance({}))
+
+
+@pytest.mark.parametrize(
+    "review_doi", ["", "https://doi.org/10.5555/review.2041", "doi:10.5555/x", "10.12/x"]
+)
+def test_review_doi_must_be_a_bare_doi(review_doi: str) -> None:
+    with pytest.raises(jsonschema.ValidationError):
+        validate_canonical(_review_with_provenance({"review_doi": review_doi}))
+
+
+def test_a_conference_paper_can_be_a_proceedings_article() -> None:
+    review = _review_with_provenance({})
+    review["target"]["work_type"] = "proceedings_article"
+    validate_canonical(review)

@@ -53,6 +53,12 @@
           "description": "Link to the review in the source system",
           "type": "string"
         },
+        "review_doi": {
+          "description": "DOI registered for the review itself (e.g., a Crossref peer review DOI), without a resolver prefix. Not the DOI of the work under review, which goes in target.identifiers.doi",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^10\\.\\d{4,9}/[^\\s]+$"
+        },
         "imported_at": {
           "description": "When the review was mapped to OCRS",
           "type": "string",
@@ -121,6 +127,7 @@
           "type": "string",
           "enum": [
             "article",
+            "proceedings_article",
             "preprint",
             "dataset",
             "software",

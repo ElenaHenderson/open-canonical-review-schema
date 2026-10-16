@@ -2,6 +2,12 @@
 
 ## 0.5.0
 
+- Added optional `provenance.review_doi`, the DOI registered for the review itself
+  (e.g., a Crossref peer review DOI). The reviewed work's DOI stays in
+  `target.identifiers.doi`.
+- Added `proceedings_article` to `target.work_type`, for papers published in
+  conference proceedings.
+
 - Renamed metric `uncertainty.confidence` to `uncertainty.credence`, retaining the
   0–1 bounds, interval, and rationale. Existing records must rename this nested key.
 
