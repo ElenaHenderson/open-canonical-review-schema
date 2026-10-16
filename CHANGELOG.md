@@ -2,6 +2,17 @@
 
 ## 0.5.0
 
+- Added `review_context.stage`, `pre_publication` or `post_publication`, after Crossref's
+  peer-review `stage`. Removed `post_publication` from `review_context.review_type`, which
+  now only says what kind of review it is. Existing records must move that value to
+  `stage` and set `review_type` to the kind of review, for example `initial` or
+  `community_comment`.
+- Added the Crossref peer-review types OCRS could not express to
+  `review_context.review_type`: `author_comment`, `community_comment`, `aggregate` and
+  `recommendation`. Of Crossref's other types, `referee-report` is `initial`, `revision`
+  or `rebuttal_response` depending on the round, `editor-report` is `meta_review`, and
+  `manuscript` is the reviewed manuscript itself rather than a review, so it has no value.
+
 - Added optional `provenance.review_doi`, the DOI registered for the review itself
   (e.g., a Crossref peer review DOI). The reviewed work's DOI stays in
   `target.identifiers.doi`.

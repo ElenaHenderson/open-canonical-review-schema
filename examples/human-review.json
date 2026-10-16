@@ -33,6 +33,7 @@
   },
   "review_context": {
     "review_type": "initial",
+    "stage": "pre_publication",
     "round": 1
   },
   "opinion": {

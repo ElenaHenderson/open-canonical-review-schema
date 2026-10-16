@@ -167,12 +167,12 @@
       }
     },
     "review_context": {
-      "description": "The circumstances of the review: its kind, round, who asked for it and the reviewer's expertise",
+      "description": "The circumstances of the review: its kind, stage, round, who asked for it and the reviewer's expertise",
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "review_type": {
-          "description": "Kind of review: first review, review of a revision, response to a rebuttal, meta-review, shepherding, after publication, or of a replication",
+          "description": "Kind of review: a referee's first review, review of a revision, response to a rebuttal, meta-review or editor's report, shepherding, review of a replication, an author's comment or response, a community comment, an aggregate of several reviews, or an editor's or recommender's recommendation. Whether it came before or after publication goes in stage",
           "type": "string",
           "enum": [
             "initial",
@@ -180,8 +180,19 @@
             "rebuttal_response",
             "meta_review",
             "shepherding",
-            "post_publication",
-            "replication"
+            "replication",
+            "author_comment",
+            "community_comment",
+            "aggregate",
+            "recommendation"
+          ]
+        },
+        "stage": {
+          "description": "Whether the review was written before the work was published (pre_publication) or after (post_publication)",
+          "type": "string",
+          "enum": [
+            "pre_publication",
+            "post_publication"
           ]
         },
         "round": {

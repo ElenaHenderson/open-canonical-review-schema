@@ -241,3 +241,52 @@ def test_a_conference_paper_can_be_a_proceedings_article() -> None:
     review = _review_with_provenance({})
     review["target"]["work_type"] = "proceedings_article"
     validate_canonical(review)
+
+
+def _review_in_context(review_context: dict) -> dict:
+    return {
+        "review_id": "review-1",
+        "version": "1.0.0",
+        "created_at": "2026-10-15T12:00:00Z",
+        "provenance": {"source_system": "example-journal"},
+        "referee": {"referee_type": "human", "identity_mode": "double_blind"},
+        "target": {"work_id": "internal_id:manuscript_id:paper-1", "work_type": "article"},
+        "review_context": review_context,
+        "opinion": {"summary": "A sound paper."},
+    }
+
+
+@pytest.mark.parametrize(
+    "review_type",
+    [
+        "initial",
+        "revision",
+        "rebuttal_response",
+        "meta_review",
+        "shepherding",
+        "replication",
+        "author_comment",
+        "community_comment",
+        "aggregate",
+        "recommendation",
+    ],
+)
+def test_review_type_covers_the_crossref_peer_review_types(review_type: str) -> None:
+    validate_canonical(_review_in_context({"review_type": review_type}))
+
+
+@pytest.mark.parametrize("stage", ["pre_publication", "post_publication"])
+def test_stage_says_whether_the_review_came_before_or_after_publication(stage: str) -> None:
+    validate_canonical(_review_in_context({"review_type": "initial", "stage": stage}))
+    validate_canonical(_review_in_context({"stage": stage}))
+
+
+def test_publication_stage_is_no_longer_a_review_type() -> None:
+    with pytest.raises(jsonschema.ValidationError):
+        validate_canonical(_review_in_context({"review_type": "post_publication"}))
+
+
+@pytest.mark.parametrize("stage", ["published", "pre-publication", ""])
+def test_stage_takes_only_the_two_values(stage: str) -> None:
+    with pytest.raises(jsonschema.ValidationError):
+        validate_canonical(_review_in_context({"stage": stage}))
