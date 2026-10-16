@@ -48,6 +48,56 @@ def test_schema_is_valid_json_schema():
     Draft202012Validator.check_schema(load_schema())
 
 
+def _review_of(identifiers: dict) -> dict:
+    return {
+        "review_id": "review-1",
+        "version": "1.0.0",
+        "created_at": "2026-10-15T12:00:00Z",
+        "provenance": {"source_system": "example-journal"},
+        "referee": {"referee_type": "human", "identity_mode": "double_blind"},
+        "target": {"work_id": "paper-1", "work_type": "article", "identifiers": identifiers},
+        "opinion": {"summary": "A sound paper."},
+    }
+
+
+def test_target_takes_crossref_identifier_types():
+    validate_canonical(
+        _review_of(
+            {
+                "handle": {
+                    "value": "1721.1/12345",
+                    "hyperlink": "https://hdl.handle.net/1721.1/12345",
+                },
+                "ark": {"value": "ark:/13030/tf5p30086k"},
+                "isbn": {"value": "9780262035613"},
+                "issn": {"value": "2050-084X"},
+                "ecli": {"value": "ECLI:EU:C:2014:317"},
+                "accession": {"value": "MN908947", "database": "GenBank"},
+                "purl": "https://purl.org/example/1",
+                "uuid": {"value": "123e4567-e89b-12d3-a456-426614174000"},
+            }
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "identifiers",
+    [
+        {"handle": {"value": "hdl:1721.1/12345"}},
+        {"ark": {"value": "13030/tf5p30086k"}},
+        {"isbn": {"value": "978-0-262-03561-3"}},
+        {"issn": {"value": "2050084X"}},
+        {"ecli": {"value": "EU:C:2014:317"}},
+        {"accession": {"database": "GenBank"}},
+        {"purl": {"value": "https://purl.org/example/1"}},
+        {"uuid": {"value": "123e4567e89b12d3a456426614174000"}},
+    ],
+)
+def test_crossref_identifier_types_reject_malformed_values(identifiers: dict) -> None:
+    with pytest.raises(jsonschema.ValidationError):
+        validate_canonical(_review_of(identifiers))
+
+
 def _review_with(finding: dict, claim: dict) -> dict:
     return {
         "review_id": "review-1",

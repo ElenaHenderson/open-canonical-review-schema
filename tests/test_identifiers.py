@@ -14,15 +14,21 @@ from ocrs.identifiers import (
     generate_canonical_work_id,
     normalize_orcid,
     resolve_primary_identifier,
+    validate_ark,
     validate_arxiv,
     validate_doi,
+    validate_ecli,
     validate_google_scholar,
+    validate_handle,
+    validate_isbn,
+    validate_issn,
     validate_openalex_author,
     validate_openalex_work,
     validate_orcid,
     validate_orcid_checksum,
     validate_pmcid,
     validate_scopus_author,
+    validate_uuid,
 )
 
 
@@ -194,6 +200,76 @@ class TestGoogleScholarValidation:
         assert not validate_google_scholar("this_is_too_long")
 
 
+class TestCrossrefIdentifierValidation:
+    """Tests for the identifier types added to match Crossref's."""
+
+    def test_valid_handle(self):
+        """Test valid Handles, including derived prefixes."""
+        assert validate_handle("1721.1/12345")
+        assert validate_handle("20.500.12345/abc-def")
+
+    def test_invalid_handle(self):
+        """Test invalid Handles."""
+        assert not validate_handle("hdl:1721.1/12345")
+        assert not validate_handle("1721.1")
+        assert not validate_handle("abc/123")
+
+    def test_valid_ark(self):
+        """Test ARKs with and without the slash after the label."""
+        assert validate_ark("ark:/13030/tf5p30086k")
+        assert validate_ark("ark:13030/tf5p30086k")
+
+    def test_invalid_ark(self):
+        """Test invalid ARKs."""
+        assert not validate_ark("13030/tf5p30086k")
+        assert not validate_ark("https://n2t.net/ark:/13030/tf5p30086k")
+        assert not validate_ark("ark:/13030")
+
+    def test_valid_isbn(self):
+        """Test ISBN-13 and ISBN-10 with correct check digits."""
+        assert validate_isbn("9780262035613")
+        assert validate_isbn("0262035618")
+        assert validate_isbn("080442957X")
+
+    def test_invalid_isbn(self):
+        """Test ISBNs with hyphens, wrong check digits or wrong length."""
+        assert not validate_isbn("978-0-262-03561-3")
+        assert not validate_isbn("9780262035614")
+        assert not validate_isbn("0262035619")
+        assert not validate_isbn("12345")
+
+    def test_valid_issn(self):
+        """Test ISSNs, including an X check character."""
+        assert validate_issn("2050-084X")
+        assert validate_issn("0028-0836")
+
+    def test_invalid_issn(self):
+        """Test ISSNs with a wrong check character or no hyphen."""
+        assert not validate_issn("2050-0841")
+        assert not validate_issn("2050084X")
+
+    def test_valid_ecli(self):
+        """Test valid ECLIs."""
+        assert validate_ecli("ECLI:EU:C:2014:317")
+        assert validate_ecli("ECLI:NL:HR:2009:BH1234")
+
+    def test_invalid_ecli(self):
+        """Test invalid ECLIs."""
+        assert not validate_ecli("EU:C:2014:317")
+        assert not validate_ecli("ECLI:EU:C:14:317")
+        assert not validate_ecli("ecli:eu:c:2014:317")
+
+    def test_valid_uuid(self):
+        """Test valid UUIDs in either case."""
+        assert validate_uuid("123e4567-e89b-12d3-a456-426614174000")
+        assert validate_uuid("123E4567-E89B-12D3-A456-426614174000")
+
+    def test_invalid_uuid(self):
+        """Test UUIDs without hyphens or with non-hex characters."""
+        assert not validate_uuid("123e4567e89b12d3a456426614174000")
+        assert not validate_uuid("123e4567-e89b-12d3-a456-42661417400g")
+
+
 class TestResolutionPriority:
     """Tests for identifier resolution priority."""
 
@@ -247,10 +323,35 @@ class TestResolutionPriority:
             "pubmed_id",
             "pmcid",
             "openalex_id",
+            "handle",
+            "ark",
+            "isbn",
+            "ecli",
+            "accession",
+            "purl",
             "permalink",
+            "uuid",
             "internal_id",
         ]
         assert IDENTIFIER_PRIORITY == expected
+
+    def test_purl_resolution(self):
+        """Test purl (string value) resolution, ahead of permalink."""
+        ids = {"purl": "https://purl.org/example/1", "permalink": "https://example.com/1"}
+        assert resolve_primary_identifier(ids) == ("purl", "https://purl.org/example/1")
+
+    def test_handle_before_uuid(self):
+        """Test that a resolvable Handle outranks an opaque UUID."""
+        ids = {
+            "uuid": {"value": "123e4567-e89b-12d3-a456-426614174000"},
+            "handle": {"value": "1721.1/12345"},
+        }
+        assert resolve_primary_identifier(ids) == ("handle", "1721.1/12345")
+
+    def test_issn_is_never_primary(self):
+        """Test that an ISSN alone does not identify the work."""
+        ids = {"issn": {"value": "2050-084X"}}
+        assert resolve_primary_identifier(ids) == ("unknown", None)
 
 
 class TestCanonicalWorkId:
@@ -351,6 +452,28 @@ class TestBuildWorkIdentifiers:
         ids = build_work_identifiers(permalink="https://example.com/paper/123")
         assert ids["permalink"] == "https://example.com/paper/123"
 
+    def test_build_with_crossref_identifier_types(self):
+        """Test building with the identifier types added to match Crossref's."""
+        ids = build_work_identifiers(
+            handle="1721.1/12345",
+            ark="ark:/13030/tf5p30086k",
+            isbn="9780262035613",
+            issn="2050-084X",
+            ecli="ECLI:EU:C:2014:317",
+            accession="MN908947",
+            accession_database="GenBank",
+            purl="https://purl.org/example/1",
+            uuid="123e4567-e89b-12d3-a456-426614174000",
+        )
+        assert ids["handle"]["hyperlink"] == "https://hdl.handle.net/1721.1/12345"
+        assert ids["ark"]["hyperlink"] == "https://n2t.net/ark:/13030/tf5p30086k"
+        assert ids["issn"]["hyperlink"] == "https://portal.issn.org/resource/ISSN/2050-084X"
+        assert ids["isbn"] == {"value": "9780262035613"}
+        assert ids["ecli"] == {"value": "ECLI:EU:C:2014:317"}
+        assert ids["accession"] == {"value": "MN908947", "database": "GenBank"}
+        assert ids["purl"] == "https://purl.org/example/1"
+        assert ids["uuid"] == {"value": "123e4567-e89b-12d3-a456-426614174000"}
+
     def test_build_empty_raises(self):
         """Test that building with no identifiers raises."""
         with pytest.raises(ValueError, match="At least one identifier"):
@@ -398,7 +521,18 @@ class TestResolversDict:
 
     def test_all_expected_resolvers_present(self):
         """Test that all expected resolvers are defined."""
-        expected_keys = {"doi", "arxiv_id", "pubmed_id", "pmcid", "openalex_id", "s2cid", "orcid"}
+        expected_keys = {
+            "doi",
+            "arxiv_id",
+            "pubmed_id",
+            "pmcid",
+            "openalex_id",
+            "s2cid",
+            "orcid",
+            "handle",
+            "ark",
+            "issn",
+        }
         assert expected_keys.issubset(set(RESOLVERS.keys()))
 
     def test_resolver_urls_are_valid(self):

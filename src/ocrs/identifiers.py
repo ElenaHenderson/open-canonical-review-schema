@@ -40,6 +40,26 @@ SCOPUS_AUTHOR_PATTERN = re.compile(r"^[1-9]\d{9,11}$")
 # Google Scholar profile ID: 12 alphanumeric characters (including - and _)
 GOOGLE_SCHOLAR_PATTERN = re.compile(r"^[-_0-9A-Za-z]{12}$")
 
+# Handle: numeric prefix (dot-separated for derived prefixes), slash, suffix
+HANDLE_PATTERN = re.compile(r"^\d+(\.\d+)*/\S+$")
+
+# ARK: ark: label, optional slash, NAAN, slash, name
+ARK_PATTERN = re.compile(r"^ark:/?[0-9A-Za-z]+/\S+$")
+
+# ISBN: ISBN-10 (last char may be X) or ISBN-13 (978/979 prefix), digits only
+ISBN_PATTERN = re.compile(r"^(\d{9}[\dX]|97[89]\d{10})$")
+
+# ISSN: NNNN-NNNC, check character may be X
+ISSN_PATTERN = re.compile(r"^\d{4}-\d{3}[\dX]$")
+
+# ECLI: ECLI:country:court:year:number
+ECLI_PATTERN = re.compile(r"^ECLI:[A-Z]{2}:[A-Z0-9.]{1,7}:\d{4}:[A-Z0-9.]{1,25}$")
+
+# UUID: 8-4-4-4-12 hex digits
+UUID_PATTERN = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
 # =============================================================================
 # Resolution Priority Order
 # =============================================================================
@@ -51,9 +71,17 @@ IDENTIFIER_PRIORITY = [
     "pubmed_id",  # MEDLINE abstracts
     "pmcid",  # PubMed Central full text
     "openalex_id",  # OpenAlex
+    "handle",  # Handle System (repositories, theses)
+    "ark",  # Archival Resource Key
+    "isbn",  # Books and chapters
+    "ecli",  # Court decisions
+    "accession",  # Data repository records
+    "purl",  # Persistent URL
     "permalink",  # Stable URL
+    "uuid",  # Opaque, unresolvable
     "internal_id",  # System-specific fallback
 ]
+# issn is left out: it identifies the journal or series, not the work.
 
 # =============================================================================
 # Resolver URLs
@@ -67,6 +95,9 @@ RESOLVERS = {
     "openalex_id": "https://openalex.org/",
     "s2cid": "https://api.semanticscholar.org/CorpusID:",
     "orcid": "https://orcid.org/",
+    "handle": "https://hdl.handle.net/",
+    "ark": "https://n2t.net/",
+    "issn": "https://portal.issn.org/resource/ISSN/",
 }
 
 
@@ -256,6 +287,91 @@ def validate_google_scholar(gs_id: str) -> bool:
     return bool(GOOGLE_SCHOLAR_PATTERN.match(gs_id))
 
 
+def validate_handle(handle: str) -> bool:
+    """Validate Handle format.
+
+    Args:
+        handle: Handle without resolver prefix (e.g., "20.500.12345/abc")
+
+    Returns:
+        True if format is valid
+    """
+    return bool(HANDLE_PATTERN.match(handle))
+
+
+def validate_ark(ark: str) -> bool:
+    """Validate Archival Resource Key format.
+
+    Supports both "ark:/13030/tf5p30086k" and "ark:13030/tf5p30086k".
+
+    Args:
+        ark: ARK including the "ark:" label
+
+    Returns:
+        True if format is valid
+    """
+    return bool(ARK_PATTERN.match(ark))
+
+
+def validate_isbn(isbn: str) -> bool:
+    """Validate ISBN-10 or ISBN-13 format and check digit.
+
+    Args:
+        isbn: ISBN, digits only (an ISBN-10 may end in X)
+
+    Returns:
+        True if format and check digit are valid
+    """
+    if not ISBN_PATTERN.match(isbn):
+        return False
+    if len(isbn) == 10:
+        total = sum((10 - i) * (10 if c == "X" else int(c)) for i, c in enumerate(isbn))
+        return total % 11 == 0
+    total = sum((1 if i % 2 == 0 else 3) * int(c) for i, c in enumerate(isbn))
+    return total % 10 == 0
+
+
+def validate_issn(issn: str) -> bool:
+    """Validate ISSN format and check character.
+
+    Args:
+        issn: ISSN with hyphen (e.g., "2050-084X")
+
+    Returns:
+        True if format and check character are valid
+    """
+    if not ISSN_PATTERN.match(issn):
+        return False
+    digits = issn.replace("-", "")
+    total = sum((8 - i) * int(c) for i, c in enumerate(digits[:7]))
+    check = (11 - total % 11) % 11
+    return digits[7] == ("X" if check == 10 else str(check))
+
+
+def validate_ecli(ecli: str) -> bool:
+    """Validate European Case Law Identifier format.
+
+    Args:
+        ecli: ECLI (e.g., "ECLI:EU:C:2014:317")
+
+    Returns:
+        True if format is valid
+    """
+    return bool(ECLI_PATTERN.match(ecli))
+
+
+def validate_uuid(value: str) -> bool:
+    """Validate UUID format (hyphenated, any version).
+
+    Args:
+        value: UUID (e.g., "123e4567-e89b-12d3-a456-426614174000")
+
+    Returns:
+        True if format is valid
+    """
+    return bool(UUID_PATTERN.match(value))
+
+
 # =============================================================================
 # Identifier Resolution
 # =============================================================================
@@ -285,8 +401,8 @@ def resolve_primary_identifier(
             # internal_id is an object with field_name and value
             if isinstance(id_data, dict) and id_data.get("value"):
                 return (id_type, str(id_data["value"]))
-        elif id_type == "permalink":
-            # permalink is a direct string (URI)
+        elif id_type in ("permalink", "purl"):
+            # permalink and purl are direct strings (URIs)
             if isinstance(id_data, str) and id_data:
                 return (id_type, id_data)
         else:
@@ -343,7 +459,16 @@ def build_work_identifiers(
     pubmed_id: str | None = None,
     pmcid: str | None = None,
     openalex_id: str | None = None,
+    handle: str | None = None,
+    ark: str | None = None,
+    isbn: str | None = None,
+    issn: str | None = None,
+    ecli: str | None = None,
+    accession: str | None = None,
+    accession_database: str | None = None,
+    purl: str | None = None,
     permalink: str | None = None,
+    uuid: str | None = None,
     internal_field_name: str | None = None,
     internal_value: str | None = None,
 ) -> dict[str, Any]:
@@ -359,7 +484,16 @@ def build_work_identifiers(
         pubmed_id: PubMed ID
         pmcid: PubMed Central ID
         openalex_id: OpenAlex Work ID
+        handle: Handle, without resolver prefix
+        ark: Archival Resource Key, including the "ark:" label
+        isbn: ISBN-10 or ISBN-13, digits only
+        issn: ISSN of the journal or series (does not identify the work alone)
+        ecli: European Case Law Identifier
+        accession: Accession number in a data repository
+        accession_database: Repository that issued the accession number
+        purl: Persistent URL
         permalink: Stable URL
+        uuid: UUID assigned to the work
         internal_field_name: Name of internal ID field
         internal_value: Value of internal ID
 
@@ -401,8 +535,35 @@ def build_work_identifiers(
             "value": openalex_id,
             "hyperlink": build_resolver_url("openalex_id", openalex_id),
         }
+    if handle:
+        identifiers["handle"] = {
+            "value": handle,
+            "hyperlink": build_resolver_url("handle", handle),
+        }
+    if ark:
+        identifiers["ark"] = {
+            "value": ark,
+            "hyperlink": build_resolver_url("ark", ark),
+        }
+    if isbn:
+        identifiers["isbn"] = {"value": isbn}
+    if issn:
+        identifiers["issn"] = {
+            "value": issn,
+            "hyperlink": build_resolver_url("issn", issn),
+        }
+    if ecli:
+        identifiers["ecli"] = {"value": ecli}
+    if accession:
+        identifiers["accession"] = {"value": accession}
+        if accession_database:
+            identifiers["accession"]["database"] = accession_database
+    if purl:
+        identifiers["purl"] = purl
     if permalink:
         identifiers["permalink"] = permalink
+    if uuid:
+        identifiers["uuid"] = {"value": uuid}
     if internal_field_name and internal_value:
         identifiers["internal_id"] = {
             "field_name": internal_field_name,

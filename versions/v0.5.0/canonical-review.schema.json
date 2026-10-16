@@ -559,7 +559,7 @@
     "workIdentifiers": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Optional structured identifiers for the work. Resolution priority: DOI > arXiv > S2CID > PubMed ID > PMCID > OpenAlex > permalink > internal_id",
+      "description": "Optional structured identifiers for the work. They cover Crossref's identifier types (doi, arxiv, pmid, pmcid, handle, ark, isbn, issn, ecli, accession, purl, uri as permalink, uuid, other as internal_id), plus S2CID and OpenAlex. Resolution priority: DOI > arXiv > S2CID > PubMed ID > PMCID > OpenAlex > Handle > ARK > ISBN > ECLI > accession > PURL > permalink > UUID > internal_id. ISSN identifies the journal or series, not the work, so it is never the primary identifier",
       "properties": {
         "doi": {
           "type": "object",
@@ -645,10 +645,152 @@
             }
           }
         },
+        "handle": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Handle (e.g., 20.500.12345/abc or 1721.1/12345). DOIs are also handles; give them in doi",
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "description": "The handle, without a resolver prefix",
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^\\d+(\\.\\d+)*/\\S+$"
+            },
+            "hyperlink": {
+              "description": "The handle's resolver URL (https://hdl.handle.net/...)",
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "ark": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Archival Resource Key (e.g., ark:/13030/tf5p30086k)",
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "description": "The ARK, including the 'ark:' label, without a resolver prefix",
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^ark:/?[0-9A-Za-z]+/\\S+$"
+            },
+            "hyperlink": {
+              "description": "A resolver URL for the ARK (e.g., https://n2t.net/ark:/13030/tf5p30086k)",
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "isbn": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "ISBN of a book or chapter (e.g., 9780262035613)",
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "description": "The ISBN-10 or ISBN-13, digits only, without hyphens or spaces; an ISBN-10 may end in X",
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(\\d{9}[\\dX]|97[89]\\d{10})$"
+            },
+            "hyperlink": {
+              "description": "URL of a page for the book",
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "issn": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "ISSN of the journal or series the work appears in (e.g., 2050-084X). It identifies the serial, not the work, so give it alongside an identifier of the work",
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "description": "The ISSN, with its hyphen",
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^\\d{4}-\\d{3}[\\dX]$"
+            },
+            "hyperlink": {
+              "description": "The ISSN Portal record (https://portal.issn.org/resource/ISSN/...)",
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "ecli": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "European Case Law Identifier, for a court decision (e.g., ECLI:EU:C:2014:317)",
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "description": "The ECLI: country, court, year and number",
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^ECLI:[A-Z]{2}:[A-Z0-9.]{1,7}:\\d{4}:[A-Z0-9.]{1,25}$"
+            },
+            "hyperlink": {
+              "description": "URL of the decision",
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "accession": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Accession number in a data repository, for a dataset or other deposited record (e.g., MN908947 in GenBank)",
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "description": "The accession number",
+              "type": "string",
+              "minLength": 1
+            },
+            "database": {
+              "description": "The repository that issued the accession number (e.g., 'GenBank', 'PDB', 'ENA')",
+              "type": "string",
+              "minLength": 1
+            },
+            "hyperlink": {
+              "description": "URL of the record in the repository",
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "purl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Persistent URL (PURL) for the work (e.g., https://purl.org/...)"
+        },
         "permalink": {
           "type": "string",
           "format": "uri",
           "description": "Stable URL for the work"
+        },
+        "uuid": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "UUID assigned to the work (e.g., 123e4567-e89b-12d3-a456-426614174000)",
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "description": "The UUID in its hyphenated form",
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            "hyperlink": {
+              "description": "URL that resolves the UUID",
+              "type": "string",
+              "format": "uri"
+            }
+          }
         },
         "internal_id": {
           "$ref": "#/$defs/internalIdentifier",

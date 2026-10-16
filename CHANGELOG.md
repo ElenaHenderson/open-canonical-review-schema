@@ -16,6 +16,11 @@
 - Removed duplicate `seed` and `seeds` fields from `ai_referee.execution`.
   Review-run seeds live in `referee.reproducibility`; explicit stage seeds override
   the whole-review seed. Existing records must move execution seeds to that location.
+- `target.identifiers` takes every identifier type Crossref uses for related items:
+  `handle`, `ark`, `isbn`, `issn`, `ecli`, `accession` (with an optional `database`),
+  `purl` and `uuid`. All are optional, so existing records stay valid. `issn` names the
+  journal or series, so it never becomes the primary identifier. `ocrs.identifiers`
+  adds validators, resolver URLs and `build_work_identifiers` arguments for them.
 
 ## 0.4.0
 
