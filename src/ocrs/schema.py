@@ -34,7 +34,7 @@ def validate_canonical(obj: dict[str, Any], *, schema_path: str | Path | None = 
     check_references(obj)
 
 
-FINDING_KINDS = ("strengths", "weaknesses", "questions")
+FINDING_KINDS = ("strengths", "weaknesses", "questions", "comments")
 # Every place OCRS holds action items: (path, the review → the list there)
 ACTION_ITEM_LISTS = (
     ("findings.changes", lambda r: r.get("findings", {}).get("changes", [])),
@@ -83,15 +83,17 @@ def _evidence_links(value: Any, node: Any, schema: dict[str, Any]):
 
 
 def check_references(obj: dict[str, Any]) -> None:
-    """The rules JSON Schema cannot state: point ids are unique, the ids that
-    `summarizes` and `applies_to.finding_id` name exist, and `page_end` is not
-    before `page`. Raises ValidationError on the first broken rule."""
+    """The rules JSON Schema cannot state: point and check ids are unique, the ids that
+    `summarizes`, `applies_to.finding_id` and `checks[].finding_ids` name are findings,
+    each `opinion.contributions[].claim_id` is a claim in `claim_assessments`, and
+    `page_end` is not before `page`. Raises ValidationError on the first broken rule."""
     findings = obj.get("findings", {})
     finding_ids: set[str] = set()
     seen: set[str] = set()
     points = [(f"findings.{kind}", findings.get(kind, [])) for kind in FINDING_KINDS]
     actions = [(path, get(obj)) for path, get in ACTION_ITEM_LISTS]
-    for path, items in [*points, *actions]:
+    checks = obj.get("checks", [])
+    for path, items in [*points, *actions, ("checks", checks)]:
         for index, point in enumerate(items):
             point_id = point.get("id")
             if point_id is None:
@@ -115,6 +117,19 @@ def check_references(obj: dict[str, Any]) -> None:
                 raise ValidationError(
                     f"{path}[{index}].applies_to.finding_id {target!r} is not a finding id"
                 )
+    for index, check in enumerate(checks):
+        for target in check.get("finding_ids", []):
+            if target not in finding_ids:
+                raise ValidationError(
+                    f"checks[{index}].finding_ids names {target!r}, which is not a finding id"
+                )
+    claim_ids = {claim["claim_id"] for claim in obj.get("claim_assessments", [])}
+    for index, contribution in enumerate(obj.get("opinion", {}).get("contributions", [])):
+        target = contribution.get("claim_id")
+        if target is not None and target not in claim_ids:
+            raise ValidationError(
+                f"opinion.contributions[{index}].claim_id {target!r} is not a claim_id"
+            )
     schema = ocrs_schema()
     for link in _evidence_links(obj, schema, schema):
         location = link.get("location", {})

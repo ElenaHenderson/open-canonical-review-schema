@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.1
+
+All additions are optional, so every 0.6.0 review is valid under 0.6.1.
+
+### Schema
+
+- `checks` records systematic checks run on the work, including those that found nothing:
+  AI-text detection, reference verification, fatal-flaw screens, similarity, image
+  integrity, statistics and retractions. Each check has a `kind`, the tool that ran it
+  (`performed_by`; absent means the referee), an `outcome` only when the source states one,
+  the source's `summary`, `measurements` (a proportion is a 0–1 `fraction`) and per-item
+  results (`items`: what was checked, the source's `status`, and whether it was `flagged`).
+  `finding_ids` links a check to the findings that report its problems.
+- `opinion.contributions` lists what the work contributes, as the reviewer reads it, with an
+  optional `title` and a `claim_id` in `claim_assessments`. Contributions are neither
+  strengths nor assessed claims.
+- `findings.comments` holds points the source does not classify as strengths, weaknesses or
+  questions. A review whose only points are comments is valid.
+- `text_format` says how the review's free text is written: `markup` (`plain`, `markdown`
+  or `html`) and `math` (`none` or `tex`).
+- Evidence links' `work` takes `citation`, the reference as printed.
+- `target.title` gives the work's title, as the review gives it.
+- `validate_canonical` also checks that check ids are unique among checks, findings and
+  action items, that `checks[].finding_ids` name findings, and that
+  `opinion.contributions[].claim_id` names a claim in `claim_assessments`.
+
 ## 0.6.0
 
 All additions are optional, so every 0.5.0 review is valid under 0.6.0.
