@@ -42,10 +42,13 @@ from ..util import migrate_work_id_to_identifiers
 
 __all__ = ["AIReviewMapper", "Block", "BlockKind", "MappingResult", "Recorder", "finish"]
 
-AIReviewMapper = Callable[[dict[str, Any], dict[str, Any], list[Block] | None], MappingResult]
-"""(reviewer's output, envelope, paper blocks or None) → the filled review and its record."""
+AIReviewMapper = Callable[[Any, dict[str, Any], list[Block] | None], MappingResult]
+"""(reviewer's output, envelope, paper blocks or None) → the filled review and its record.
+
+The output is the reviewer's JSON as a dict, or its text when the reviewer writes Markdown."""
 
 REVIEW_VERSION = "1.0.0"
+UNSPECIFIED = "unspecified"
 # The mapping spec every mapper here follows: schemas/mapping-spec.v1.1.0.json.
 MAPPING_SPEC_ID = "canonical-review.mapping.v1"
 MAPPING_SPEC_VERSION = "1.1.0"
@@ -115,8 +118,21 @@ class Recorder:
         the document it came from.
         """
         self.copy(source, f"{target}.quote", quote)
+        self.anchor(source, target, quote, blocks)
+        return {"type": "paper_section", "ref": ref, "quote": quote}
+
+    def parse(self, source: str, target: str, original: str, result: JsonValue) -> JsonValue:
+        """`result` was read out of `original`, part of a value at `source`, by a pattern."""
+        self.read.add(source)
+        self.steps.append(
+            Step(source=source, target=target, rule=Rule.PARSED, original=original, result=result)
+        )
+        return result
+
+    def anchor(self, source: str, target: str, quote: str, blocks: list[Block] | None) -> None:
+        """Record where in the paper `quote` was found, or that it was not."""
         if blocks is None or self.unanchored is None:
-            return {"type": "paper_section", "ref": ref, "quote": quote}
+            return
         match, best_score = find_quote(quote, blocks)
         if match is None:
             self.unanchored.append(
@@ -132,7 +148,6 @@ class Recorder:
                     score=round(match.score, 3),
                 )
             )
-        return {"type": "paper_section", "ref": ref, "quote": quote}
 
 
 def build_review(
@@ -143,10 +158,11 @@ def build_review(
     source_system: str,
     work_id: str,
     work_type: str,
-    reviewer_commit: str,
-    model_id: str,
     started_at: datetime,
     ended_at: datetime,
+    reviewer_commit: str | None = None,
+    reviewer_version: str | None = None,
+    model_id: str | None = None,
     work_version: str | None = None,
     requested_by: str | None = None,
     cost_usd: float | None = None,
@@ -154,9 +170,17 @@ def build_review(
     """The parts of an OCRS review that come from the run, not the reviewer's output.
 
     `work_id` is any identifier of the paper: a canonical work ID, a DOI, a URL, or the
-    platform's own ID, which becomes an internal_id named after `source_system`.
+    platform's own ID, which becomes an internal_id named after `source_system`. A hosted
+    reviewer may publish no commit, version or model; those are then `unspecified`,
+    which OCRS requires to be stated.
     """
     identifiers = migrate_work_id_to_identifiers(work_id, source_system)
+    framework_info: dict[str, Any] = {
+        "name": framework,
+        "version": reviewer_version or (reviewer_commit[:12] if reviewer_commit else UNSPECIFIED),
+    }
+    if reviewer_commit:
+        framework_info["commit"] = reviewer_commit
     execution: dict[str, Any] = {
         "started_at": iso(started_at),
         "ended_at": iso(ended_at),
@@ -183,12 +207,8 @@ def build_review(
             "identity_mode": "open",
             "ai_referee": {
                 "system": {
-                    "critic_framework": {
-                        "name": framework,
-                        "version": reviewer_commit[:12],
-                        "commit": reviewer_commit,
-                    },
-                    "models": [{"role": "reviewer", "model_id": model_id}],
+                    "critic_framework": framework_info,
+                    "models": [{"role": "reviewer", "model_id": model_id or UNSPECIFIED}],
                 },
                 "execution": execution,
             },

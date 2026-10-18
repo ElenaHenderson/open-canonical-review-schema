@@ -10,7 +10,7 @@ from typing import Any
 from pydantic import AwareDatetime, validate_call
 
 from .anchors import Block
-from .mappers import openaireview
+from .mappers import deepreview, openaireview
 from .mappers.ai import AIReviewMapper, build_review
 from .mappers.cmt import from_cmt, to_cmt
 from .mappers.editorialmanager import from_editorialmanager, to_editorialmanager
@@ -32,9 +32,13 @@ _FROM: dict[str, Callable[..., dict[str, Any]]] = {
 
 # AI reviewer sources: their mappers also return a mapping record (steps and gaps).
 _FROM_WITH_RECORD: dict[str, AIReviewMapper] = {
+    "deepreview": deepreview.map_deepreview,
     "openaireview": openaireview.map_openaireview,
 }
-_MAPPER_VERSIONS = {"openaireview": openaireview.MAPPER_VERSION}
+_MAPPER_VERSIONS = {
+    "deepreview": deepreview.MAPPER_VERSION,
+    "openaireview": openaireview.MAPPER_VERSION,
+}
 
 _TO: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "cmt": to_cmt,
@@ -60,7 +64,8 @@ def map_from(source: str, payload: dict[str, Any], *, keep_raw: bool = False) ->
     if source in _FROM_WITH_RECORD:
         out = map_with_record(source, **payload).review
         if keep_raw:
-            out["provenance"]["raw_payload"] = payload["output"]
+            raw = payload["output"]
+            out["provenance"]["raw_payload"] = raw if isinstance(raw, dict) else {"text": raw}
     elif source in _FROM:
         out = _FROM[source](payload, keep_raw=keep_raw)
     else:
@@ -78,16 +83,17 @@ def mapper_version(source: str) -> str:
 @validate_call
 def map_with_record(
     source: str,
-    output: dict[str, Any],
+    output: dict[str, Any] | str,
     *,
     review_id: str,
     source_system: str,
     work_id: str,
     work_type: str,
-    reviewer_commit: str,
-    model_id: str,
     started_at: AwareDatetime,
     ended_at: AwareDatetime,
+    reviewer_commit: str | None = None,
+    reviewer_version: str | None = None,
+    model_id: str | None = None,
     work_version: str | None = None,
     requested_by: str | None = None,
     cost_usd: float | None = None,
@@ -95,9 +101,11 @@ def map_with_record(
 ) -> MappingResult:
     """Map an AI reviewer's own output to OCRS, with a record of each step and the gaps.
 
-    `output` is the reviewer's file, unchanged. The keyword arguments are what that file
+    `output` is the reviewer's file, unchanged: its JSON as a dict, or its text when the
+    reviewer writes Markdown (DeepReview). The keyword arguments are what that file
     doesn't say: which review and paper, what kind of work the paper is, who produced the
-    review, the reviewer's commit, the model, the run's times and cost. `blocks` is the
+    review, the reviewer's commit or version, the model, the run's times and cost. A hosted
+    reviewer that publishes no version or model gets `unspecified` for them. `blocks` is the
     paper, to find each quote in; without it, quotes are copied but not checked.
     """
     if source not in _FROM_WITH_RECORD:
@@ -111,6 +119,7 @@ def map_with_record(
         work_type=work_type,
         work_version=work_version,
         reviewer_commit=reviewer_commit,
+        reviewer_version=reviewer_version,
         model_id=model_id,
         started_at=started_at,
         ended_at=ended_at,

@@ -14,6 +14,7 @@ from .mapping import MappingResult, Rule, Step
 MAX_CELL = 120
 _TOKEN = re.compile(r"([^.\[\]]+)|\[(\d+)\]")
 _ITEM = re.compile(r"^(.*?\[\d+\])")
+_DEEPEST_ITEM = re.compile(r"^(.*\[\d+\])")
 
 GAP_MEANINGS = {
     "unmapped": "Reviewer fields with no OCRS field. Their values are kept in `extensions`.",
@@ -47,6 +48,12 @@ def item_of(path: str) -> str:
     return match.group(1) if match else ""
 
 
+def deepest_item_of(path: str) -> str:
+    """`issues[0].tiers[1].items[2].text` → `issues[0].tiers[1].items[2]`."""
+    match = _DEEPEST_ITEM.match(path)
+    return match.group(1) if match else ""
+
+
 def relative(path: str, item: str) -> str:
     return path[len(item) :].lstrip(".") or path
 
@@ -57,6 +64,8 @@ def how(step: Step, review: dict[str, Any]) -> tuple[str, str]:
         return "copied", cell(value_at(review, step.target))
     if step.rule == Rule.LOOKUP:
         return "looked up", cell(f"{step.original} → {step.result}")
+    if step.rule == Rule.PARSED:
+        return "parsed", cell(step.result)
     if step.rule == Rule.ANCHORED_EXACT:
         found = "found exactly"
     else:
@@ -66,14 +75,16 @@ def how(step: Step, review: dict[str, Any]) -> tuple[str, str]:
     return f"{found} in the paper", f"{anchor.get('part')}{block}"
 
 
-def step_rows(steps: list[Step], review: dict[str, Any]) -> Iterator[str]:
+def step_rows(steps: list[Step], review: dict[str, Any], item: str) -> Iterator[str]:
+    """One row per step. Reviewer paths inside `item` are shortened relative to it;
+    others (a part or tier heading above it) stay whole."""
     yield "| Reviewer field | OCRS field | How | Value |"
     yield "|---|---|---|---|"
     for step in steps:
-        source_item, target_item = item_of(step.source), item_of(step.target)
         rule, value = how(step, review)
-        source = relative(step.source, source_item)
-        target = relative(step.target, target_item)
+        inside = item and step.source.startswith((f"{item}.", f"{item}["))
+        source = relative(step.source, item) if inside else step.source
+        target = relative(step.target, item_of(step.target))
         yield f"| `{source}` | `{target}` | {rule} | {value} |"
 
 
@@ -159,18 +170,20 @@ def render_gaps(result: MappingResult) -> Iterator[str]:
 def render_steps(result: MappingResult) -> Iterator[str]:
     review, record = result.review, result.record
     yield "## How each field was mapped"
-    for item, steps in groupby(record.steps, key=lambda step: item_of(step.source)):
+    # One group per OCRS item (a finding), headed by the most specific reviewer item it
+    # came from: several findings can come from one reviewer list item's children.
+    for target_item, steps in groupby(record.steps, key=lambda step: item_of(step.target)):
         steps = list(steps)
+        item = max((deepest_item_of(step.source) for step in steps), key=len)
         yield ""
-        if not item:
+        if not target_item:
             yield "### Review"
         else:
-            target_item = item_of(steps[0].target)
             title = value_at(review, f"{target_item}.title")
             suffix = f": {cell(title)}" if title else ""
             yield f"### `{item}` → `{target_item}`{suffix}"
         yield ""
-        yield from step_rows(steps, review)
+        yield from step_rows(steps, review, item)
     if record.skipped:
         yield ""
         yield "## Skipped"

@@ -1,0 +1,329 @@
+{
+  "$schema": "https://valency-oss.github.io/open-canonical-review-schema/v0.7.1/canonical-review.schema.json",
+  "review_id": "deepreview-cold-storage-1",
+  "version": "1.0.0",
+  "created_at": "2026-10-15T18:05:00Z",
+  "provenance": {
+    "source_system": "deepreview",
+    "source_review_id": "deepreview-cold-storage-1",
+    "imported_at": "2026-10-16T13:30:00Z",
+    "mapping": {
+      "mapping_spec_id": "canonical-review.mapping.v1",
+      "mapping_spec_version": "1.1.0",
+      "mapper_version": "1.1.0"
+    }
+  },
+  "referee": {
+    "referee_type": "ai",
+    "identity_mode": "open",
+    "ai_referee": {
+      "system": {
+        "critic_framework": {
+          "name": "deepreview",
+          "version": "unspecified"
+        },
+        "models": [
+          {
+            "role": "reviewer",
+            "model_id": "unspecified"
+          }
+        ]
+      },
+      "execution": {
+        "started_at": "2026-10-15T17:40:00Z",
+        "ended_at": "2026-10-15T18:05:00Z",
+        "wall_time_seconds": 1500.0
+      }
+    }
+  },
+  "target": {
+    "work_id": "internal_id:deepreview:paper-cold-storage",
+    "work_type": "preprint",
+    "identifiers": {
+      "internal_id": {
+        "field_name": "deepreview",
+        "value": "paper-cold-storage"
+      }
+    }
+  },
+  "opinion": {
+    "summary": "This paper introduces a multi-source deep-learning framework for forecasting bay-level air temperatures in Freezer Hall 3 of the Brannock Cold-Storage Depot (BCSD) at four dispatch horizons (5 min, 15 min, 30 min, and 60 min). To warn the depot's dock scheduler of warm-air surges before trucks reach the doors, the authors combine one-minute bay temperature maps from the in-hall Ceiling Thermal Array (CTA) with coarser 15-minute snapshots of the truck yard from the depot's yard-management system (the Yard and Dock Feed, YDF), including trailer positions, reefer return-air temperatures, and Gate Transit Vectors (GTV) derived from gate RFID reads. The architecture pairs graph-attention layers on a rack-aisle graph, a dilated 2D convolutional yard encoder, an infiltration-path join that links yard cells to the bays behind each dock door, a single-shot multi-horizon decoder built on a Newton-cooling residual, and a two-phase curriculum with an asymmetric missed-warm loss, and it reports a 14% lower temperature error and 22% fewer missed warm bays at the 30-minute lead than the depot's deployed door-event regression."
+  },
+  "review_context": {
+    "review_type": "pre_submission",
+    "requested_by": "authors"
+  },
+  "findings": {
+    "strengths": [
+      {
+        "id": "strength-1",
+        "text": "The paper tackles a practical gap in automated cold-chain operations by pushing bay temperature forecasts out to the 30–60 minute window a dock scheduler needs to resequence arrivals, with a possible saving of roughly 0.4% to 2.1% of the depot's refrigeration energy and no new hardware."
+      },
+      {
+        "id": "strength-2",
+        "text": "Pairing an in-hall thermal map with a view of the truck yard is an unusual and well-motivated combination for warehouse control, joining a precise local measurement of the hall to an early signal of heat that is still on its way in."
+      },
+      {
+        "id": "strength-3",
+        "text": "The infiltration-path join, combined with graph-attention layers (`GraphAttn`) on the rack-aisle graph and an upwind shift by the gate transit vectors, gives a clean answer to the mismatch between a planar yard raster and a hall whose bays are reached through a handful of doors at uncertain depths."
+      },
+      {
+        "id": "strength-4",
+        "text": "The single-shot decoder, which predicts a gated residual on top of a Newton-cooling relaxation and is trained first on an occupancy-weighted load loss and then with an asymmetric missed-warm penalty, builds the hall's thermal response into the output and avoids an early habit of forecasting a uniformly warm hall."
+      }
+    ],
+    "weaknesses": [
+      {
+        "id": "weakness-1",
+        "text": "The alternating even/odd calendar-day data split places 71 of the 93 scored test days directly between adjacent development days (and interleaves validation days with test days), which risks leakage across multi-day heat waves and weekly delivery cycles; the authors might evaluate a contiguous multi-week block split with buffer days removed at its edges, or stratify test results by how many neighboring days sit in the development pool.",
+        "summarizes": [
+          "issue-2.1.2"
+        ]
+      },
+      {
+        "id": "weakness-2",
+        "text": "There are internal inconsistencies and missing definitions in the preprocessing and evaluation descriptions—most notably two incompatible accounts of the CTA Gaussian smoothing ($\\sigma = 2.5$ bay pitches on only the final sweep and the target versus $\\sigma = 6$ grid cells on every sweep), disagreements between the prose and Table 1 on yard-feed normalizations, and a missing $L_1$ formula for the mean absolute recovery-energy error (MARE), whose place in Equation 11 is taken by a repeat of the $L_2$ training loss.",
+        "summarizes": []
+      },
+      {
+        "id": "weakness-3",
+        "text": "In the 30–60 minute ablations (Table 4), removing the ceiling array entirely (`No CTA`) gives a slightly lower missed-warm rate and load MSE than the full model, which suggests that tying the shared decoder to the last observed bay temperature $\\theta_0$ carries stale local state once the warm air has moved on; the model also loses to plain persistence in quiet periods, and a lead-dependent decay on $\\theta_0$ or a better-conditioned gate could help.",
+        "summarizes": [
+          "issue-4.1.1"
+        ]
+      },
+      {
+        "id": "weakness-4",
+        "text": "Several architectural and training details needed for reproducibility and a fair comparison with baselines are underspecified, including missing citations for the graph and thermal models the method builds on (Reference Paper: Message Passing on Floor-Plan Graphs for Indoor Climate Prediction, Halvorsen et al., 2018; Reference Paper: Lumped-Capacitance Models of Refrigerated Warehouses Under Door Infiltration, Vasquez-Thorne et al., 2020), withholding the coordinate and difference channels from the `GraphGRU` and `StackTCN` baselines, reading decoder query metadata from a matched future 20-minute target sweep, and leaving out the promised \"shift-balanced sampler\" and \"setpoint-prior initialization.\"",
+        "evidence_links": [
+          {
+            "type": "external",
+            "ref": "Reference Paper: Message Passing on Floor-Plan Graphs for Indoor Climate Prediction, Halvorsen et al., 2018",
+            "work": {
+              "title": "Message Passing on Floor-Plan Graphs for Indoor Climate Prediction",
+              "authors": [
+                "Halvorsen et al."
+              ],
+              "year": 2018
+            }
+          },
+          {
+            "type": "external",
+            "ref": "Reference Paper: Lumped-Capacitance Models of Refrigerated Warehouses Under Door Infiltration, Vasquez-Thorne et al., 2020",
+            "work": {
+              "title": "Lumped-Capacitance Models of Refrigerated Warehouses Under Door Infiltration",
+              "authors": [
+                "Vasquez-Thorne et al."
+              ],
+              "year": 2020
+            }
+          }
+        ],
+        "summarizes": []
+      },
+      {
+        "id": "issue-1.1.1",
+        "title": "Potential Inconsistency in Plume-Reach and Arrival-Time Estimates",
+        "text": "- **Observation:** In Section 1.2 (page 3), the text states: *\"For doors $2\\text{–}9\\text{ m}$ wide, the warm plume reaches about $6\\text{–}20\\text{ m}$ past the scored-zone boundary. At front speeds of $3.0\\text{–}4.2\\text{ m min}^{-1}$ it crosses that zone in about $2\\text{–}6\\text{ min}$.\"* On page 4 it adds: *\"Measured from the door line instead, the same plumes reach about $4\\text{–}27\\text{ m}$ into the hall.\"* Section 1.5 (page 6) repeats the comparison, and Appendix B (page 35) gives the derivation: *\"Past the scored-zone boundary the reach is about $2.2$ times the door width. Over the logged weeks the median door width in use is $2.8\\text{ m}$, with the 10th–90th percentile at $1.4\\text{–}9.0\\text{ m}$. The reach past the boundary is then about $6\\text{–}20\\text{ m}$. From the door line, where the factor is $3.0$, the same doors give about $4\\text{–}27\\text{ m}$.\"*\n- **Potential Concern:** Under a free-jet spreading model, the reach of a plume through a door of width $w$ is $R = k\\,w$, with the factor $k$ set by where the reach is measured from.\n  - For the reach from the door line, $k = 3.0$, so the 10th–90th percentile widths $w \\in [1.4, 9.0]\\text{ m}$ give $R \\approx 4.2\\text{–}27\\text{ m}$ ($\\sim 4\\text{–}27\\text{ m}$ as reported).\n  - For the reach past the scored-zone boundary, $k = 2.2$, and the same widths give $R \\approx 3.1\\text{–}19.8\\text{ m}$, not $6\\text{–}20\\text{ m}$. The lower figure of $6\\text{ m}$ is instead the reach at the *median* width ($2.2 \\times 2.8\\text{ m} \\approx 6.2\\text{ m}$).\n  - The scored-zone range therefore pairs the *median* width with the *90th-percentile* width, while the door-line range uses the *10th-to-90th percentile* widths, so at the lower bound the reach from the door line ($4\\text{ m}$) looks shorter than the reach past the boundary ($6\\text{ m}$), which cannot be. Stating in Section 1.2 that the $6\\text{–}20\\text{ m}$ reach and the $2\\text{–}6\\text{ min}$ crossing time at $3.0\\text{–}4.2\\text{ m min}^{-1}$ refer to median-to-90th-percentile widths ($w \\approx 2.8\\text{–}9.0\\text{ m}$), while a $1.4\\text{ m}$ door reaches only $\\sim 3\\text{ m}$ past the boundary, would make the comparison consistent.",
+        "group": [
+          "[Introduction, BCSD Operations Context & Forecasting Background] (Pages: 1-7)",
+          "Potential Mistakes and Improvements"
+        ],
+        "evidence_links": [
+          {
+            "type": "paper_section",
+            "ref": "Section 1.2, Pages 3–4",
+            "location": {
+              "page": 3,
+              "page_end": 4,
+              "section": "1.2"
+            }
+          },
+          {
+            "type": "paper_section",
+            "ref": "Section 1.5, Page 6",
+            "location": {
+              "page": 6,
+              "section": "1.5"
+            }
+          },
+          {
+            "type": "paper_section",
+            "ref": "",
+            "quote": "For doors $2\\text{–}9\\text{ m}$ wide, the warm plume reaches about $6\\text{–}20\\text{ m}$ past the scored-zone boundary. At front speeds of $3.0\\text{–}4.2\\text{ m min}^{-1}$ it crosses that zone in about $2\\text{–}6\\text{ min}$."
+          },
+          {
+            "type": "paper_section",
+            "ref": "",
+            "quote": "Measured from the door line instead, the same plumes reach about $4\\text{–}27\\text{ m}$ into the hall."
+          },
+          {
+            "type": "paper_section",
+            "ref": "",
+            "quote": "Past the scored-zone boundary the reach is about $2.2$ times the door width. Over the logged weeks the median door width in use is $2.8\\text{ m}$, with the 10th–90th percentile at $1.4\\text{–}9.0\\text{ m}$. The reach past the boundary is then about $6\\text{–}20\\text{ m}$. From the door line, where the factor is $3.0$, the same doors give about $4\\text{–}27\\text{ m}$."
+          }
+        ],
+        "severity": "major"
+      },
+      {
+        "id": "issue-1.2.1",
+        "text": "The Abstract states *\"We estimate the optimistic order-of-magnitude saving in BCSD refrigeration energy to be between $0.4\\%$ and $2.1\\%$,\"* whereas Section 4.1 (page 30) and Section 5 (page 33) give a single figure ($\\sim 1.8\\%$) from the product $0.60 \\times 0.35 \\times 0.085 \\approx 1.79\\%$. Using the same phrasing in the Abstract and Section 4.1 would make them consistent.",
+        "group": [
+          "[Introduction, BCSD Operations Context & Forecasting Background] (Pages: 1-7)",
+          "Minor Corrections and Typos"
+        ],
+        "evidence_links": [
+          {
+            "type": "paper_section",
+            "ref": "Abstract (Page 1)",
+            "location": {
+              "page": 1,
+              "section": "Abstract"
+            }
+          },
+          {
+            "type": "paper_section",
+            "ref": "",
+            "quote": "We estimate the optimistic order-of-magnitude saving in BCSD refrigeration energy to be between $0.4\\%$ and $2.1\\%$,"
+          }
+        ],
+        "severity": "minor"
+      },
+      {
+        "id": "issue-1.2.2",
+        "text": "In *\"The rule-based door controller now used by DockPlan, described in,$^{21}$ applies a similar event-triggered load model,\"* the superscript citation stands in for the object of *\"in\"*, followed by a stray comma. Consider revising to *\"described in Ref. 21,\"* or *\"described by Marchetti,$^{21}$\"*.",
+        "group": [
+          "[Introduction, BCSD Operations Context & Forecasting Background] (Pages: 1-7)",
+          "Minor Corrections and Typos"
+        ],
+        "evidence_links": [
+          {
+            "type": "paper_section",
+            "ref": "Section 1.3 (Page 5)",
+            "location": {
+              "page": 5,
+              "section": "1.3"
+            }
+          },
+          {
+            "type": "paper_section",
+            "ref": "",
+            "quote": "The rule-based door controller now used by DockPlan, described in,$^{21}$ applies a similar event-triggered load model,"
+          }
+        ],
+        "suggested_edits": [
+          {
+            "replacement": "described in Ref. 21,"
+          },
+          {
+            "replacement": "described by Marchetti,$^{21}$"
+          }
+        ],
+        "severity": "minor"
+      },
+      {
+        "id": "issue-2.1.2",
+        "title": "Multi-Day Weather and Delivery-Cycle Leakage and Validation–Test Adjacency in the Alternating Day Split",
+        "text": "In Section 2.1 (pages 8–9) and Section 2.3 (pages 10–12), the 238 operating days are sorted by date and split by alternating index: even-indexed days form the development pool (80% training, 20% evenly spaced validation) and odd-indexed days the test holdout, with no buffer days between them. As page 9 notes (and Section 4.2, page 32, concedes), 229 of the 237 consecutive pairs in the archive are one calendar day apart, so 112 of the 119 odd-indexed days (and 71 of the 93 scored holdout days after filtering, with another 15 that have one development neighbor) have development days on both sides ($d-1$ and $d+1$). Two concerns follow:\n- *Shared regimes across training and test:* The day-of-week input is fixed at zero in the metadata MLP, but the yard encoder still sees outdoor temperature, humidity and the trailer mix, and heat waves, weekly supplier rotations and slow drifts in reefer return-air temperature (`rat`) and dew point (`dew`) at BCSD usually last several days. With neighboring days on opposite sides of the split, the late shift of day $N$ (training) and the early shift of day $N+1$ (test) are only $\\sim 8\\text{--}10$ hours apart, so a model with $\\sim 7.4 \\times 10^4$ parameters can recognize near-identical conditions from $t \\pm 24\\text{ h}$ at test time. Baselines with no parameters and no memory (persistence, heat-front flow, door-event regression, and GTV advection) cannot do this, and neither can a deployed model facing a new season.\n- *Validation days next to test days:* The 24 validation days are an evenly spaced 20% of the even-indexed pool, so each sits one calendar day from a test day on either side. Because validation-loss plateaus drive the learning-rate schedule, early stopping, and the switch to the Phase 2 missed-warm finetuning (Section 2.7), model selection is tuned on conditions interleaved with the test set. The authors could bound the effect without new data, either by training once more on contiguous multi-week or monthly blocks (dropping 1–2 buffer days at each boundary) or, with no retraining at all, by splitting the existing holdout results in Section 4.2 into the 71 test days with two development neighbors and the 22 with one or none (or by how much the weather and delivery mix changed from the neighboring training days).",
+        "group": [
+          "[CTA & Yard Feed Datasets, Preprocessing, and Splitting Strategy] (Pages: 7-13)",
+          "Potential Mistakes and Improvements"
+        ],
+        "evidence_links": [
+          {
+            "type": "paper_section",
+            "ref": "Sections 2.1, 2.3, 3.1, 4.2, and 5"
+          },
+          {
+            "type": "paper_section",
+            "ref": "Pages 8–12, 25–26, 32–33"
+          }
+        ],
+        "severity": "major"
+      },
+      {
+        "id": "issue-2.2.6",
+        "text": "*\"...humidity is scaled by $[0, 100]/100$...\"* $\\rightarrow$ Consider writing *\"clipped to $[0, 100]$ and divided by $100$\"* for clarity.",
+        "group": [
+          "[CTA & Yard Feed Datasets, Preprocessing, and Splitting Strategy] (Pages: 7-13)",
+          "Minor Corrections and Typos"
+        ],
+        "evidence_links": [
+          {
+            "type": "paper_section",
+            "ref": "Page 12, Section 2.3",
+            "location": {
+              "page": 12,
+              "section": "2.3"
+            }
+          },
+          {
+            "type": "paper_section",
+            "ref": "",
+            "quote": "...humidity is scaled by $[0, 100]/100$..."
+          }
+        ],
+        "suggested_edits": [
+          {
+            "replacement": "clipped to $[0, 100]$ and divided by $100$"
+          }
+        ],
+        "severity": "minor"
+      },
+      {
+        "id": "issue-4.1.1",
+        "title": "Mechanistic Interpretation of the `No CTA` Ablation Outperforming `Proposed` on `load MSE` and $\\eta_{\\text{MW}}$ at 30–60 min, and Quiet-Period Underperformance",
+        "text": "In Table 4 (p. 30) and Section 4.2 (*\"the ceiling array can raise the long-lead error\"*, pp. 31–32), dropping the in-hall array (`No CTA`) gives a lower (better) `load MSE` ($0.0412 \\pm 0.0026$ vs. $0.0423 \\pm 0.0014$ at $30\\text{ min}$; $0.0538 \\pm 0.0017$ vs. $0.0561 \\pm 0.0029$ at $60\\text{ min}$) and a lower (better) missed-warm rate $\\eta_{\\text{MW}}$ ($0.121 \\pm 0.019$ vs. $0.134 \\pm 0.024$ at $30\\text{ min}$; $0.152 \\pm 0.021$ vs. $0.158 \\pm 0.030$ at $60\\text{ min}$) than the full `Proposed` model, although `Proposed` stays ahead on `MARE` ($3.4\\%$ at $30\\text{ min}$ and $1.1\\%$ at $60\\text{ min}$), $|\\Delta E_{\\text{shift}}|$, and `kW MAE`. Since `load MSE` ($\\mathcal{L}_{\\text{load}}$) and $\\mathcal{L}_{\\text{MW}}$ are exactly the training objectives (Equations 8–10), it is notable that the full model does worse than the array-free ablation on its own loss at long leads, while Section 4.2 puts this down only to *\"forcing the decoder through a one-hour sensor history.\"* Three points deserve discussion:\n- *The fixed Newton-cooling anchor $\\theta_0$ at long leads:* In Equation 6 (p. 20), the decoder adds a residual to a relaxation that starts from the last observed sweep: $\\hat{\\theta} = \\theta_{\\text{sup}} + (\\theta_0 - \\theta_{\\text{sup}})\\,\\mathrm{e}^{-H/\\kappa} + \\alpha\\,g\\,\\Delta\\theta$. At $30\\text{–}60\\text{ min}$, a warm plume present at $t_{\\text{end}}$ has usually been drawn back to the coils or has spread $90\\text{–}250\\text{ m}$ at $3.0\\text{–}4.2\\text{ m min}^{-1}$, far beyond the $64\\text{ m}$ hall. Anchoring on $\\theta_0$ therefore asks the term $\\alpha\\,g\\,\\Delta\\theta$ both to build the incoming heat suggested by the yard *and* to cancel stale local structure in $\\theta_0$; wherever the yard-driven gate $g \\in (0, 1)$ is small or slightly mistimed, remnants of $\\theta_0$ survive into the forecast and cost heavily under the squared `load MSE`. In `No CTA`, the last sweep is the setpoint, so the anchor carries no stale structure and the head forecasts directly from the smoother upwind yard features, which lowers squared outliers (`load MSE`) and missed warm bays ($\\eta_{\\text{MW}}$) at the cost of a larger mean bias ($\\Delta P_{\\text{eq}} = +1.84$ vs. $+1.29\\text{ kW}$ at $30\\text{ min}$) and $L_1$ error (`MARE`). Discussing this in Section 4.2, and whether a lead-dependent weight on the anchor (e.g., replacing $\\theta_0$ by $\\theta_{\\text{set}} + \\beta(H)(\\theta_0 - \\theta_{\\text{set}})$ with $\\beta(H) \\to 0$ at long leads) would let the model move smoothly from an array-anchored residual at $5\\text{–}15\\text{ min}$ to a yard-driven forecast at $30\\text{–}60\\text{ min}$, would strengthen the analysis.\n- *The gate $g$ and Phase-2 $\\mathcal{L}_{\\text{MW}}$ hedging in quiet periods:* On nearly static windows ($|\\Delta f_{\\text{warm}}| < 0.03$) and in the quietest quartile of door traffic, `Proposed` loses to last-value persistence, winning on only $46\\% / 41\\%$ and $38\\% / 33\\%$ of windows at $30 / 60\\text{ min}$ (Section 3.1, p. 27; Section 4.2, p. 31), even though the gate of Equation 7 is designed so that *\"a quiet bay can stay on its measured temperature.\"* Table 3 (p. 26) also shows all three learned models with a positive signed bias $\\Delta P_{\\text{eq}}$ ($+1.29$ and $+1.22\\text{ kW}$ for `Proposed` at $30$ and $60\\text{ min}$ vs. $-0.31$ and $-0.04\\text{ kW}$ for persistence), so that $\\hat{\\theta} > \\theta$ on average. Section 4.2 could explain why $g$ does not close ($g \\to 0$) in quiet periods, for instance because Equation 7 sees only point-sampled yard values $[p_i^{\\text{now}} \\parallel p_i^{\\text{up}}]$ rather than transit speed, the lead $H$, or the array's own differences ($\\Delta\\theta$), and because regression to the mean and the Phase-2 $\\mathcal{L}_{\\text{MW}}$ finetuning push residuals away from zero.\n- *Seed spread and fair comparison:* In Table 4, the gaps between `Proposed` and `No CTA` in $\\eta_{\\text{MW}}$ at $30\\text{ min}$ ($0.134 \\pm 0.024$ vs. $0.121 \\pm 0.019$) and $60\\text{ min}$ ($0.158 \\pm 0.030$ vs. $0.152 \\pm 0.021$), and in `load MSE` at $30\\text{ min}$ ($0.0423 \\pm 0.0014$ vs. $0.0412 \\pm 0.0026$), lie within $1\\sigma$ over the four training seeds. And because `No CTA` (yard only) already beats `GraphGRU` and `StackTCN` at $30\\text{–}60\\text{ min}$, noting in Section 3.1 (p. 25) that `GraphGRU` and `StackTCN` see *the array history only* would keep readers from crediting the long-lead gains to the backbone rather than to the yard feed.",
+        "group": [
+          "[Empirical Benchmark Results, Ablations, Discussion & Technical Appendices] (Pages: 24-37)",
+          "Potential Mistakes and Improvements"
+        ],
+        "evidence_links": [
+          {
+            "type": "paper_section",
+            "ref": "Section 3.1, pp. 25–27",
+            "location": {
+              "page": 25,
+              "page_end": 27,
+              "section": "3.1"
+            }
+          },
+          {
+            "type": "paper_section",
+            "ref": "Section 3.2, pp. 28–30, Table 4",
+            "location": {
+              "page": 28,
+              "page_end": 30,
+              "section": "3.2"
+            }
+          },
+          {
+            "type": "paper_section",
+            "ref": "Section 4.2, pp. 31–32",
+            "location": {
+              "page": 31,
+              "page_end": 32,
+              "section": "4.2"
+            }
+          },
+          {
+            "type": "paper_section",
+            "ref": "",
+            "quote": "the ceiling array can raise the long-lead error"
+          },
+          {
+            "type": "paper_section",
+            "ref": "",
+            "quote": "forcing the decoder through a one-hour sensor history."
+          },
+          {
+            "type": "paper_section",
+            "ref": "",
+            "quote": "a quiet bay can stay on its measured temperature."
+          }
+        ],
+        "severity": "major"
+      }
+    ]
+  }
+}

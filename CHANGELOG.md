@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.6.0
+
+All additions are optional, so every 0.5.0 review is valid under 0.6.0.
+
+### Schema
+
+- Findings take an `id`, unique among the review's findings and action items, a `group`
+  (the review's headings the point sits under, outermost first) and `suggested_edits`
+  (rewrites the reviewer proposes: a `replacement` and, optionally, the `original` text).
+- A finding that restates others in brief lists their ids in `summarizes`, so it can be
+  left out when counting points. `summarizes: []` marks an overview whose source does not
+  say which points it covers.
+- Action items (`findings.changes` and `ethics_and_risk.required_mitigations`) take an
+  `id`, `title`, `evidence_links`, `suggested_edits` and `group`, as findings do, and
+  `applies_to.finding_id` names the finding they address.
+- Evidence locations take `page_end` for a page range. Evidence links take the type
+  `bibliography`, for the work's own reference list, and a `work` (title, authors, year,
+  identifiers) for another work, such as a citation the reviewer says is missing.
+- `review_context.review_type` takes `pre_submission`: feedback the authors asked for
+  before submitting.
+- `validate_canonical` also checks what JSON Schema cannot: ids are unique, `summarizes`
+  and `applies_to.finding_id` name findings that exist, and `page_end` is not before `page`.
+
+### Python package
+
+- New mapper `deepreview` for Google DeepReview's Markdown report: `map_with_record`
+  takes the report's text as `output`.
+- `map_with_record` no longer requires `reviewer_commit` or `model_id`. It takes
+  `reviewer_version` for a reviewer with releases rather than commits; what is not given
+  is `unspecified`. `map_from(..., keep_raw=True)` keeps a Markdown report as
+  `raw_payload.text`.
+- Mapping records have a `parsed` rule for values a mapper reads out of the reviewer's
+  text by a pattern, and `Recorder.parse` to record them.
+
 ## 0.5.0
 
 - Added `review_context.stage`, `pre_publication` or `post_publication`, after Crossref's

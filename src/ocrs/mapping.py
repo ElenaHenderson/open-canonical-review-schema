@@ -19,6 +19,7 @@ from pydantic import BaseModel, JsonValue
 class Rule(str, Enum):
     COPIED = "copied"
     LOOKUP = "lookup"
+    PARSED = "parsed"
     ANCHORED_EXACT = "anchored_exact"
     ANCHORED_FUZZY = "anchored_fuzzy"
 

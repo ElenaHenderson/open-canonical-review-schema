@@ -3,7 +3,7 @@
 """The examples in the README and CONTRIBUTING.md work as written.
 
 Each Python block runs on its own. Blocks may use the inputs a reader brings
-(`openreview_note`, `openaireview_paper_json`), which come from test fixtures.
+(`openreview_note`, `openaireview_paper_json`, `deepreview_report`), which come from test fixtures.
 Each JSON block is a whole review, or part of one that must validate when
 added to a minimal review.
 """
@@ -51,6 +51,7 @@ def reader_inputs():
         "openaireview_paper_json": json.loads(
             (FIXTURES / "ai" / "openaireview_paper.json").read_text()
         ),
+        "deepreview_report": (FIXTURES / "ai" / "deepreview_report.md").read_text(),
     }
 
 

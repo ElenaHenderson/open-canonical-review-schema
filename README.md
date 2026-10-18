@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/ci.yml/badge.svg)](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/ci.yml)
 
-**Status: v0.5.0, a draft. Feedback wanted:** [tell us how you use OCRS](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=adoption-story.yml) or [propose a schema change](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=schema-change.yml).
+**Status: v0.6.0, a draft. Feedback wanted:** [tell us how you use OCRS](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=adoption-story.yml) or [propose a schema change](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=schema-change.yml).
 
 A standardized JSON schema and Python mapping utilities for peer review data. OCRS enables interoperability between different peer review systems by providing a canonical representation that preserves rich metadata including reviewer information, decision recommendations, structured findings, metrics, and AI provenance tracking.
 
@@ -29,6 +29,7 @@ OCRS provides bidirectional mappers for converting between the canonical schema 
 | **ScholarOne** | Full | Basic | Clarivate journal system; `to_scholarone` is a minimal stub |
 | **Journal Narrative** | Full | Full | Minimal free-text reviews with DOI/journal metadata |
 | **OpenAIReview** | Full | – | AI reviewer ([ChicagoHAI/OpenAIReview](https://github.com/ChicagoHAI/OpenAIReview)): `paper.json` |
+| **DeepReview** | Full | – | Google's AI reviewer: the Markdown that its "Copy Report" gives |
 
 **Legend:**
 - **Full**: Complete mapping with all relevant fields preserved
@@ -39,13 +40,13 @@ OCRS provides bidirectional mappers for converting between the canonical schema 
 The schema is at a permanent URL, one per version:
 
 ```
-https://valency-oss.github.io/open-canonical-review-schema/v0.5.0/canonical-review.schema.json
+https://valency-oss.github.io/open-canonical-review-schema/v0.6.0/canonical-review.schema.json
 ```
 
 Validate a review with any JSON Schema (draft 2020-12) validator, for example [check-jsonschema](https://github.com/python-jsonschema/check-jsonschema):
 
 ```bash
-uvx check-jsonschema --schemafile https://valency-oss.github.io/open-canonical-review-schema/v0.5.0/canonical-review.schema.json review.json
+uvx check-jsonschema --schemafile https://valency-oss.github.io/open-canonical-review-schema/v0.6.0/canonical-review.schema.json review.json
 ```
 
 For complete reviews, see [examples/](examples/). The Python package below also maps reviews from other systems to OCRS.
@@ -62,7 +63,7 @@ note_like = map_to("openreview", canonical)
 
 ## AI reviewers
 
-The OpenAIReview mapper copies the reviewer's own output into OCRS; it never rewrites or invents text. Whatever has no OCRS field is kept, unchanged, in `extensions.<reviewer>`.
+The OpenAIReview and DeepReview mappers copy the reviewer's own output into OCRS; they never rewrite or invent text. Whatever has no OCRS field is kept, unchanged, in `extensions.<reviewer>`.
 
 `map_with_record` also returns a record of how each field was mapped and where the result falls short of OCRS:
 
@@ -71,7 +72,9 @@ The OpenAIReview mapper copies the reviewer's own output into OCRS; it never rew
 - **coerced**: reviewer values OCRS does not allow (for example an unknown severity), and what the mapper did instead;
 - **unanchored**: quotes the reviewer took from the paper that cannot be found in it.
 
-`output` is the reviewer's own file, unchanged. The keyword arguments are what that file doesn't say: which review and paper, who produced it, the reviewer's commit, the model, and the run's times and cost. `work_id` can be a DOI, a URL, a canonical work ID such as `doi:10.1234/abc`, or the platform's own ID, which is kept as an `internal_id` named after `source_system`. Give the paper as plain-text `blocks` (body, abstract, references) to also check each quote against it; the record then says where each quote was found. Without `blocks`, quotes are copied but not checked.
+Each step also says how its value was taken: `copied`, `looked up` in a table, or `parsed` out of the reviewer's text by a pattern (a page number from a location, for example).
+
+`output` is the reviewer's own file, unchanged: its JSON, or its text when the reviewer writes Markdown. The keyword arguments are what that file doesn't say: which review and paper, who produced it, the reviewer's commit or version, the model, and the run's times and cost. A hosted reviewer may publish no version or model; leave them out and the review says `unspecified`. `work_id` can be a DOI, a URL, a canonical work ID such as `doi:10.1234/abc`, or the platform's own ID, which is kept as an `internal_id` named after `source_system`. Give the paper as plain-text `blocks` (body, abstract, references) to also check each quote against it; the record then says where each quote was found. Without `blocks`, quotes are copied but not checked.
 
 ```python
 from ocrs import map_with_record, render_mapping_markdown
@@ -93,6 +96,24 @@ result = map_with_record(
 result.review  # the OCRS review
 result.record.gaps  # unmapped, unfilled, coerced (and unanchored, with blocks)
 render_mapping_markdown(result)  # the same record, for people
+```
+
+DeepReview's report is Markdown. Its Strengths and Weaknesses become findings; its Weaknesses restate points made in full later, so each is marked as an overview (`summarizes`). Each point under Potential Issues And Suggestions becomes a weakness. Its part of the paper and its tier go in `group`, and the tier sets the severity: Potential Mistakes and Improvements is `major`, Minor Corrections and Typos is `minor`. The places it names become evidence links with pages and sections, the passages it quotes become evidence quotes, and the rewrites it proposes become `suggested_edits`.
+
+```python
+from ocrs import map_with_record
+
+result = map_with_record(
+    "deepreview",
+    deepreview_report,
+    review_id="…",
+    source_system="deepreview",
+    work_id="…",
+    work_type="preprint",
+    requested_by="authors",
+    started_at="2026-10-15T17:40:00Z",
+    ended_at="2026-10-15T18:05:00Z",
+)
 ```
 
 ## Example
