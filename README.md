@@ -19,12 +19,13 @@ A standardized JSON schema and Python mapping utilities for peer review data. OC
 
 ## Why OCRS?
 
-Peer review data is fragmented across platforms (OpenReview, CMT, journal systems) with incompatible formats. OCRS solves this by:
+Science is entering an agentic era. AI agents now draft papers, run analyses and produce other scientific output, and reviewers, human and AI working together, are writing high-quality reviews of that work faster and at larger scale than peer review ever has. A review is only useful if it can travel: to the agent that revises the paper, to the reader deciding what to trust, to the archive that keeps the record. Today review data is fragmented across conference systems, journal systems and AI reviewers, each with its own format. OCRS is a common language for reviews, so agents and people can store, exchange and show them. It does this by:
 
-- **Unifying formats**: Convert between OpenReview, CMT, journal narratives, and more
-- **Preserving provenance**: Track where data came from and how it was transformed
-- **Supporting AI reviews**: First-class support for AI/hybrid referee metadata with execution traces, model specifications, and cost tracking
-- **Enabling analysis**: Structured schema enables cross-platform review analytics
+- **Giving agents one format**: An agent that writes, revises or curates science reads and writes reviews from every system the same way
+- **Unifying formats**: Convert between OpenReview, CMT, journal narratives, AI reviewers (OpenAIReview, DeepReview, Reviewer3), and more
+- **Treating human, AI and hybrid reviews alike**: First-class AI/hybrid referee metadata with execution traces, model specifications, and cost tracking, so a reader can see how an AI reviewer reached its conclusions
+- **Preserving provenance**: Track who reviewed, where the data came from, and how it was transformed
+- **Keeping findings structured**: Findings, decisions and metrics stay machine-readable, so an agent can act on them, a site can show them, and analysts can compare reviews across platforms
 - **Ensuring validation**: JSON Schema validation catches malformed data early
 
 ## Supported Systems
