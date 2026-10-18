@@ -11,6 +11,7 @@ added to a minimal review.
 
 import json
 import re
+from importlib.metadata import version
 from pathlib import Path
 
 import pytest
@@ -82,3 +83,12 @@ def test_example_metrics_use_catalog_keys(path):
     keys = {metric["key"] for metric in load_catalog()["metrics"]}
     for metric in json.loads(path.read_text()).get("metrics", []):
         assert metric["key"] in keys
+
+
+def test_readme_and_citation_name_the_package_version():
+    current = version("ocrs")
+    readme = (ROOT / "README.md").read_text()
+    assert f"badge/schema-v{current}-" in readme
+    assert f"**Status: v{current}," in readme
+    assert set(re.findall(r"open-canonical-review-schema/v(\d+\.\d+\.\d+)/", readme)) == {current}
+    assert f"\nversion: {current}\n" in (ROOT / "CITATION.cff").read_text()

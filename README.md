@@ -1,6 +1,13 @@
 # Open Canonical Review Schema (OCRS)
 
-[![CI](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/ci.yml/badge.svg)](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/valency-oss/open-canonical-review-schema/ci.yml?branch=main&label=CI)](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/ci.yml)
+[![Links](https://img.shields.io/github/actions/workflow/status/valency-oss/open-canonical-review-schema/links.yml?branch=main&label=links)](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/links.yml)
+[![Docs](https://img.shields.io/github/actions/workflow/status/valency-oss/open-canonical-review-schema/docs.yml?branch=main&label=docs)](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/docs.yml)
+[![Schema version](https://img.shields.io/badge/schema-v0.6.1-blue)](CHANGELOG.md#061)
+[![Status: draft](https://img.shields.io/badge/status-draft-orange)](CONTRIBUTING.md#versioning)
+[![JSON Schema draft 2020-12](https://img.shields.io/badge/JSON%20Schema-draft%202020--12-blue)](https://json-schema.org/draft/2020-12)
+[![Python 3.10 | 3.11 | 3.12](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)](pyproject.toml)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 **Status: v0.6.1, a draft. Feedback wanted:** [tell us how you use OCRS](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=adoption-story.yml) or [propose a schema change](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=schema-change.yml).
 
