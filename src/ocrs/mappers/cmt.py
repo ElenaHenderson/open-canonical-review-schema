@@ -9,6 +9,7 @@ from typing import Any
 
 from ..catalog import alias_map, load_catalog
 from ..identifiers import generate_canonical_work_id
+from ..schema import schema_id
 from ..util import (
     first_paragraph,
     guess_scale_from_value,
@@ -105,6 +106,7 @@ def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, An
         referee["referee_id"] = str(payload["reviewerId"])
 
     out: dict[str, Any] = {
+        "$schema": schema_id(),
         "review_id": review_id,
         "version": "1.0.0",
         "created_at": created_at,

@@ -127,8 +127,10 @@ New fields should read like the fields already there:
 A pull request that changes the schema:
 
 1. Changes `src/ocrs/schemas/canonical-review.schema.json` (or the catalog or mapping spec).
-2. Sets the new version in `pyproject.toml`, in the schema's `$id`, in `CITATION.cff`, and in
-   the README's version badge, status line and schema URLs.
+2. Sets the new version in `pyproject.toml`, in the schema's `$id`, in `CITATION.cff`, in
+   the README's version badge, status line and schema URLs. The `sync-example-schema`
+   pre-commit hook then sets each example's `$schema` to the new `$id` (or run
+   `python scripts/sync_examples.py`).
 3. Copies the files in `src/ocrs/schemas/` to `versions/v<version>/`, which GitHub Pages
    publishes at the `$id` URL. It never changes a version that is already published.
 4. Adds a CHANGELOG entry that says whether every review valid under the previous version is
@@ -153,12 +155,26 @@ for the current schema.
 
 1. Fork the repository
 2. Clone your fork locally
-3. Set up the development environment:
+3. [Install uv](https://docs.astral.sh/uv/getting-started/installation/), if you don't have it.
+4. Set up the development environment and install the git hooks:
 
 ```bash
-uv sync
-uv run prek install  # Install pre-commit hooks
+uv sync               # the package, plus pytest, Ruff and prek from the dev group
+uv run prek install   # the git hooks; once per clone
 ```
+
+[Prek](https://github.com/j178/prek), the pre-commit-compatible runner that reads
+`.pre-commit-config.yaml`, is a `dev` dependency of this repository, pinned in `uv.lock`, so
+`uv sync` installs it into `.venv`. Run it with `uv run prek`; don't install prek or
+pre-commit globally.
+
+The hooks are required, not optional. Besides running Ruff, the `sync-example-schema` hook
+sets the `$schema` of each review in `examples/` to the schema's `$id` whenever the schema or
+an example changes. A version bump committed without it leaves the examples on the old
+version, and `test_example_names_the_current_schema` fails in CI. If that happens, run
+`uv run prek run --all-files` (or `python scripts/sync_examples.py`) and commit the result.
+
+A hook that fixes a file stops the commit. Review the change, `git add` it, and commit again.
 
 ### Running tests
 

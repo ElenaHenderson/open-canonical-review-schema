@@ -37,7 +37,7 @@ from ..mapping import (
     Step,
     UnanchoredQuote,
 )
-from ..schema import load_schema, validate_canonical
+from ..schema import load_schema, schema_id, validate_canonical
 from ..util import migrate_work_id_to_identifiers
 
 __all__ = ["AIReviewMapper", "Block", "BlockKind", "MappingResult", "Recorder", "finish"]
@@ -189,6 +189,7 @@ def build_review(
     if cost_usd is not None:
         execution["cost"] = {"currency": "USD", "estimated_total": cost_usd}
     review: dict[str, Any] = {
+        "$schema": schema_id(),
         "review_id": review_id,
         "version": REVIEW_VERSION,
         "created_at": iso(ended_at),

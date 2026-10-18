@@ -3,13 +3,13 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/valency-oss/open-canonical-review-schema/ci.yml?branch=main&label=CI)](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/ci.yml)
 [![Links](https://img.shields.io/github/actions/workflow/status/valency-oss/open-canonical-review-schema/links.yml?branch=main&label=links)](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/links.yml)
 [![Docs](https://img.shields.io/github/actions/workflow/status/valency-oss/open-canonical-review-schema/docs.yml?branch=main&label=docs)](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/docs.yml)
-[![Schema version](https://img.shields.io/badge/schema-v0.6.2-blue)](CHANGELOG.md#062)
+[![Schema version](https://img.shields.io/badge/schema-v0.6.3-blue)](CHANGELOG.md#063)
 [![Status: draft](https://img.shields.io/badge/status-draft-orange)](CONTRIBUTING.md#versioning)
 [![JSON Schema draft 2020-12](https://img.shields.io/badge/JSON%20Schema-draft%202020--12-blue)](https://json-schema.org/draft/2020-12)
 [![Python 3.10 | 3.11 | 3.12](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)](pyproject.toml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
-**Status: v0.6.2, a draft. Feedback wanted:** [tell us how you use OCRS](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=adoption-story.yml) or [propose a schema change](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=schema-change.yml).
+**Status: v0.6.3, a draft. Feedback wanted:** [tell us how you use OCRS](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=adoption-story.yml) or [propose a schema change](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=schema-change.yml).
 
 A standardized JSON schema and Python mapping utilities for peer review data. OCRS enables interoperability between different peer review systems by providing a canonical representation that preserves rich metadata including reviewer information, decision recommendations, structured findings, metrics, and AI provenance tracking.
 
@@ -52,13 +52,21 @@ OCRS provides bidirectional mappers for converting between the canonical schema 
 The schema is at a permanent URL, one per version:
 
 ```
-https://valency-oss.github.io/open-canonical-review-schema/v0.6.2/canonical-review.schema.json
+https://valency-oss.github.io/open-canonical-review-schema/v0.6.3/canonical-review.schema.json
 ```
 
 Validate a review with any JSON Schema (draft 2020-12) validator, for example [check-jsonschema](https://github.com/python-jsonschema/check-jsonschema):
 
 ```bash
-uvx check-jsonschema --schemafile https://valency-oss.github.io/open-canonical-review-schema/v0.6.2/canonical-review.schema.json review.json
+uvx check-jsonschema --schemafile https://valency-oss.github.io/open-canonical-review-schema/v0.6.3/canonical-review.schema.json review.json
+```
+
+A review names the version it follows in `$schema`, which the mappers set to the package's version. Editors such as VS Code use it to check the file as you write:
+
+```json
+{
+  "$schema": "https://valency-oss.github.io/open-canonical-review-schema/v0.6.3/canonical-review.schema.json"
+}
 ```
 
 For complete reviews, see [examples/](examples/). The Python package below also maps reviews from other systems to OCRS.
@@ -463,15 +471,17 @@ OCRS currently supports these peer review systems (see [Supported Systems](#supp
 ## Development
 
 ### Setup
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/). Everything else, including the git-hook runner [prek](https://github.com/j178/prek), comes with the repository: `uv sync` installs the package and its `dev` dependency group (pytest, Ruff and prek, at the versions in `uv.lock`) into `.venv`. Don't install prek or pre-commit globally.
 ```bash
 uv sync
 ```
 
-### Install git hooks (prek)
-Prek is a pre-commit-compatible runner that reads `.pre-commit-config.yaml`.
+### Install the git hooks (required)
+Prek is a pre-commit-compatible runner that reads `.pre-commit-config.yaml`. Install the hooks once per clone, before your first commit: besides running Ruff, the `sync-example-schema` hook sets the `$schema` of each review in `examples/` to the current schema version. Without it, a version bump leaves the examples behind and CI fails.
 ```bash
 uv run prek install
 ```
+The hooks then run on every `git commit`. A hook that fixes a file stops the commit: review the change, `git add` it, and commit again.
 
 ### Run hooks on all files
 ```bash

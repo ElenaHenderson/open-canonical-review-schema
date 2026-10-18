@@ -56,6 +56,11 @@ def ocrs_schema() -> dict[str, Any]:
     return _ocrs_schema
 
 
+def schema_id() -> str:
+    """The packaged schema's `$id`, which a review names in its `$schema`."""
+    return ocrs_schema()["$id"]
+
+
 def _evidence_links(value: Any, node: Any, schema: dict[str, Any]):
     """Every evidence link in `value`, found by following the OCRS schema: only where the
     schema puts an evidenceLink, never inside free-form or source data."""

@@ -9,6 +9,7 @@ from typing import Any
 
 from ..catalog import alias_map, load_catalog
 from ..identifiers import generate_canonical_work_id
+from ..schema import schema_id
 from ..util import (
     epoch_ms_to_iso,
     first_paragraph,
@@ -196,6 +197,7 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
     review_id = note.get("id") if isinstance(note.get("id"), str) else str(uuid.uuid4())
 
     out: dict[str, Any] = {
+        "$schema": schema_id(),
         "review_id": review_id,
         "version": "1.0.0",
         "created_at": created,

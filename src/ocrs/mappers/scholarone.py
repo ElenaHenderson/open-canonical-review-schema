@@ -12,6 +12,7 @@ from ..identifiers import generate_canonical_work_id
 from ..scales import (
     SCHOLARONE_RECOMMENDATION,
 )
+from ..schema import schema_id
 from ..util import (
     first_paragraph,
     map_recommendation_from_numeric,
@@ -283,6 +284,7 @@ def from_scholarone(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[
         referee["referee_id"] = reviewer_id
 
     out: dict[str, Any] = {
+        "$schema": schema_id(),
         "review_id": f"s1_{review_id}",
         "version": "1.0.0",
         "created_at": created,

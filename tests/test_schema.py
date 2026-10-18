@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the canonical review schema itself."""
 
+import json
 from importlib.metadata import version
 from pathlib import Path
 
@@ -9,7 +10,7 @@ import jsonschema
 import pytest
 from jsonschema import Draft202012Validator
 
-from ocrs import load_schema, validate_canonical
+from ocrs import load_schema, map_from, map_with_record, schema_id, validate_canonical
 
 
 def test_schema_id_names_the_package_version():
@@ -18,6 +19,57 @@ def test_schema_id_names_the_package_version():
         f"/v{version('ocrs')}/canonical-review.schema.json"
     )
     assert load_schema()["$id"] == expected
+
+
+MINIMAL_REVIEW = {
+    "review_id": "review-1",
+    "version": "1.0.0",
+    "created_at": "2026-10-06T12:00:00Z",
+    "provenance": {"source_system": "example-journal"},
+    "referee": {"referee_type": "human", "identity_mode": "double_blind"},
+    "target": {"work_id": "internal_id:manuscript_id:paper-1", "work_type": "article"},
+    "opinion": {"summary": "A sound paper."},
+}
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def test_a_review_may_name_its_schema():
+    validate_canonical(MINIMAL_REVIEW)
+    validate_canonical({"$schema": schema_id(), **MINIMAL_REVIEW})
+    with pytest.raises(jsonschema.ValidationError):
+        validate_canonical({"$schema": 63, **MINIMAL_REVIEW})
+
+
+@pytest.mark.parametrize(
+    ("source", "fixture"),
+    [
+        ("cmt", "cmt"),
+        ("editorialmanager", "editorialmanager"),
+        ("hotcrp", "hotcrp"),
+        ("journal_narrative", "journal"),
+        ("openreview", "openreview"),
+        ("scholarone", "scholarone"),
+    ],
+)
+def test_mappers_name_the_packaged_schema(source, fixture):
+    payload = json.loads((FIXTURES / fixture / "minimal_review.json").read_text())
+    review = map_from(source, payload)
+    assert review["$schema"] == schema_id() == load_schema()["$id"]
+    assert next(iter(review)) == "$schema"
+
+
+def test_ai_mappers_name_the_packaged_schema():
+    review = map_with_record(
+        "openaireview",
+        json.loads((FIXTURES / "ai" / "openaireview_paper.json").read_text()),
+        review_id="review-1",
+        source_system="example-platform",
+        work_id="paper-1",
+        work_type="preprint",
+        started_at="2026-10-03T01:00:00Z",
+        ended_at="2026-10-03T01:08:00Z",
+    ).review
+    assert review["$schema"] == schema_id()
 
 
 def test_an_anonymous_human_review_needs_no_human_referee():

@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 from ..identifiers import generate_canonical_work_id, parse_canonical_work_id
+from ..schema import schema_id
 from ..util import first_paragraph, now_iso
 
 
@@ -53,6 +54,7 @@ def from_journal_narrative(
     venue = payload.get("journal") or payload.get("venue")
 
     out: dict[str, Any] = {
+        "$schema": schema_id(),
         "review_id": review_id,
         "version": "1.0.0",
         "created_at": created_at,

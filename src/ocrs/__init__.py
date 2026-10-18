@@ -29,12 +29,13 @@ from .registry import (
     supported_targets,
 )
 from .report import render_mapping_markdown
-from .schema import load_schema, validate_canonical
+from .schema import load_schema, schema_id, validate_canonical
 from .util import migrate_work_id_to_identifiers
 
 __all__ = [
     # Schema
     "load_schema",
+    "schema_id",
     "validate_canonical",
     # Registry
     "map_from",

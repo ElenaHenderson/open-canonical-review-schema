@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.3
+
+The addition is optional, so every 0.6.2 review is valid under 0.6.3.
+
+### Schema
+
+- `$schema` names the OCRS version a review follows, as the URL of that version's schema
+  (its `$id`). Validators and editors can use it to pick the schema to check the review
+  against. Before 0.6.3, a review could not carry it, since the top-level object is closed.
+
+### Python package
+
+- Every mapper sets `$schema` to the packaged schema's `$id`, as the first key of the review.
+- `schema_id()` returns that URL, for reviews written without a mapper.
+- The examples name their schema in `$schema`.
+
 ## 0.6.2
 
 All additions are optional, so every 0.6.1 review is valid under 0.6.2.

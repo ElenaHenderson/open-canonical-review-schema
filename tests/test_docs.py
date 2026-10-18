@@ -9,6 +9,7 @@ Each JSON block is a whole review, or part of one that must validate when
 added to a minimal review.
 """
 
+import importlib.util
 import json
 import re
 from importlib.metadata import version
@@ -16,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from ocrs import validate_canonical
+from ocrs import schema_id, validate_canonical
 from ocrs.catalog import load_catalog
 
 ROOT = Path(__file__).parent.parent
@@ -83,6 +84,45 @@ def test_example_metrics_use_catalog_keys(path):
     keys = {metric["key"] for metric in load_catalog()["metrics"]}
     for metric in json.loads(path.read_text()).get("metrics", []):
         assert metric["key"] in keys
+
+
+@pytest.mark.parametrize(
+    "path", sorted((ROOT / "examples").glob("*.json")), ids=lambda path: path.name
+)
+def test_example_names_the_current_schema(path):
+    """Also that the example is as `scripts/sync_examples.py` writes it."""
+    text = path.read_text(encoding="utf-8")
+    assert json.loads(text)["$schema"] == schema_id()
+    assert _sync_examples().sync(text, schema_id()) == text
+
+
+def _sync_examples():
+    spec = importlib.util.spec_from_file_location(
+        "sync_examples", ROOT / "scripts" / "sync_examples.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{\n  "$schema": "https://example.org/v0.0.1/s.json",\n  "review_id": "r"\n}\n',
+        '{\n    "$schema": "https://example.org/v0.0.1/s.json",\n    "review_id": "r"\n}\n',
+        '{"review_id": "r", "$schema": "https://example.org/v0.0.1/s.json"}',
+        '{"review_id": "r", "extensions": {"x": {"$schema": "keep"}}}',
+    ],
+    ids=["two-space", "four-space", "single-line, not first", "missing, nested kept"],
+)
+def test_sync_examples_sets_the_top_level_schema(text):
+    sync = _sync_examples().sync
+    synced = sync(text, schema_id())
+    review = json.loads(text)
+    review.pop("$schema", None)
+    assert json.loads(synced) == {"$schema": schema_id(), **review}
+    assert next(iter(json.loads(synced))) == "$schema"
+    assert sync(synced, schema_id()) == synced
 
 
 def test_readme_and_citation_name_the_package_version():
