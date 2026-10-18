@@ -14,7 +14,7 @@ import re
 import unicodedata
 from collections.abc import Iterable
 from difflib import SequenceMatcher
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel
 
@@ -28,7 +28,7 @@ _SPACE = re.compile(r"\s+")
 _SPACE_BEFORE_PUNCTUATION = re.compile(r"\s+([.,;:!?)\]])")
 
 
-class BlockKind(str, Enum):
+class BlockKind(StrEnum):
     BODY = "body"
     ABSTRACT = "abstract"
     REFERENCE = "reference"

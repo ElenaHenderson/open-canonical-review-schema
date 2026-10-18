@@ -49,18 +49,33 @@ prose are not parsed.
 
 The report is Markdown with TeX, so the review's `text_format` says so. All
 values read by a pattern are recorded as `parsed` steps.
+
+`to_reviewer3` writes an OCRS review back as such a report (see its docstring).
 """
 
 from __future__ import annotations
 
+import itertools
 import re
+from collections import Counter
 from typing import Any
 
 from ..anchors import Block
 from ..mapping import MappingResult
-from .ai import Recorder, finish
+from .ai import (
+    FENCE,
+    Fences,
+    Recorder,
+    add_section,
+    check_text,
+    extension,
+    findings_of,
+    finish,
+    indented,
+    overall_texts,
+)
 
-MAPPER_VERSION = "1.0.0"
+MAPPER_VERSION = "1.1.0"
 TEXT_FORMAT = {"markup": "markdown", "math": "tex"}
 # OCRS requires a check to say something: one of these
 CHECK_CONTENT = {"summary", "outcome", "measurements", "items"}
@@ -86,34 +101,6 @@ TITLED = re.compile(r"^\*\*(.+?)\*\*\s*(?:[—–:]|\s-)?\s*(.*)$", re.DOTALL)
 COMMENT_START = re.compile(
     r"^( {0,3})(\d+)\.\s+\*\*(.+?)\*\*\s*(?:[—–-]\s*Pages?\s+(\d+)(?:\s*[–-]\s*(\d+))?)?\s*$"
 )
-# A fenced code block opens and closes with three or more backticks or tildes
-# (a backtick fence's info string has no backticks, so ```example``` is inline code, not a fence)
-FENCE = re.compile(r"^ {0,3}(`{3,}(?=[^`]*$)|~{3,})")
-# A closing fence has nothing after its marker but whitespace (```python opens, never closes)
-CLOSING_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})\s*$")
-
-
-class Fences:
-    """Tracks whether a line is inside a fenced code block, line by line."""
-
-    def __init__(self) -> None:
-        self.open: str | None = None
-
-    def inside(self, line: str) -> bool:
-        """Whether `line` is part of a fence (its opening and closing lines included)."""
-        fence = FENCE.match(line)
-        if self.open is None:
-            if fence:
-                self.open = fence.group(1)
-                return True
-            return False
-        closing = CLOSING_FENCE.match(line)
-        if closing and closing.group(1)[0] == self.open[0]:
-            if len(closing.group(1)) >= len(self.open):
-                self.open = None
-        return True
-
-
 # The excerpt is a label, not the paper's text: `Fig 3`, `Figure 2(b)`, `Table 1`, `Eq. (4)`
 LABEL_TYPES = [
     (re.compile(r"^fig(?:ure)?s?\.?\s*\(?\d+[a-z]?\)?(?:\([a-z]\))?$", re.IGNORECASE), "figure"),
@@ -179,7 +166,7 @@ def trim_blank_lines(lines: list[str]) -> str:
 def prose_paragraphs(text: str) -> list[str]:
     """The paragraphs of `text` outside fenced code, each stripped."""
     paragraphs: list[list[str]] = [[]]
-    fences = Fences()
+    fences = Fences(lists=True)
     for line in text.splitlines():
         if fences.inside(line) or not line.strip():
             paragraphs.append([])
@@ -206,7 +193,8 @@ def split_sections(markdown: str) -> list[tuple[str | None, str]]:
     parts: list[tuple[str | None, str]] = []
     heading: str | None = None
     lines: list[str] = []
-    fences = Fences()
+    # A fence in a list item cannot hide a heading, which ends the item
+    fences = Fences(lists=True)
     for line in markdown.splitlines():
         match = None if fences.inside(line) else SECTION.match(line)
         if match:
@@ -234,11 +222,15 @@ def parse_bullets(body: str) -> tuple[list[dict[str, str]], str]:
     rest: list[str] = []
     in_item = False
     list_indent: int | None = None
-    fences = Fences()
+    fences = Fences(lists=True)
     for line in body.splitlines():
-        # A line of fenced code is never a point, though it may continue one
+        # A line of fenced code is never a point, though it may continue one; a point's own
+        # code is read relative to its indentation, as Markdown reads it
+        # A line that belongs to an open fence is never a point; a bullet that ends an item
+        # and its unclosed code is one, even when it opens a fence of its own (`- ```py`)
+        held = fences.holds(line)
         code = fences.inside(line)
-        bullet = None if code else TOP_BULLET.match(line)
+        bullet = None if held else TOP_BULLET.match(line)
         if bullet and (list_indent is None or len(bullet.group(1)) <= list_indent):
             list_indent = len(bullet.group(1)) if list_indent is None else list_indent
             items.append((len(bullet.group(1)) + len(bullet.group(2)), [bullet.group(3)]))
@@ -296,7 +288,7 @@ def table_rows(lines: list[str]) -> list[dict[str, str]]:
 def parse_references(body: str) -> dict[str, Any]:
     """The counts sentence, an entry per row of the table (or per `#N — Citation:` line),
     and any other text."""
-    fences = Fences()
+    fences = Fences(lists=True)
     lines = [(line, fences.inside(line)) for line in body.splitlines()]
     # Table rows and `#N — Citation:` entries count only outside code; examples stay prose
     table = [line for line, code in lines if not code and line.strip().startswith("|")]
@@ -339,16 +331,19 @@ def parse_comments(body: str) -> tuple[list[dict[str, str]], str]:
     comments: list[dict[str, Any]] = []
     above: list[str] = []
     lines: list[str] = []
-    fences = Fences()
+    fences = Fences(lists=True)
     list_indent: int | None = None
     for line in body.splitlines():
         # A comment starts at the list's own indentation, outside code: deeper numbered
         # items and code are part of the explanation
-        in_code = fences.inside(line)
-        start = None if in_code else COMMENT_START.match(line)
+        # The line goes through the fence tracker first: a header that ends a list item
+        # also ends any code in it
+        start = None if fences.inside(line) else COMMENT_START.match(line)
         if start and list_indent is not None and len(start.group(1)) > list_indent:
             start = None
         if start:
+            # A comment's own header is no list item: its explanation starts afresh
+            fences = Fences(lists=True)
             list_indent = len(start.group(1)) if list_indent is None else list_indent
             if comments:
                 comments[-1]["lines"] = lines
@@ -700,4 +695,489 @@ def map_reviewer3(output: str, review: dict[str, Any], blocks: list[Block] | Non
         findings["comments"] = comments
     if findings:
         review["findings"] = findings
-    return finish(review, recorder, report, ignored=set())
+    result = finish(review, recorder, report, ignored=set())
+    keep_skipped_rows(result.review, report.get("reference_check", {}).get("entries", []))
+    return result
+
+
+def identity_of(row: dict[str, str]) -> tuple[str, str]:
+    """A reference row's number and citation, as printed."""
+    return row.get("number", ""), row.get("citation", "")
+
+
+def keep_skipped_rows(review: dict[str, Any], entries: list[dict[str, str]]) -> None:
+    """Keep what `to_reviewer3` needs to put each reference row back without guessing: a
+    row skipped for having no status keeps its empty status, and a mapped row whose other
+    columns were kept keeps its number and citation with them, so they go back to the right
+    item even after items are removed, and when two rows share a number."""
+    kept = (review.get("extensions") or {}).get("reviewer3", {}).get("reference_check", {})
+    rows = list(kept.get("entries") or [None] * len(entries))
+    shared = Counter(identity_of(entry) for entry in entries if entry.get("status"))
+    changed = False
+    for index, entry in enumerate(entries):
+        if not entry.get("status"):
+            rows[index] = {**(rows[index] or {}), "status": ""}
+            changed = True
+        elif (rows[index] or shared[identity_of(entry)] > 1) and any(identity_of(entry)):
+            # Rows sharing a number and citation all keep them, so their order tells them apart
+            identity = {key: entry[key] for key in ("number", "citation") if entry.get(key)}
+            rows[index] = {**identity, **(rows[index] or {})}
+            changed = True
+    if changed:
+        references = review.setdefault("extensions", {}).setdefault("reviewer3", {})
+        references.setdefault("reference_check", {})["entries"] = rows
+
+
+# OCRS → Reviewer3
+
+# Findings written as Reviewer Comments, in this order, and the title one gets without its own
+COMMENT_KINDS = {
+    "comments": "Comment",
+    "weaknesses": "Weakness",
+    "questions": "Question",
+    "changes": "Requested Change",
+}
+CHECK_SECTIONS = {
+    "ai_text_detection": "AI Text Detection",
+    "fatal_flaw_screen": "Fatal Flaws",
+    "reference_verification": "Reference Check",
+}
+NO_FATAL_FLAWS = "No fatal methodological flaws were identified."
+COMMENT_ID = re.compile(r"^comment-(\d+)$")
+FLAW_ID = re.compile(r"^fatal-flaw-(\d+)$")
+
+
+def demoted(text: str) -> str:
+    """`text` with its own `###` headings made `####`, outside fenced code (read as the
+    parser reads it), so free text from another review (Markdown too, often) does not
+    start sections of the report."""
+    fences = Fences(lists=True)
+    return "\n".join(
+        line if fences.inside(line) or not SECTION.match(line) else f"#{line}"
+        for line in text.split("\n")
+    )
+
+
+def nested(text: str) -> str:
+    """`text` with each line that would start a new comment (`2. **Title**`) indented by a
+    space, with the lines of its list item, outside fenced code, so it stays in the comment
+    and its item keeps its shape; Markdown renders it the same."""
+    fences = Fences(lists=True)
+    lines = []
+    item: int | None = None  # content indentation of the item being shifted
+    for line in text.split("\n"):
+        indent = len(line) - len(line.lstrip(" "))
+        if item is not None and line.strip() and indent < item:
+            item = None
+        code = fences.inside(line)
+        header = COMMENT_START.match(line) if not code else None
+        if header and not line[0].isspace():
+            item = len(line) - len(line.lstrip(" ")) + len(header.group(2)) + 2
+            lines.append(f" {line}")
+        elif item is not None:
+            lines.append(f" {line}" if line.strip() else line)
+        else:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def read_back(kind: str, body: str) -> dict[str, Any]:
+    """The check the mapper reads out of `body` as the section of its kind."""
+    report = parse_report(f"### {CHECK_SECTIONS[kind]}\n\n{body}\n")
+    recorder = Recorder(checks_quotes=False)
+    if kind == "ai_text_detection" and report.get("ai_text_detection"):
+        return ai_text_check(report["ai_text_detection"], "check", recorder)
+    if kind == "fatal_flaw_screen" and report.get("fatal_flaws"):
+        return fatal_flaw_check(report["fatal_flaws"], "check", [], recorder)
+    if kind == "reference_verification" and report.get("reference_check"):
+        return reference_check(report["reference_check"], "check", recorder)
+    return {}
+
+
+def unsaid(check: dict[str, Any], body: str) -> dict[str, Any]:
+    """What `check` says that `body`, its section as Reviewer3 writes it, does not: an outcome
+    the section does not state, who ran it, measurements and items it does not give."""
+    said = read_back(check["kind"], body)
+    rest: dict[str, Any] = {}
+    if check.get("outcome") and check["outcome"] != said.get("outcome"):
+        rest["outcome"] = check["outcome"]
+    performer = (check.get("performed_by") or {}).get("name")
+    if performer and performer != (said.get("performed_by") or {}).get("name"):
+        rest["performed_by"] = {"name": performer}
+    given = [(m.get("key"), m.get("value")) for m in said.get("measurements") or []]
+    measurements = [
+        m for m in check.get("measurements") or [] if (m.get("key"), m.get("value")) not in given
+    ]
+    if measurements:
+        rest["measurements"] = measurements
+    if check.get("items") and check["kind"] != "reference_verification":
+        rest["items"] = check["items"]
+    return rest
+
+
+def write_bullets(points: list[dict[str, Any]]) -> str:
+    """`- **Title** — text` (or `- text`) for each point, its later lines indented under it.
+    Text that opens with a code fence starts on its own line, or the fence would never
+    open and its closing marker would open one instead."""
+
+    def bullet(point: dict[str, Any]) -> str:
+        text = indented(point["text"], "  ")
+        if FENCE.match(point["text"].split("\n")[0]):
+            text = f"\n  {text}"
+        if point.get("title"):
+            title = indented(point["title"], "  ")
+            return f"- **{title}** —" + (text if text.startswith("\n") else f" {text}")
+        # An item may start empty; the marker's trailing space keeps it an item
+        return f"- {text}"
+
+    return "\n".join(bullet(point) for point in points)
+
+
+def is_fraction(measurement: dict[str, Any]) -> bool:
+    """A share of the text: a 0–1 number in `fraction` units, or with no unit."""
+    value, unit = measurement.get("value"), measurement.get("unit")
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    return unit == "fraction" or (unit is None and 0 <= value <= 1)
+
+
+def percent(value: float) -> str:
+    return f"{round(value * 100, 4):g}%"
+
+
+def write_ai_text(check: dict[str, Any]) -> str:
+    """The check's own sentence, or one saying its fractions and who measured them."""
+    if check.get("summary"):
+        return check["summary"]
+    shares, others = [], []
+    for m in check.get("measurements") or []:
+        name = m.get("label") or m["key"]
+        if is_fraction(m):
+            shares.append(f"{percent(m['value'])} {name}")
+        else:
+            others.append(f"{name}: {m['value']}" + (f" {m['unit']}" if m.get("unit") else ""))
+    sentence = f"{' and '.join(shares)} text detected." if shares else ""
+    if others:
+        sentence = f"{sentence} {'; '.join(others)}.".strip()
+    detector = (check.get("performed_by") or {}).get("name")
+    if detector:
+        sentence = f"{sentence} See the full {detector} report.".strip()
+    return sentence
+
+
+def write_fatal_flaws(check: dict[str, Any], flaws: list[dict[str, Any]]) -> str:
+    """The check's prose, then its flaws as points.
+
+    A flaw the mapper made has an ID `fatal-flaw-<n>`, its place among the section's points;
+    a place no flaw takes was a bulleted verdict ("- No fatal … identified."), which the
+    mapper put in the summary. Such verdicts go back to those places as points, so the
+    flaws keep their IDs.
+    """
+    summary = check.get("summary")
+    if not summary and not flaws and check.get("outcome") == "no_issues":
+        summary = NO_FATAL_FLAWS
+    places = {int(m.group(1)): flaw for flaw in flaws if (m := FLAW_ID.match(flaw.get("id", "")))}
+    paragraphs = summary.split("\n\n") if summary else []
+    verdicts = [i for i, p in enumerate(paragraphs) if NO_FATAL.match(p.strip())]
+    # Count the empty places before listing them: an ID is any string, and one such as
+    # fatal-flaw-1000000000 must not mean listing a billion places
+    last = max(places, default=0)
+    gaps = last - len(places)
+    if not gaps or len(places) != len(flaws) or len(verdicts) < gaps:
+        return "\n\n".join(part for part in (summary, write_bullets(flaws)) if part)
+    # The bulleted verdicts came after the section's prose, in order, each a block that
+    # runs from its verdict to the next (a verdict point may have paragraphs of its own)
+    starts = verdicts[-gaps:]
+    prose = "\n\n".join(paragraphs[: starts[0]])
+    ends = [*starts[1:], len(paragraphs)]
+    texts = iter("\n\n".join(paragraphs[a:b]) for a, b in zip(starts, ends, strict=True))
+    points = [
+        write_bullets([places[n]]) if n in places else f"- {indented(next(texts), '  ')}"
+        for n in range(1, last + 1)
+    ]
+    return "\n\n".join(part for part in (prose, "\n".join(points)) if part)
+
+
+def cell(value: Any) -> str:
+    return str(value).replace("|", "\\|").replace("\n", " ")
+
+
+def write_reference_summary(check: dict[str, Any]) -> str | None:
+    """The check's own sentence, or `Checked N references: n verified, …` from its counts."""
+    if check.get("summary"):
+        return check["summary"]
+    counts = {m["key"]: m["value"] for m in check.get("measurements") or [] if "key" in m}
+    if "checked" not in counts:
+        return None
+    rest = [f"{value} {key.replace('_', ' ')}" for key, value in counts.items() if key != "checked"]
+    sentence = f"Checked {counts['checked']} references"
+    return f"{sentence}: {', '.join(rest)}." if rest else f"{sentence}."
+
+
+def reference_rows(check: dict[str, Any], kept: list[Any]) -> list[dict[str, str]]:
+    """A row per item, with the columns the mapper did not read, and the rows it skipped
+    for having no status, each where it was.
+
+    Kept columns that came with a number and citation go to the item with that number and
+    citation (an item that is gone takes them with it); the rest go to the items in order.
+    """
+    items = check.get("items") or []
+    entries = [*kept, *([None] * len(items))]
+    # A skipped row kept its empty status; a mapped one only the columns not read
+    skipped = [isinstance(entry, dict) and "status" in entry for entry in entries]
+
+    def identity(item: dict[str, Any]) -> tuple[str, str]:
+        link = item.get("target") or {}
+        return link.get("ref", ""), (link.get("work") or {}).get("citation", "")
+
+    # The k-th kept row with a number and citation goes to the k-th item with them
+    by_identity: dict[tuple[str, str], list[int]] = {}
+    for i, item in enumerate(items):
+        by_identity.setdefault(identity(item), []).append(i)
+    seen: Counter[tuple[str, str]] = Counter()
+    claimed: dict[int, int] = {}  # entry index -> item index
+    for e, entry in enumerate(entries):
+        if skipped[e] or not isinstance(entry, dict) or not any(identity_of(entry)):
+            continue
+        wanted = identity_of(entry)
+        matches = by_identity.get(wanted, [])
+        claimed[e] = matches[seen[wanted]] if seen[wanted] < len(matches) else -1
+        seen[wanted] += 1
+    free = iter([i for i in range(len(items)) if i not in claimed.values()])
+    rows = []
+    for e, entry in enumerate(entries):
+        if skipped[e]:
+            rows.append(dict(entry))
+            continue
+        index = claimed[e] if e in claimed else next(free, -1)
+        if index < 0:
+            continue
+        item = items[index]
+        link = item.get("target") or {}
+        work = link.get("work") or {}
+        row = {"number": link.get("ref", ""), "citation": work.get("citation", "")}
+        row["citation"] = row["citation"] or work.get("title", "")
+        row["status"] = item["status"]
+        if item.get("notes"):
+            row["notes"] = item["notes"]
+        rows.append(row | (entry or {}))
+    return rows
+
+
+def write_reference_check(check: dict[str, Any], kept: dict[str, Any]) -> str:
+    parts = [write_reference_summary(check)]
+    rows = reference_rows(check, kept.get("entries") or [])
+    if rows:
+        columns = ["number", "citation", "status"]
+        columns += dict.fromkeys(key for row in rows for key in row if key not in columns)
+        names = {"number": "#", "citation": "Citation", "status": "Status"}
+        table = [
+            "| " + " | ".join(names.get(key, key) for key in columns) + " |",
+            "| " + " | ".join("---" for _ in columns) + " |",
+            *("| " + " | ".join(cell(row.get(key, "")) for key in columns) + " |" for row in rows),
+        ]
+        parts.append("\n".join(table))
+    parts.append(kept.get("text"))
+    return "\n\n".join(part for part in parts if part)
+
+
+def excerpt_of(link: dict[str, Any]) -> str | None:
+    """The comment's excerpt: the quote, or a figure, table or equation label."""
+    if link.get("quote"):
+        return link["quote"]
+    ref = link.get("ref") or ""
+    if link.get("type") in ("figure", "table", "equation"):
+        if any(pattern.match(ref) for pattern, _ in LABEL_TYPES):
+            return ref
+    return None
+
+
+def write_comment(number: int | str, comment: dict[str, Any]) -> str:
+    """`N. **Title** — Page P`, the excerpt as a blockquote, then the explanation."""
+    # A comment's title is one line of the report
+    head = f"{number}. **{' '.join(comment['title'].split())}**"
+    if comment.get("page"):
+        pages = str(comment["page"])
+        if comment.get("page_end") and int(comment["page_end"]) > int(comment["page"]):
+            pages += f"–{comment['page_end']}"
+        head += f" — Page {pages}"
+    parts = [head]
+    if comment.get("excerpt"):
+        parts.append(
+            "\n".join(f"> {line}" if line else ">" for line in comment["excerpt"].split("\n"))
+        )
+    elif comment.get("text", "").lstrip().startswith(">"):
+        # An explanation that opens with a quote would be read back as the excerpt; an empty
+        # excerpt before it keeps it the explanation
+        parts.append(">")
+    if comment.get("text"):
+        parts.append(nested(demoted(comment["text"])))
+    return "\n\n".join(parts)
+
+
+def comment_from(point: dict[str, Any], default_title: str) -> dict[str, Any]:
+    """A comment from a finding: its first link gives the page and the excerpt."""
+    comment: dict[str, Any] = {"title": point.get("title") or default_title, "text": point["text"]}
+    links = point.get("evidence_links") or []
+    if links:
+        location = links[0].get("location") or {}
+        comment["page"], comment["page_end"] = location.get("page"), location.get("page_end")
+        comment["excerpt"] = excerpt_of(links[0])
+    return comment
+
+
+def write_comments(points: list[tuple[dict[str, Any], str]], kept: list[Any]) -> str:
+    """The comments in the order the reviewer wrote them, with their own numbers.
+
+    One the mapper skipped for having no explanation left its title and number in
+    extensions, at its place in the list. A mapped comment's number is in its ID
+    (`comment-7`); any other comment is numbered after the highest number in use.
+    """
+    numbered: list[tuple[dict[str, Any], str | None]] = []
+    remaining = iter(points)
+
+    def mapped(point: dict[str, Any], label: str) -> tuple[dict[str, Any], str | None]:
+        number = COMMENT_ID.match(point.get("id", ""))
+        return comment_from(point, label), number.group(1) if number else None
+
+    def skipped(entry: Any) -> bool:
+        return isinstance(entry, dict) and bool(entry.get("title"))
+
+    def kept_number(entry: dict[str, Any]) -> str | None:
+        number = str(entry.get("number") or "")
+        return number if number.isdigit() else None
+
+    # Mapped comments fill the places the mapper left them, in order. A printed number is
+    # not a place (a list may run 3, 2, 1), so a comment removed before a skipped one moves
+    # the skipped one; an unedited review comes back as it was
+    for entry in kept:
+        if skipped(entry):
+            numbered.append((entry, kept_number(entry)))
+        elif (point := next(remaining, None)) is not None:
+            numbered.append(mapped(*point))
+    numbered += [mapped(*point) for point in remaining]
+    # Numbers are written as they were, repeats included: the mapper numbers comments by
+    # position when their numbers repeat, so a list numbered 3, 3, 3 keeps its IDs
+    # Printed numbers are kept as printed (`01`); new comments follow the highest
+    known = [int(number) for _, number in numbered if number is not None]
+    free = (str(n) for n in itertools.count(max(known, default=0) + 1))
+    numbers = [number if number is not None else next(free) for _, number in numbered]
+    return "\n\n".join(
+        write_comment(number, comment)
+        for (comment, _), number in zip(numbered, numbers, strict=True)
+    )
+
+
+def to_reviewer3(canonical: dict[str, Any]) -> str:
+    """An OCRS review as Reviewer3's Markdown report.
+
+    `target.title` is the paper's title and contributions are the Overview. The first
+    check of each kind Reviewer3 runs is its section: AI Text Detection, Fatal Flaws (with
+    the weaknesses the check names as its flaws) and Reference Check (its items as the
+    table). A check without its own sentence gets one from its measurements, outcome or
+    counts. Comments, the other weaknesses, questions and requested changes are Reviewer
+    Comments, in that order; a comment's first evidence link gives its page and excerpt,
+    and one without a title is titled by its kind. The summary, the full text, strengths
+    and other checks, which Reviewer3 does not report, are written under headings of their
+    own (the mapper keeps them in `extensions.reviewer3`). Severities, scores, the decision
+    and text for the editors only are left out.
+    """
+    kept = extension(canonical, "reviewer3")
+    other: dict[str, str] = dict(kept.get("other") or {})
+    sections = ["# Review Report"]
+    title = (canonical.get("target") or {}).get("title")
+    if title:
+        sections.append(title)
+    sections.append("---")
+    if other.get("preamble"):
+        sections.append(other.pop("preamble"))
+    opinion = canonical.get("opinion") or {}
+    contributions = [c for c in opinion.get("contributions") or [] if c.get("text")]
+    overview_rest = other.pop("Overview", None)
+    if contributions or overview_rest:
+        body = "\n\n".join(p for p in (overview_rest, write_bullets(contributions)) if p)
+        sections.append(f"### Overview\n\n{body}")
+
+    checks: dict[str, dict[str, Any]] = {}
+    extra_checks = []
+    for check in canonical.get("checks") or []:
+        if check["kind"] in CHECK_SECTIONS and check["kind"] not in checks:
+            checks[check["kind"]] = check
+        else:
+            extra_checks.append(check)
+    weaknesses = findings_of(canonical, "weaknesses")
+    fatal_ids = {
+        finding_id
+        for check in canonical.get("checks") or []
+        if check["kind"] == "fatal_flaw_screen"
+        for finding_id in check.get("finding_ids") or []
+    }
+
+    def flaws_of(check: dict[str, Any]) -> list[dict[str, Any]]:
+        named = set(check.get("finding_ids") or [])
+        return [w for w in weaknesses if w.get("id") in named]
+
+    def native(check: dict[str, Any], kept_references: dict[str, Any]) -> str:
+        """The check as Reviewer3 writes its kind, or in prose when that says nothing (a
+        check with only an outcome, say)."""
+        if check["kind"] == "ai_text_detection":
+            body = write_ai_text(check)
+        elif check["kind"] == "fatal_flaw_screen":
+            body = write_fatal_flaws(check, flaws_of(check))
+        else:
+            body = write_reference_check(check, kept_references)
+        if not body:
+            return check_text(check)
+        rest = check_text(unsaid(check, body))
+        return f"{body}\n\n{rest}" if rest else body
+
+    def check_body(kind: str) -> str:
+        check = checks.get(kind)
+        if check is None and kind == "reference_verification" and kept.get("reference_check"):
+            # A table whose rows all lack a status made no check; the mapper kept it
+            return write_reference_check({}, kept["reference_check"])
+        return native(check, kept.get("reference_check") or {}) if check else ""
+
+    for kind, heading in CHECK_SECTIONS.items():
+        body = check_body(kind)
+        if body:
+            sections.append(f"### {heading}\n\n{demoted(body)}")
+        # A repeated section the mapper kept follows the one it mapped
+        if heading in other and kind != "ai_text_detection":
+            sections.append(f"### {heading}\n\n{other.pop(heading)}")
+
+    points = [
+        (point, label)
+        for kind, label in COMMENT_KINDS.items()
+        for point in findings_of(canonical, kind)
+        if not (kind == "weaknesses" and point.get("id") in fatal_ids)
+    ]
+    above = other.pop(COMMENTS_GROUP, None)
+    if points or above or kept.get("comments"):
+        comments = write_comments(points, kept.get("comments") or [])
+        body = "\n\n".join(part for part in (above, comments) if part)
+        sections.append(f"### {COMMENTS_GROUP}\n\n{body}")
+
+    summary, text = overall_texts(canonical)
+    if summary:
+        add_section(other, "Summary", summary)
+    if text:
+        add_section(other, "Review", text)
+    strengths = findings_of(canonical, "strengths")
+    if strengths:
+        add_section(other, "Strengths", write_bullets(strengths))
+    # A second check of a kind Reviewer3 runs is written as Reviewer3 writes that kind, under
+    # a numbered heading of its own; any other check in prose. The mapper keeps both
+    repeats: Counter[str] = Counter()
+    for check in extra_checks:
+        kind = check["kind"]
+        if kind in CHECK_SECTIONS:
+            repeats[kind] += 1
+            heading = f"{CHECK_SECTIONS[kind]} ({repeats[kind] + 1})"
+            body = native(check, {})
+        else:
+            heading, body = check.get("label") or kind, check_text(check)
+        if body:
+            add_section(other, heading, body)
+    sections += [f"### {heading}\n\n{demoted(text)}" for heading, text in other.items()]
+    return "\n\n".join(sections) + "\n"

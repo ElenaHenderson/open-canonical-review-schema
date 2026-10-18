@@ -13,9 +13,12 @@ from ..schema import schema_id
 from ..util import (
     epoch_ms_to_iso,
     first_paragraph,
+    first_present_item,
     guess_scale_from_value,
+    is_score_field,
     map_recommendation_from_numeric,
     map_recommendation_from_text,
+    match_alias,
     normalize_linear,
     now_iso,
     parse_numeric_prefix,
@@ -38,6 +41,17 @@ KNOWN_TEXT_KEYS = {
     "strengths",
     "weaknesses",
 }
+
+
+RECOMMENDATION_KEYS = (
+    "recommendation",
+    "rating",
+    "decision",
+    "overallEvaluation",
+    "overall_rating",
+    "overall",
+)
+CONFIDENCE_KEYS = ("confidence", "reviewer_confidence")
 
 
 def _extract_time(note: dict[str, Any]) -> str:
@@ -154,7 +168,8 @@ def _collect_findings(content: dict[str, Any]) -> dict[str, Any]:
                 out[k] = items
         elif isinstance(v, str) and v.strip():
             # if newline-separated
-            bullets = [b.strip("-* \t") for b in v.splitlines() if b.strip()]
+            bullets = [b.strip("-* \t") for b in v.splitlines()]
+            bullets = [b for b in bullets if b]
             if bullets:
                 out[k] = [{"text": b} for b in bullets]
     return out
@@ -172,14 +187,9 @@ def _metric_key_for_label(
     if lcf in idx:
         m = idx[lcf]
         return m["key"], m.get("aspect")
-    if lcf in amap:
-        key = amap[lcf]
-        # best effort aspect from catalog if present
+    key = match_alias(lcf, amap)
+    if key:
         return key, None
-    # fuzzy contains match over aliases
-    for alias, key in amap.items():
-        if alias in lcf or lcf in alias:
-            return key, None
     return "other", "other"
 
 
@@ -257,24 +267,9 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
             out["opinion"]["summary"] = first_paragraph(any_text, 200)
 
     # decision and metrics
-    rec_raw = None
-    for k in (
-        "recommendation",
-        "rating",
-        "decision",
-        "overallEvaluation",
-        "overall_rating",
-        "overall",
-    ):
-        if k in content:
-            rec_raw = content.get(k)
-            break
-
-    conf_raw = None
-    for k in ("confidence", "reviewer_confidence"):
-        if k in content:
-            conf_raw = content.get(k)
-            break
+    # The first of these the form fills is the recommendation; a null one does not hide the next
+    rec_key, rec_raw = first_present_item(content, RECOMMENDATION_KEYS)
+    conf_key, conf_raw = first_present_item(content, CONFIDENCE_KEYS)
 
     # Parse recommendation
     decision = {}
@@ -282,9 +277,10 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
         num, rest = parse_numeric_prefix(rec_raw)
         if num is not None:
             scale = guess_scale_from_value(num)
+            # The reviewer's own words first, as for CMT and HotCRP, then the number
             decision["recommendation"] = (
-                map_recommendation_from_numeric(num, scale)
-                or map_recommendation_from_text(rest or "")
+                map_recommendation_from_text(rest or "")
+                or map_recommendation_from_numeric(num, scale)
                 or "borderline"
             )
             # also store overall metric
@@ -332,22 +328,26 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
 
     # Additional structured metric fields from content
     for k, v in content.items():
-        if k in KNOWN_TEXT_KEYS:
+        # The fields read above; another score field (a numeric `rating` beside a text
+        # `recommendation`) is a metric, unless it repeats one already there
+        if k in KNOWN_TEXT_KEYS or k in (rec_key, conf_key):
             continue
-        if k in {
-            "recommendation",
-            "rating",
-            "decision",
-            "overallEvaluation",
-            "confidence",
-            "reviewer_confidence",
-        }:
+        if not is_score_field(k):
             continue
         # numeric-like fields
         num, rest = parse_numeric_prefix(v)
         if num is None:
             continue
         key, _aspect = _metric_key_for_label(k.replace("_", " ").strip(), amap, idx)
+        # A recommendation or confidence field is that score, whatever its name says
+        if k in RECOMMENDATION_KEYS:
+            key = "overall"
+        elif k in CONFIDENCE_KEYS:
+            key = "confidence"
+        # One overall score and one confidence: a second field naming either (`overall_rating`
+        # beside a numeric `rating`) is the same score, but kept when the first was text
+        if key in ("overall", "confidence") and any(m["key"] == key for m in out["metrics"]):
+            continue
         aspect = None
         for m in catalog.get("metrics", []):
             if m["key"] == key:

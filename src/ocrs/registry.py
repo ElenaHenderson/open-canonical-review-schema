@@ -42,12 +42,16 @@ _MAPPER_VERSIONS = {
     "reviewer3": reviewer3.MAPPER_VERSION,
 }
 
-_TO: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+# AI reviewer targets give the reviewer's own output: JSON as a dict, or Markdown text.
+_TO: dict[str, Callable[[dict[str, Any]], dict[str, Any] | str]] = {
     "cmt": to_cmt,
+    "deepreview": deepreview.to_deepreview,
     "editorialmanager": to_editorialmanager,
     "hotcrp": to_hotcrp,
     "journal_narrative": to_journal_narrative,
+    "openaireview": openaireview.to_openaireview,
     "openreview": to_openreview,
+    "reviewer3": reviewer3.to_reviewer3,
     "scholarone": to_scholarone,
 }
 
@@ -131,7 +135,9 @@ def map_with_record(
     return _FROM_WITH_RECORD[source](output, review, blocks)
 
 
-def map_to(target: str, canonical_review: dict[str, Any]) -> dict[str, Any]:
+def map_to(target: str, canonical_review: dict[str, Any]) -> dict[str, Any] | str:
+    """Write an OCRS review in a target's format. An AI reviewer target gives its own output:
+    OpenAIReview's paper.json as a dict, DeepReview's and Reviewer3's report as Markdown."""
     validate_canonical(canonical_review)
     if target not in _TO:
         raise ValueError(f"Unsupported target: {target}. Supported: {supported_targets()}")

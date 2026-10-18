@@ -98,7 +98,7 @@ class TestOpenAIReview:
         assert review["provenance"]["mapping"] == {
             "mapping_spec_id": "canonical-review.mapping.v1",
             "mapping_spec_version": "1.1.0",
-            "mapper_version": "1.0.2",
+            "mapper_version": "1.1.0",
         }
         assert review["target"]["version"] == RUN["work_version"]
         assert review["review_context"] == {"requested_by": "example-platform"}
@@ -194,3 +194,35 @@ class TestRecorder:
             "cosmetic",
             None,
         )
+
+
+class TestPickMethod:
+    def test_the_only_method(self):
+        output = {"methods": {"zero_shot__m": {"overall_feedback": "Fine.", "comments": []}}}
+        review = map_with_record("openaireview", output, **RUN).review
+        assert review["opinion"]["summary"] == "Fine."
+        assert "findings" not in review
+
+    def test_unmerged_alone_is_not_mapped(self):
+        output = {"methods": {"progressive_original__m": {}, "a__m": {}, "b__m": {}}}
+        with pytest.raises(ValueError, match="Cannot tell which OpenAIReview method"):
+            map_with_record("openaireview", output, **RUN)
+
+    def test_no_feedback_and_no_tokens(self):
+        output = {"methods": {"progressive__m": {"comments": [{"explanation": "A gap."}]}}}
+        review = map_with_record("openaireview", output, **RUN).review
+        assert review["opinion"] == {}
+        assert "outputs" not in review["referee"]["ai_referee"]
+        assert _weaknesses(review) == [{"id": "comment-1", "text": "A gap."}]
+
+
+def test_ocrs_version_when_the_package_is_not_installed(monkeypatch):
+    from importlib.metadata import PackageNotFoundError
+
+    from ocrs.mappers import ai
+
+    def missing(name):
+        raise PackageNotFoundError(name)
+
+    monkeypatch.setattr(ai, "version", missing)
+    assert ai.ocrs_version() == "unknown"

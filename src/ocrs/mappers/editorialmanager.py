@@ -13,6 +13,7 @@ from ..schema import schema_id
 from ..util import (
     first_paragraph,
     map_recommendation_from_text,
+    match_alias,
     now_iso,
     parse_date_flexible,
     parse_labeled_score,
@@ -186,14 +187,8 @@ def _map_ratings_to_metrics(
             m = idx[lcf]
             key = m["key"]
             aspect = m.get("aspect", "other")
-        elif lcf in amap:
-            key = amap[lcf]
         else:
-            # Fuzzy match
-            for alias, k in amap.items():
-                if alias in lcf or lcf in alias:
-                    key = k
-                    break
+            key = match_alias(lcf, amap) or "other"
 
         # Look up aspect from catalog if we found a key
         if key != "other":

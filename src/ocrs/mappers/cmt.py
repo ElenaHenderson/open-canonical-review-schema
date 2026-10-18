@@ -12,9 +12,12 @@ from ..identifiers import generate_canonical_work_id
 from ..schema import schema_id
 from ..util import (
     first_paragraph,
+    first_present,
     guess_scale_from_value,
+    is_score_field,
     map_recommendation_from_numeric,
     map_recommendation_from_text,
+    match_alias,
     normalize_linear,
     now_iso,
     parse_numeric_prefix,
@@ -86,7 +89,8 @@ def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, An
     catalog = load_catalog()
     amap = alias_map(catalog)
 
-    review_id = str(payload.get("reviewId") or payload.get("id") or uuid.uuid4())
+    source_review_id = first_present(payload, ("reviewId", "id"))
+    review_id = str(source_review_id if source_review_id is not None else uuid.uuid4())
     created_at = (
         payload.get("createdAt") if isinstance(payload.get("createdAt"), str) else now_iso()
     )
@@ -112,7 +116,7 @@ def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, An
         "created_at": created_at,
         "provenance": {
             "source_system": "cmt",
-            "source_review_id": str(payload.get("reviewId") or payload.get("id") or ""),
+            "source_review_id": "" if source_review_id is None else str(source_review_id),
             "imported_at": now_iso(),
             "mapping": {
                 "mapping_spec_id": "canonical-review.mapping.v1",
@@ -158,7 +162,7 @@ def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, An
 
     # Decision
     dec = {}
-    rec_raw = payload.get("overallEvaluation") or payload.get("recommendation")
+    rec_raw = first_present(payload, ("overallEvaluation", "recommendation"))
     if rec_raw is not None:
         num, rest = parse_numeric_prefix(rec_raw)
         if num is not None:
@@ -212,26 +216,31 @@ def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, An
 
     # Metrics from remaining numeric fields
     for k, v in payload.items():
-        if k in NARR_KEYS or k in {
-            "reviewId",
-            "id",
-            "createdAt",
-            "paperId",
-            "submissionId",
-            "conferenceName",
-            "trackName",
-            "reviewerId",
-            "overallEvaluation",
-            "recommendation",
-            "confidence",
-        }:
+        if (
+            k in NARR_KEYS
+            or k
+            in {
+                "reviewId",
+                "id",
+                "createdAt",
+                "paperId",
+                "submissionId",
+                "conferenceName",
+                "trackName",
+                "reviewerId",
+                "overallEvaluation",
+                "recommendation",
+                "confidence",
+            }
+            or not is_score_field(k)
+        ):
             continue
         num, rest = parse_numeric_prefix(v)
         if num is None:
             continue
         label = k.replace("_", " ").strip()
         lcf = label.casefold()
-        key = amap.get(lcf, "other")
+        key = match_alias(lcf, amap) or "other"
         aspect = next(
             (m.get("aspect") for m in catalog.get("metrics", []) if m["key"] == key),
             "other",

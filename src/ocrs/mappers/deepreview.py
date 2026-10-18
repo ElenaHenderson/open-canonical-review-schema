@@ -40,6 +40,8 @@ which points it covers. The report states no severity. DeepReview's own page
 shows Potential Mistakes points as Major and Minor Corrections as Minor, so the
 tier is looked up as `major` or `minor`; a tier the mapper does not know is
 recorded as a coercion and left without severity.
+
+`to_deepreview` writes an OCRS review back as such a report (see its docstring).
 """
 
 from __future__ import annotations
@@ -49,9 +51,20 @@ from typing import Any
 
 from ..anchors import Block
 from ..mapping import MappingResult
-from .ai import Recorder, finish
+from .ai import (
+    FENCE,
+    Fences,
+    Recorder,
+    add_section,
+    check_text,
+    extension,
+    findings_of,
+    finish,
+    indented,
+    overall_texts,
+)
 
-MAPPER_VERSION = "1.0.0"
+MAPPER_VERSION = "1.1.0"
 TIER_SEVERITY = {
     "Potential Mistakes and Improvements": "major",
     "Minor Corrections and Typos": "minor",
@@ -195,11 +208,26 @@ def unquote(token: str) -> str:
 # Parsing the report
 
 
+def fenced_lines(text: str) -> set[int]:
+    """Where each line inside a fenced code block outside lists starts in `text` (a fence
+    in a list item cannot hide a heading)."""
+    fences, starts, offset = Fences(lists=True), set(), 0
+    for line in text.splitlines(keepends=True):
+        if fences.inside(line):
+            starts.add(offset)
+        offset += len(line)
+    return starts
+
+
 def split_sections(text: str, level: int) -> list[tuple[str | None, str]]:
-    """(heading, body) for each heading of exactly `level` #s; text before the first has None."""
+    """(heading, body) for each heading of exactly `level` #s; text before the first has None.
+    A heading inside a fenced code block is part of the code."""
     marker = re.compile(rf"^{'#' * level} (?!#)(.*)$", re.MULTILINE)
+    fenced = fenced_lines(text)
     parts, heading, start = [], None, 0
     for match in marker.finditer(text):
+        if match.start() in fenced:
+            continue
         parts.append((heading, text[start : match.start()]))
         heading, start = match.group(1).strip(), match.end()
     parts.append((heading, text[start:]))
@@ -549,4 +577,266 @@ def map_deepreview(
     findings = {kind: points for kind, points in findings.items() if points}
     if findings:
         review["findings"] = findings
-    return finish(review, recorder, report, ignored=set())
+    result = finish(review, recorder, report, ignored=set())
+    keep_skipped_points(result.review, report.get("issues", []))
+    return result
+
+
+def keep_skipped_points(review: dict[str, Any], issues: list[dict[str, Any]]) -> None:
+    """Keep each point skipped for having no text with its empty text, even a bare one that
+    left nothing else, so `to_deepreview` writes it back in its place and the points after
+    it keep their IDs."""
+    for p, part in enumerate(issues):
+        for t, tier in enumerate(part["tiers"]):
+            for i, item in enumerate(tier["items"]):
+                if tier["heading"] and not item.get("text"):
+                    kept = review.setdefault("extensions", {}).setdefault("deepreview", {})
+                    kept_part = slot(kept, "issues", p, len(issues))
+                    kept_tier = slot(kept_part, "tiers", t, len(part["tiers"]))
+                    slot(kept_tier, "items", i, len(tier["items"]))["text"] = ""
+
+
+def slot(parent: dict[str, Any], key: str, index: int, length: int) -> dict[str, Any]:
+    """The dict at `parent[key][index]`, making the list (as long as the report's) and the
+    dict when the mapper kept nothing there."""
+    items = parent.setdefault(key, [None] * length)
+    if not isinstance(items[index], dict):
+        items[index] = {}
+    return items[index]
+
+
+# OCRS → DeepReview
+
+BOILERPLATE = "# HIGH LEVEL SUMMARY\n---"
+ISSUE_ID = re.compile(r"^issue-(\d+)\.(\d+)\.(\d+)$")
+GENERAL_PART = "[General]"
+SEVERITY_TIER = {
+    "critical": "Potential Mistakes and Improvements",
+    "major": "Potential Mistakes and Improvements",
+    "minor": "Minor Corrections and Typos",
+    "info": "Minor Corrections and Typos",
+}
+NUMBERED_TIERS = {"Potential Mistakes and Improvements"}
+# OCRS findings DeepReview has no section for, each written under a heading of its own
+EXTRA_FINDINGS = {"questions": "Questions", "changes": "Requested Changes", "comments": "Comments"}
+LIST_MARKER = re.compile(r"^(?:\d+\.|[-*])\s")
+SECTION_HEADING = re.compile(r"^## (?!#)", re.MULTILINE)
+
+
+def demoted(text: str) -> str:
+    """`text` with its own `##` headings made `###`, outside fenced code (read as the
+    parser reads it), so free text from another review (Markdown too, often) does not
+    start sections of the report."""
+    fences = Fences(lists=True)
+    return "\n".join(
+        line if fences.inside(line) else SECTION_HEADING.sub("### ", line)
+        for line in text.split("\n")
+    )
+
+
+def write_item(marker: str, head: str | None, text: str) -> str:
+    """A list item: `**head:** text`, or just text. The text starts on the next line when
+    starting it on the marker's line would change how the report reads back: when it
+    begins with a list or a code fence, or when all its later lines are indented (the
+    parser takes the indentation they share as the list's)."""
+    pad = " " * (len(marker) + 1)
+    later = [line for line in text.split("\n")[1:] if line.strip()]
+    own_line = (
+        LIST_MARKER.match(text)
+        or FENCE.match(text.split("\n")[0])
+        or (later and all(line[0] in " \t" for line in later))
+    )
+    # A heading the reviewer wrapped keeps its later lines indented under the marker
+    head = indented(head, pad) if head else head
+    if not head:
+        # An item may start empty; the marker's trailing space keeps it an item
+        return (
+            f"{marker} \n{pad}{indented(text, pad)}"
+            if own_line
+            else f"{marker} {indented(text, pad)}"
+        )
+    if own_line:
+        return f"{marker} **{head}:**\n{pad}{indented(text, pad)}"
+    return f"{marker} **{head}:** {indented(text, pad)}".rstrip()
+
+
+def places(point: dict[str, Any]) -> str:
+    """The point's location as the report writes it: its places, `;`-separated."""
+    refs = [
+        link["ref"]
+        for link in point.get("evidence_links") or []
+        if link.get("ref") and not link.get("quote") and link.get("type") != "external"
+    ]
+    return "; ".join(refs)
+
+
+def read_places(location: str) -> list[str]:
+    """The places the mapper reads out of a location, as `map_issue` splits them."""
+    places = (LEADING_JOIN.sub("", p.strip().rstrip(",").rstrip()) for p in split_places(location))
+    return [place for place in places if place]
+
+
+def issue_head(point: dict[str, Any]) -> str | None:
+    """The point's bold heading: its title, then its places in parentheses. Places alone
+    are written bare when they read back as the same places (`Page 14, Figure 1(a)
+    caption`), else in parentheses (`(Page 2; Figure 1)`), which read back as places with
+    no title."""
+    title, location = point.get("title"), places(point)
+    if title and location:
+        return f"{title} ({location})"
+    if location:
+        wanted = read_places(location)
+        bare = parse_item(f"**{location}:** x")
+        if "title" not in bare and read_places(bare.get("location", "")) == wanted:
+            return location
+        return f"({location})"
+    return title or None
+
+
+def is_issue(point: dict[str, Any]) -> bool:
+    """Whether a weakness is a point under Potential Issues rather than in Weaknesses."""
+    group = point.get("group") or []
+    return len(group) >= 2 or (bool(point.get("severity")) and "summarizes" not in point)
+
+
+def place_issues(points: list[dict[str, Any]], kept: list[Any]) -> dict[int, dict[str, Any]]:
+    """Parts by index, each with its tiers by index, each with its items by index.
+
+    A point the mapper made has an ID `issue-<part>.<tier>.<item>` that says where it was,
+    and what the mapper kept goes back where it was too. Only then does any other point
+    go to the part and tier its group names (or its severity's tier under General), after
+    what is there, so it never takes a place the report's own points had.
+    """
+    parts: dict[int, dict[str, Any]] = {}
+
+    def by_heading(found: dict[int, dict[str, Any]], heading: str, new: dict) -> int:
+        index = next((i for i, x in found.items() if x.get("heading") == heading), None)
+        if index is None:
+            index = max(found, default=-1) + 1
+            found[index] = new
+        return index
+
+    def headings(point: dict[str, Any]) -> tuple[str, str]:
+        group = point.get("group") or []
+        part = group[0] if group else GENERAL_PART
+        return part, group[1] if len(group) > 1 else SEVERITY_TIER[point["severity"]]
+
+    placed = [(point, ISSUE_ID.match(point.get("id", ""))) for point in points]
+    for point, place in placed:
+        if place:
+            part_heading, tier_heading = headings(point)
+            p, t, i = (int(n) - 1 for n in place.groups())
+            part = parts.setdefault(p, {"heading": part_heading, "tiers": {}})
+            tier = part["tiers"].setdefault(t, {"heading": tier_heading, "items": {}})
+            tier["items"][i] = {"head": issue_head(point), "text": point["text"]}
+    overlay_kept_issues(parts, kept)
+    for point, place in placed:
+        if not place:
+            part_heading, tier_heading = headings(point)
+            p = by_heading(parts, part_heading, {"heading": part_heading, "tiers": {}})
+            tiers = parts[p]["tiers"]
+            t = by_heading(tiers, tier_heading, {"heading": tier_heading, "items": {}})
+            items = tiers[t]["items"]
+            items[max(items, default=-1) + 1] = {"head": issue_head(point), "text": point["text"]}
+    return parts
+
+
+def overlay_kept_issues(parts: dict[int, dict[str, Any]], kept: list[Any]) -> None:
+    """Put back what the mapper kept of each part: headings of parts and tiers with no
+    mapped point, text outside the points, and points it skipped for having no text."""
+    for p, kept_part in enumerate(kept):
+        if not isinstance(kept_part, dict):
+            continue
+        part = parts.setdefault(p, {"heading": "", "tiers": {}})
+        part["heading"] = kept_part.get("heading", part["heading"])
+        for t, kept_tier in enumerate(kept_part.get("tiers") or []):
+            if not isinstance(kept_tier, dict):
+                continue
+            tier = part["tiers"].setdefault(t, {"heading": "", "items": {}})
+            tier["heading"] = kept_tier.get("heading", tier["heading"])
+            if kept_tier.get("text"):
+                tier["text"] = kept_tier["text"]
+            for i, kept_item in enumerate(kept_tier.get("items") or []):
+                if isinstance(kept_item, dict) and i not in tier["items"]:
+                    head = kept_item.get("title") or kept_item.get("location")
+                    if kept_item.get("title") and kept_item.get("location"):
+                        head = f"{kept_item['title']} ({kept_item['location']})"
+                    tier["items"][i] = {"head": head, "text": kept_item.get("text", "")}
+
+
+def write_issues(parts: dict[int, dict[str, Any]], preamble: str | None) -> str:
+    lines = [f"## {ISSUES_HEADING}"]
+    if preamble:
+        lines.append(preamble)
+    for p in sorted(parts):
+        part = parts[p]
+        lines.append(f"### {part['heading']}")
+        for t in sorted(part["tiers"]):
+            tier = part["tiers"][t]
+            if tier["heading"]:
+                lines.append(f"#### {tier['heading']}\n")
+            if tier.get("text"):
+                lines.append(f"{tier['text']}\n")
+            numbered = tier["heading"] in NUMBERED_TIERS
+            items = [
+                write_item(f"{n}." if numbered else "*", item["head"], item["text"])
+                for n, item in enumerate((tier["items"][i] for i in sorted(tier["items"])), 1)
+            ]
+            if items:
+                lines.append("\n\n".join(items) + "\n")
+    # Only newlines: an empty point's marker keeps its trailing space, or it is no point
+    return "\n".join(lines).rstrip("\n")
+
+
+def write_points(points: list[dict[str, Any]]) -> str:
+    return "\n".join(write_item("*", point.get("title"), point["text"]) for point in points)
+
+
+def to_deepreview(canonical: dict[str, Any]) -> str:
+    """An OCRS review as DeepReview's Markdown report.
+
+    The review's summary (or, without one, its full text) is the Summary; strengths and
+    weaknesses are the Strengths and Weaknesses, a point's title its bold heading. A
+    weakness whose group names a part and a tier, or that has a severity and is not an
+    overview, is a point under Potential Issues And Suggestions, its places written back
+    after its title: critical and major points as Potential Mistakes and Improvements,
+    minor and info as Minor Corrections and Typos, under a General part when its group
+    names none. Contributions, questions, requested changes, comments, the full text when
+    there is also a summary, and checks, which DeepReview does not report, are written
+    under headings of their own, so a reader still sees them (the mapper keeps them in
+    `extensions.deepreview`). Scores, the decision, severities beyond the tier's and text
+    for the editors only are left out.
+    """
+    kept = extension(canonical, "deepreview")
+    other: dict[str, str] = dict(kept.get("other") or {})
+    opinion = canonical.get("opinion") or {}
+    sections = [BOILERPLATE]
+    if other.get("preamble"):
+        sections.append(other.pop("preamble"))
+    summary, text = overall_texts(canonical)
+    if summary or text:
+        sections.append(f"## Summary\n{demoted(summary or text)}")
+    for kind, heading in (("strengths", "Strengths"), ("weaknesses", "Weaknesses")):
+        points = [p for p in findings_of(canonical, kind) if kind == "strengths" or not is_issue(p)]
+        rest = other.pop(heading, None)
+        if points or rest:
+            body = "\n\n".join(part for part in (rest, write_points(points)) if part)
+            sections.append(f"## {heading}\n{body}")
+    issues = [p for p in findings_of(canonical, "weaknesses") if is_issue(p)]
+    parts = place_issues(issues, kept.get("issues") or [])
+    issues_preamble = other.pop(ISSUES_HEADING, None)
+    if parts or issues_preamble:
+        sections.append(write_issues(parts, issues_preamble))
+    if summary and text:
+        add_section(other, "Review", text)
+    contributions = [c for c in opinion.get("contributions") or [] if c.get("text")]
+    if contributions:
+        add_section(other, "Contributions", write_points(contributions))
+    for kind, heading in EXTRA_FINDINGS.items():
+        if findings_of(canonical, kind):
+            add_section(other, heading, write_points(findings_of(canonical, kind)))
+    for check in canonical.get("checks") or []:
+        if text := check_text(check):
+            add_section(other, check.get("label") or check["kind"], text)
+    sections += [f"## {heading}\n{demoted(text)}" for heading, text in other.items()]
+    return "\n\n".join(sections) + "\n"

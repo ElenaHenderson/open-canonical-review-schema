@@ -6,7 +6,7 @@
 [![Schema version](https://img.shields.io/badge/schema-v0.6.3-blue)](CHANGELOG.md#063)
 [![Status: draft](https://img.shields.io/badge/status-draft-orange)](CONTRIBUTING.md#versioning)
 [![JSON Schema draft 2020-12](https://img.shields.io/badge/JSON%20Schema-draft%202020--12-blue)](https://json-schema.org/draft/2020-12)
-[![Python 3.10 | 3.11 | 3.12](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)](pyproject.toml)
+[![Python 3.12 | 3.13 | 3.14](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)](pyproject.toml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 **Status: v0.6.3, a draft. Feedback wanted:** [tell us how you use OCRS](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=adoption-story.yml) or [propose a schema change](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=schema-change.yml).
@@ -39,9 +39,9 @@ OCRS provides bidirectional mappers for converting between the canonical schema 
 | **Editorial Manager** | Full | Basic | Journal manuscript system; `to_editorialmanager` is a minimal stub |
 | **ScholarOne** | Full | Basic | Clarivate journal system; `to_scholarone` is a minimal stub |
 | **Journal Narrative** | Full | Full | Minimal free-text reviews with DOI/journal metadata |
-| **OpenAIReview** | Full | – | AI reviewer ([ChicagoHAI/OpenAIReview](https://github.com/ChicagoHAI/OpenAIReview)): `paper.json` |
-| **DeepReview** | Full | – | Google's AI reviewer: the Markdown that its "Copy Report" gives |
-| **Reviewer3** | Full | – | AI reviewer: the Markdown export of its report |
+| **OpenAIReview** | Full | Full | AI reviewer ([ChicagoHAI/OpenAIReview](https://github.com/ChicagoHAI/OpenAIReview)): `paper.json` |
+| **DeepReview** | Full | Full | Google's AI reviewer: the Markdown that its "Copy Report" gives |
+| **Reviewer3** | Full | Full | AI reviewer: the Markdown export of its report |
 
 **Legend:**
 - **Full**: Complete mapping with all relevant fields preserved
@@ -152,6 +152,18 @@ result = map_with_record(
     ended_at="2026-10-15T17:30:00Z",
 )
 result.review["checks"]  # AI-text detection, fatal-flaw screen, reference check
+```
+
+### Writing a review in a reviewer's format
+
+`map_to` writes an OCRS review back in an AI reviewer's own format: OpenAIReview's `paper.json` as a dict, DeepReview's and Reviewer3's report as Markdown text. It writes what the reviewer's mapper reads, from the same OCRS fields, and puts back what the mapper kept in `extensions.<reviewer>`, so a review mapped from a reviewer maps back to the same OCRS review. A review from anywhere else, a human one from OpenReview say, is written as well as the format allows: points the format has no place for become OpenAIReview and Reviewer3 comments, or go under headings of their own in a Markdown report; what cannot be written at all, such as scores and the decision, is left out.
+
+```python
+from ocrs import map_from, map_to
+
+canonical = map_from("openreview", openreview_note)
+paper_json = map_to("openaireview", canonical)
+markdown = map_to("deepreview", canonical)  # or "reviewer3"
 ```
 
 ## Example

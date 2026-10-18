@@ -52,6 +52,7 @@ def from_journal_narrative(
 
     identifiers = _build_target_identifiers(payload)
     venue = payload.get("journal") or payload.get("venue")
+    reviewer_id = payload.get("reviewer_id")
 
     out: dict[str, Any] = {
         "$schema": schema_id(),
@@ -71,14 +72,12 @@ def from_journal_narrative(
         "referee": {
             "referee_type": "human",
             "identity_mode": "confidential",
-            "referee_id": payload.get("reviewer_id"),
             "human_referee": {},
         },
         "target": {
             "identifiers": identifiers,
             "work_id": generate_canonical_work_id(identifiers),
             "work_type": "article",
-            "venue": venue,
         },
         "metrics": [],
         "opinion": {
@@ -91,8 +90,11 @@ def from_journal_narrative(
         "narrative": {"detailed_review": full_text.strip()} if full_text.strip() else {},
     }
 
-    if out.get("referee", {}).get("referee_id") is None:
-        out["referee"].pop("referee_id", None)
+    # A journal's reviewer number is an ID like any other
+    if reviewer_id is not None and reviewer_id != "":
+        out["referee"]["referee_id"] = str(reviewer_id)
+    if isinstance(venue, str) and venue.strip():
+        out["target"]["venue"] = venue.strip()
 
     if keep_raw:
         out["provenance"]["raw_payload"] = payload

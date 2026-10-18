@@ -211,3 +211,280 @@ def test_editorialmanager_to_stub():
     assert len(back["ratings"]) == 1
     assert back["ratings"][0]["question"] == "Overall Quality"
     assert back["ratings"][0]["score"] == 4
+
+
+def test_editorialmanager_reviewer_id_fallbacks():
+    """Test reviewer ID falls back to reviewer_id, then reviewerEmail."""
+    for extra, expected in [
+        ({"reviewerId": "R-1"}, "R-1"),
+        ({"reviewer_id": 42}, "42"),
+        ({"reviewerEmail": "ref@example.org"}, "ref@example.org"),
+    ]:
+        canon = map_from("editorialmanager", {"manuscriptId": "MS-1", **extra})
+        assert canon["referee"]["referee_id"] == expected
+
+
+def test_editorialmanager_work_id_fallbacks():
+    """Test manuscript ID falls back through the alternative ID keys."""
+    for key in ("manuscript_id", "ms_id", "documentId"):
+        canon = map_from("editorialmanager", {key: "MS-77"})
+        assert canon["target"]["identifiers"]["internal_id"] == {
+            "field_name": "manuscriptId",
+            "value": "MS-77",
+        }
+        assert canon["target"]["work_id"] == "internal_id:manuscriptId:MS-77"
+
+
+def test_editorialmanager_empty_payload():
+    """Test an empty payload maps to a valid review with defaults."""
+    canon = map_from("editorialmanager", {})
+    assert canon["target"]["identifiers"] == {}
+    assert canon["target"]["work_id"] == "unknown"
+    assert "referee_id" not in canon["referee"]
+    assert canon["referee"]["human_referee"] == {}
+    assert canon["opinion"]["summary"] == "No summary provided."
+    assert canon["metrics"] == []
+    assert "narrative" not in canon
+    assert "decision" not in canon
+    assert "review_context" not in canon
+    # Random UUID review ID
+    assert len(canon["provenance"]["source_review_id"]) == 36
+    assert canon["review_id"] == "em_" + canon["provenance"]["source_review_id"]
+
+
+def test_editorialmanager_created_at_keys():
+    """Test created_at is read from the alternative date keys."""
+    for key in ("dateReceived", "date_received", "reviewDate", "created_at"):
+        canon = map_from("editorialmanager", {"manuscriptId": "MS-1", key: "2024-12-20"})
+        assert canon["created_at"] == "2024-12-20T00:00:00Z"
+
+
+def test_editorialmanager_review_id_fallbacks():
+    """Test review ID falls back to review_id, then id."""
+    for key in ("review_id", "id"):
+        canon = map_from("editorialmanager", {"manuscriptId": "MS-1", key: 501})
+        assert canon["review_id"] == "em_501"
+        assert canon["provenance"]["source_review_id"] == "501"
+
+
+def test_editorialmanager_doi_identifier():
+    """Test a valid DOI becomes the primary identifier; an invalid one is ignored."""
+    canon = map_from("editorialmanager", {"manuscriptId": "MS-1", "doi": "10.1234/abc.5"})
+    assert canon["target"]["identifiers"]["doi"] == {
+        "value": "10.1234/abc.5",
+        "hyperlink": "https://doi.org/10.1234/abc.5",
+    }
+    assert canon["target"]["work_id"] == "doi:10.1234/abc.5"
+
+    canon = map_from("editorialmanager", {"manuscriptId": "MS-1", "doi": "not-a-doi"})
+    assert "doi" not in canon["target"]["identifiers"]
+    assert canon["target"]["work_id"] == "internal_id:manuscriptId:MS-1"
+
+
+def test_editorialmanager_human_referee_fields():
+    """Test ORCID, name and affiliation populate human_referee."""
+    canon = map_from(
+        "editorialmanager",
+        {
+            "manuscriptId": "MS-1",
+            "reviewerOrcid": "https://orcid.org/0000-0002-1825-0097",
+            "reviewerName": "Ada Lovelace",
+            "reviewerAffiliation": "University of London",
+        },
+    )
+    assert canon["referee"]["human_referee"] == {
+        "orcid": "0000-0002-1825-0097",
+        "name": "Ada Lovelace",
+        "affiliation": "University of London",
+    }
+
+    # snake_case / short alternative keys
+    canon = map_from(
+        "editorialmanager",
+        {
+            "manuscriptId": "MS-1",
+            "orcid": "0000-0002-1825-0097",
+            "reviewer_name": "Grace Hopper",
+            "affiliation": "Yale",
+        },
+    )
+    assert canon["referee"]["human_referee"] == {
+        "orcid": "0000-0002-1825-0097",
+        "name": "Grace Hopper",
+        "affiliation": "Yale",
+    }
+
+
+def test_editorialmanager_invalid_orcid_dropped():
+    """Test an ORCID that does not normalize is left out of human_referee."""
+    canon = map_from("editorialmanager", {"manuscriptId": "MS-1", "orcid": "1234"})
+    assert canon["referee"]["human_referee"] == {}
+
+
+def test_editorialmanager_unknown_code_falls_back_to_text():
+    """Test an unmapped recommendationCode falls back to the text recommendation."""
+    canon = map_from(
+        "editorialmanager",
+        {"manuscriptId": "MS-1", "recommendationCode": 9, "recommendation": "Reject"},
+    )
+    assert canon["decision"] == {"recommendation": "reject"}
+
+
+def test_editorialmanager_narrative_variants():
+    """Test narrative uses the first non-blank source and snake_case keys."""
+    canon = map_from(
+        "editorialmanager",
+        {
+            "manuscriptId": "MS-1",
+            "commentsToAuthor": "   ",
+            "comments_to_author": "Snake case comments.\n\nSecond paragraph.",
+            "confidential_comments_to_editor": "For the editor only.",
+            "summary": "A short summary.",
+        },
+    )
+    assert canon["narrative"] == {
+        "detailed_review": "Snake case comments.\n\nSecond paragraph.",
+        "confidential_to_editors": "For the editor only.",
+        "summary": "A short summary.",
+    }
+    # Opinion summary is the first paragraph of the first non-blank text
+    assert canon["opinion"]["summary"] == "Snake case comments."
+
+
+def test_editorialmanager_narrative_first_key_wins():
+    """Test commentsToAuthor takes precedence over comments_to_author."""
+    canon = map_from(
+        "editorialmanager",
+        {"manuscriptId": "MS-1", "commentsToAuthor": "Camel.", "comments_to_author": "Snake."},
+    )
+    assert canon["narrative"] == {"detailed_review": "Camel."}
+
+
+def test_editorialmanager_opinion_from_comments():
+    """Test opinion summary falls back to the generic comments field."""
+    canon = map_from("editorialmanager", {"manuscriptId": "MS-1", "comments": "Generic."})
+    assert canon["opinion"]["summary"] == "Generic."
+    # "comments" is not a narrative source
+    assert "narrative" not in canon
+
+
+def test_editorialmanager_ratings_edge_cases():
+    """Test ratings parsing: skips, alternative keys, labels and alias matching."""
+    payload = {
+        "manuscriptId": "MS-1",
+        "ratings": [
+            "not a dict",
+            {"question": "Clarity"},  # no score
+            {"question": "Clarity", "score": "Excellent"},  # text only
+            {"question": "Originality", "score": "4. Good", "label": "Solid"},
+            {"criterionName": "Writing Quality Score", "score": 7, "max_score": 10},
+            {"question": "Clarity", "score": 3},
+            {"question": "Bananas", "score": 2},
+        ],
+    }
+    canon = map_from("editorialmanager", payload)
+    metrics = canon["metrics"]
+    assert [m["label"] for m in metrics] == [
+        "Originality",
+        "Writing Quality Score",
+        "Clarity",
+        "Bananas",
+    ]
+
+    originality = metrics[0]
+    assert originality["key"] == "novelty"  # exact alias
+    assert originality["aspect"] == "novelty"
+    assert originality["value"] == 4
+    assert originality["justification"] == "Good - Solid"
+
+    writing = metrics[1]
+    assert writing["key"] == "readability"  # fuzzy alias "writing quality"
+    assert writing["scale"]["max"] == 10
+    assert "justification" not in writing
+
+    clarity = metrics[2]
+    assert clarity["key"] == "clarity"  # exact catalog key
+    assert clarity["aspect"] == "clarity"
+
+    assert metrics[3]["key"] == "other"
+    assert metrics[3]["aspect"] == "other"
+
+
+def _minimal_canonical(**overrides) -> dict:
+    """Build a minimal valid canonical review for to_editorialmanager tests."""
+    canon = {
+        "review_id": "em_REV-X",
+        "version": "1.0.0",
+        "created_at": "2024-12-25T00:00:00Z",
+        "provenance": {
+            "source_system": "editorialmanager",
+            "source_review_id": "REV-X",
+            "imported_at": "2024-12-25T00:00:00Z",
+            "mapping": {
+                "mapping_spec_id": "canonical-review.mapping.v1",
+                "mapping_spec_version": "1.1.0",
+                "mapper_version": "0.1.0",
+            },
+        },
+        "referee": {"referee_type": "human", "identity_mode": "confidential"},
+        "target": {"work_id": "internal_id:manuscriptId:MS-X", "work_type": "article"},
+        "opinion": {"summary": "Summary text."},
+    }
+    canon.update(overrides)
+    return canon
+
+
+def test_editorialmanager_to_minimal():
+    """Test to_editorialmanager on a minimal review omits optional fields."""
+    back = map_to("editorialmanager", _minimal_canonical())
+    assert back == {
+        "reviewId": "REV-X",
+        "manuscriptId": "MS-X",
+        "commentsToAuthor": "Summary text.",
+    }
+
+
+def test_editorialmanager_to_unprefixed_review_id():
+    """Test a review ID without the em_ prefix is passed through unchanged."""
+    back = map_to("editorialmanager", _minimal_canonical(review_id="s1_DOC-1_r2"))
+    assert back["reviewId"] == "s1_DOC-1_r2"
+
+
+def test_editorialmanager_to_opinion_text_fallback():
+    """Test commentsToAuthor falls back to opinion.text before opinion.summary."""
+    canon = _minimal_canonical(opinion={"summary": "Summary text.", "text": "Full opinion."})
+    assert map_to("editorialmanager", canon)["commentsToAuthor"] == "Full opinion."
+
+
+def test_editorialmanager_to_revision_requirement():
+    """Test a revision requirement is written back as a recommendation label."""
+    canon = _minimal_canonical(decision={"revision_requirement": "major"})
+    assert map_to("editorialmanager", canon)["recommendation"] == "Major Revision"
+
+
+def test_editorialmanager_to_metric_edge_cases():
+    """Test non-dict metrics are skipped and maxScore defaults to 5."""
+    canon = _minimal_canonical(
+        metrics=[
+            "not a dict",
+            {"key": "novelty", "aspect": "novelty", "value": 3},
+            {"key": "clarity", "label": "Clarity", "value": 7, "scale": "bad"},
+        ]
+    )
+    back = to_editorialmanager(canon)
+    assert back["ratings"] == [
+        {"question": "novelty", "score": 3, "maxScore": 5},
+        {"question": "Clarity", "score": 7, "maxScore": 5},
+    ]
+
+
+def test_editorialmanager_to_no_comments():
+    """Test commentsToAuthor is omitted when there is no narrative or opinion text."""
+    back = to_editorialmanager(_minimal_canonical(opinion=None))
+    assert "commentsToAuthor" not in back
+
+
+def test_editorialmanager_empty_or_short_questions_are_other():
+    ratings = [{"question": "", "score": 3}, {"question": "ab", "score": 3}]
+    canon = map_from("editorialmanager", {"manuscriptId": "M", "ratings": ratings})
+    assert [m["key"] for m in canon["metrics"]] == ["other", "other"]

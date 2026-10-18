@@ -250,3 +250,305 @@ def test_cmt_to_stub():
     assert back.get("summary") == "Good paper."  # Uses opinion.summary
     assert back.get("commentsToAuthors") == "Detailed review text."
     assert back.get("commentsToChairs") == "Comments to chairs."
+
+
+def test_cmt_without_paper_id_or_text():
+    """Test a CMT row with no paper ID, narrative, recommendation or confidence."""
+    canon = map_from("cmt", {"reviewId": "r1"})
+
+    assert canon["target"]["identifiers"] == {}
+    assert canon["target"]["work_id"] == "unknown"
+    assert canon["opinion"]["summary"] == "No summary provided."
+    assert "narrative" not in canon
+    assert "decision" not in canon
+    assert "referee_id" not in canon["referee"]
+    assert "raw_payload" not in canon["provenance"]
+    assert canon["metrics"] == []
+
+
+def test_cmt_id_and_created_at_fallbacks():
+    """Test the id fallback for the review ID and a non-string createdAt."""
+    canon = map_from("cmt", {"id": 7, "paperId": 1, "createdAt": 1735689600, "reviewerId": 99})
+
+    assert canon["review_id"] == "7"
+    assert canon["provenance"]["source_review_id"] == "7"
+    assert canon["created_at"] != 1735689600
+    assert canon["created_at"].endswith("Z")
+    assert canon["referee"]["referee_id"] == "99"
+
+
+def test_cmt_review_text_fallback_sets_opinion():
+    """Test that reviewText is the detailed review and its first paragraph the opinion."""
+    payload = {
+        "reviewId": "r1",
+        "paperId": 1,
+        "reviewText": "  First paragraph.\n\nSecond paragraph.  ",
+        "commentsToChairs": " Possible overlap with prior work. ",
+    }
+    canon = map_from("cmt", payload)
+
+    assert canon["opinion"]["summary"] == "First paragraph."
+    assert canon["narrative"] == {
+        "detailed_review": "First paragraph.\n\nSecond paragraph.",
+        "confidential_to_editors": "Possible overlap with prior work.",
+    }
+
+
+def test_cmt_summary_wins_over_review_text_for_opinion():
+    """Test that the summary, not the review text, is the opinion when both exist."""
+    payload = {"reviewId": "r1", "paperId": 1, "summary": "Short.", "commentsToAuthors": "Long."}
+    canon = map_from("cmt", payload)
+    assert canon["opinion"]["summary"] == "Short."
+    assert canon["narrative"]["detailed_review"] == "Long."
+
+
+def test_cmt_text_recommendation():
+    """Test that a text-only recommendation maps without an overall metric."""
+    canon = map_from("cmt", {"reviewId": "r1", "paperId": 1, "recommendation": "Weak Reject"})
+    assert canon["decision"] == {"recommendation": "weak_reject"}
+    assert canon["metrics"] == []
+
+
+def test_cmt_unrecognized_text_recommendation_is_borderline():
+    """Test that unmapped recommendation text defaults to borderline."""
+    canon = map_from("cmt", {"reviewId": "r1", "paperId": 1, "recommendation": "Unsure"})
+    assert canon["decision"] == {"recommendation": "borderline"}
+
+
+def test_cmt_non_text_recommendation_is_ignored():
+    """Test that a recommendation that is neither a number nor text adds no decision."""
+    canon = map_from("cmt", {"reviewId": "r1", "paperId": 1, "recommendation": ["Accept"]})
+    assert "decision" not in canon
+    assert canon["metrics"] == []
+
+
+def test_cmt_recommendation_text_wins_over_number():
+    """Test that the label after the score decides the CMT recommendation."""
+    canon = map_from("cmt", {"reviewId": "r1", "paperId": 1, "overallEvaluation": "3: Reject"})
+    assert canon["decision"]["recommendation"] == "reject"
+    overall = canon["metrics"][0]
+    assert overall["value"] == 3
+    assert overall["normalized"]["value_0_1"] == 0.5
+
+
+def test_cmt_bare_number_recommendation():
+    """Test that a bare score maps through the numeric rubric."""
+    canon = map_from("cmt", {"reviewId": "r1", "paperId": 1, "overallEvaluation": 9})
+    assert canon["decision"]["recommendation"] == "strong_accept"
+
+
+def test_cmt_unmappable_number_recommendation_is_borderline():
+    """Test that a score on an unknown scale is borderline with an unnormalized metric."""
+    canon = map_from("cmt", {"reviewId": "r1", "paperId": 1, "overallEvaluation": 42})
+    assert canon["decision"]["recommendation"] == "borderline"
+    overall = canon["metrics"][0]
+    assert overall["scale"] == {"type": "interval"}
+    assert "normalized" not in overall
+
+
+def test_cmt_revision_recommendation_is_a_revision_requirement():
+    """Test that a revision recommendation becomes a revision requirement."""
+    payload = {"reviewId": "r1", "paperId": 1, "recommendation": "Major revision"}
+    canon = map_from("cmt", payload)
+    assert canon["decision"] == {"revision_requirement": "major"}
+
+
+def test_cmt_confidence_ratio():
+    """Test that a 0-1 confidence becomes the decision confidence."""
+    payload = {"reviewId": "r1", "paperId": 1, "recommendation": "Accept", "confidence": 0.8}
+    canon = map_from("cmt", payload)
+    assert canon["decision"] == {"recommendation": "accept", "confidence": 0.8}
+    conf = canon["metrics"][0]
+    assert conf["key"] == "confidence"
+    assert conf["scale"] == {"type": "ratio", "min": 0, "max": 1, "step": 0.01}
+
+
+def test_cmt_non_numeric_confidence_is_ignored():
+    """Test that text-only confidence adds neither a metric nor a decision."""
+    canon = map_from("cmt", {"reviewId": "r1", "paperId": 1, "confidence": "high"})
+    assert canon["metrics"] == []
+    assert "decision" not in canon
+
+
+def test_cmt_unbounded_confidence_has_no_decision_confidence():
+    """Test that confidence on an unknown scale is kept only as a raw metric."""
+    payload = {"reviewId": "r1", "paperId": 1, "recommendation": "Accept", "confidence": 50}
+    canon = map_from("cmt", payload)
+    assert canon["decision"] == {"recommendation": "accept"}
+    conf = canon["metrics"][0]
+    assert conf["value"] == 50
+    assert "normalized" not in conf
+
+
+def test_cmt_extra_metrics():
+    """Test that other numeric fields map to catalog or 'other' metrics."""
+    payload = {
+        "reviewId": "r1",
+        "paperId": 1,
+        "originality": "4: Good",
+        "word_count": 1200,
+        "ethicsFlag": "No",
+    }
+    canon = map_from("cmt", payload)
+    by_label = {m["label"]: m for m in canon["metrics"]}
+
+    assert by_label["originality"]["key"] == "novelty"
+    assert by_label["originality"]["aspect"] == "novelty"
+    assert by_label["originality"]["justification"] == "Good"
+    assert by_label["originality"]["normalized"]["value_0_1"] == 0.75
+    assert by_label["word count"]["key"] == "other"
+    assert by_label["word count"]["aspect"] == "other"
+    assert "normalized" not in by_label["word count"]
+    assert "ethicsFlag" not in by_label
+
+
+def cmt_canonical(**fields) -> dict:
+    """Build a minimal valid canonical review, overriding top-level fields."""
+    canon = {
+        "review_id": "cmt_1",
+        "version": "1.0.0",
+        "created_at": "2025-01-01T00:00:00Z",
+        "provenance": {
+            "source_system": "cmt",
+            "imported_at": "2025-01-01T00:00:00Z",
+            "mapping": {
+                "mapping_spec_id": "canonical-review.mapping.v1",
+                "mapping_spec_version": "1.1.0",
+                "mapper_version": "0.1.0",
+            },
+        },
+        "referee": {"referee_type": "human", "identity_mode": "confidential"},
+        "target": {"work_id": "internal_id:paperId:42", "work_type": "other"},
+        "opinion": {"summary": "Good paper."},
+    }
+    canon.update(fields)
+    validate_canonical(canon)
+    return canon
+
+
+def test_to_cmt_opinion_text_fallback():
+    """Test that opinion text is the comments to authors without a detailed review."""
+    canon = cmt_canonical()
+    canon["opinion"] = {"text": "Opinion text."}
+    back = to_cmt(canon)
+
+    assert back["commentsToAuthors"] == "Opinion text."
+    assert "summary" not in back
+    assert "recommendation" not in back
+    assert "overallEvaluation" not in back
+    assert back["reviewerId"] is None
+    assert back["conferenceName"] is None
+
+
+def test_to_cmt_metrics():
+    """Test that overall and confidence metrics are written, and others skipped."""
+    scale = {"type": "ordinal", "min": 1, "max": 5}
+    canon = cmt_canonical(
+        decision={"recommendation": "accept"},
+        metrics=[
+            {"key": "overall", "label": "Overall", "aspect": "overall", "scale": scale, "value": 4},
+            {
+                "key": "confidence",
+                "label": "Conf",
+                "aspect": "confidence",
+                "scale": scale,
+                "value": 3,
+            },
+            {"key": "overall", "label": "Again", "aspect": "overall", "scale": scale, "value": 1},
+            {"key": "novelty", "label": "Novelty", "aspect": "novelty", "scale": scale, "value": 2},
+        ],
+    )
+    canon["metrics"].insert(0, "not a metric")
+    back = to_cmt(canon)
+
+    assert back["recommendation"] == "accept"
+    assert back["overallEvaluation"] == 4
+    assert back["confidence"] == 3
+    assert "novelty" not in back
+
+
+def test_to_cmt_revision_requirement_labels_the_score():
+    """Test that a revision requirement is written as the score's label and round-trips."""
+    scale = {"type": "ordinal", "min": 1, "max": 10}
+    canon = cmt_canonical(
+        decision={"revision_requirement": "minor"},
+        metrics=[
+            {"key": "overall", "label": "Overall", "aspect": "overall", "scale": scale, "value": 6}
+        ],
+    )
+    back = to_cmt(canon)
+
+    assert back["recommendation"] == "minor_revision"
+    assert back["overallEvaluation"] == "6: Minor Revision"
+
+    again = map_from("cmt", back)
+    assert again["decision"] == {"revision_requirement": "minor"}
+    assert again["metrics"][0]["value"] == 6
+
+
+def test_cmt_identifiers_and_dates_are_not_scores():
+    """A DOI, an ORCID or a paper ID starts with digits but is never a metric."""
+    canon = map_from(
+        "cmt",
+        {
+            "reviewId": "r",
+            "paper_id": 3,
+            "doi": "10.1234/test.2024",
+            "reviewerOrcid": "0000-0001-5000-0007",
+            "createdOn_date": "2024-01-02",
+            "originality": "4: Good",
+        },
+    )
+    assert [m["label"] for m in canon["metrics"]] == ["originality"]
+
+
+def test_cmt_a_zero_score_is_a_score():
+    canon = map_from("cmt", {"reviewId": 0, "paperId": 1, "overallEvaluation": 0})
+    assert canon["review_id"] == "0"
+    assert canon["provenance"]["source_review_id"] == "0"
+    assert [m["value"] for m in canon["metrics"] if m["key"] == "overall"] == [0]
+
+
+def test_cmt_booleans_are_not_scores():
+    canon = map_from("cmt", {"reviewId": "r", "paperId": 1, "conflict": True})
+    assert canon["metrics"] == []
+
+
+def test_cmt_timestamps_are_not_scores():
+    canon = map_from(
+        "cmt",
+        {
+            "reviewId": "r",
+            "paperId": 1,
+            "timestamp": 1735689600,
+            "reviewTime": 1735689600,
+            "created_timestamp": 1735689600,
+            "valid": 3,
+            "format": 4,
+        },
+    )
+    assert [m["label"] for m in canon["metrics"]] == ["valid", "format"]
+
+
+def test_cmt_field_names_match_aliases_by_whole_words():
+    canon = map_from("cmt", {"reviewId": "r", "paperId": 1, "soundness_score": 3, "ab": 2})
+    assert [(m["label"], m["key"]) for m in canon["metrics"]] == [
+        ("soundness score", "correctness"),
+        ("ab", "other"),
+    ]
+
+
+def test_cmt_a_boolean_score_does_not_hide_the_recommendation():
+    canon = map_from(
+        "cmt",
+        {"reviewId": "r", "paperId": 1, "overallEvaluation": False, "recommendation": "Accept"},
+    )
+    assert canon["decision"]["recommendation"] == "accept"
+
+
+def test_cmt_ids_and_times_set_off_by_separators_are_not_scores():
+    canon = map_from(
+        "cmt",
+        {"reviewId": "r", "paperId": 1, "paper-id": 5, "Paper ID": 6, "CREATED_AT": 7, "valid": 3},
+    )
+    assert [m["label"] for m in canon["metrics"]] == ["valid"]

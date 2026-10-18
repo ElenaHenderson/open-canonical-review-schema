@@ -1,5 +1,52 @@
 # Changelog
 
+## Unreleased
+
+### Python package
+
+- `map_to` writes an OCRS review in each AI reviewer's own format: `openaireview` gives
+  OpenAIReview's `paper.json` as a dict, `deepreview` and `reviewer3` give the report's
+  Markdown. Each writes what its mapper reads and puts back what the mapper kept in
+  `extensions.<reviewer>`, so a review mapped from a reviewer and written back maps to the
+  same OCRS review. Points a format has no place for become comments or go under headings
+  of their own; scores and the decision are left out. `supported_targets()` lists the three.
+- So that writing back never has to guess, the AI mappers record a little more:
+  OpenAIReview weaknesses get IDs `comment-<n>` (their place in the method's comments),
+  and `extensions.openaireview` always names the method that was mapped. A skipped
+  OpenAIReview comment, DeepReview point or Reviewer3 reference row keeps its empty
+  `explanation`, `text` or `status` in extensions, and a Reviewer3 row whose other
+  columns are kept keeps its number with them. DeepReview headings inside fenced code are
+  code, not sections. Mapper versions: OpenAIReview, DeepReview and Reviewer3 1.1.0.
+- Python 3.12 or later is required (was 3.10), and CI tests on Python 3.12, 3.13 and 3.14.
+
+### Mapper fixes
+
+- Identifiers, links and times are no longer read as scores: a DOI (`10.1234/…` became a
+  metric of 10.1234), an ORCID, an arXiv ID, a version, a paper or submission ID, a
+  timestamp or a date (`created_at`, `cdate`, `paperId`, `review_date`) in a CMT, OpenReview
+  or HotCRP review no longer becomes an `other` metric. Nor does a boolean.
+- A recommendation or score field that is present but null or blank no longer hides the
+  next one (OpenReview `recommendation: null` with a `rating`, HotCRP `overall_merit: null`
+  with `overall`), and a score of 0 is kept (CMT `overallEvaluation: 0`, a ScholarOne
+  criterion response of 0, reviewer number 0).
+- OpenReview's `overall_rating` and `overall` give one overall metric, not two, and its
+  recommendation is read from the reviewer's label before the number, as CMT and HotCRP do
+  (`3: Strong Accept` is `strong_accept`, not `borderline`).
+- Recommendation labels are read by whole words in every mapper: `Not acceptable` and
+  `Unacceptable` are `reject`, and `Marginally acceptable` says nothing, so the score
+  decides; before, `acceptable` read as `accept`. A negated qualifier is set aside: `Not a
+  strong accept` leaves the score to decide, and `Weak accept (not a strong accept)` is
+  `weak_accept`.
+- A field name names a catalog metric only by whole words: it contains an alias
+  (`Soundness score`), or it is part of aliases of one metric only (`presentation`). An
+  empty or short name (`""`, `ab`) or one shared by several metrics (`quality`) is `other`;
+  before, an empty ScholarOne criterion became the overall score.
+- A ScholarOne recommendation code outside 1–5 gives no recommendation and no metric; it
+  was read on a higher-is-better scale, the reverse of ScholarOne's (9 was `accept`).
+- HotCRP takes a numeric `contactId` as the referee ID and leaves null items out of
+  findings; OpenReview leaves out a bare bullet (`-`). A journal review without a journal
+  has no `venue` (it failed validation), and a numeric `reviewer_id` is kept as text.
+
 ## 0.6.3
 
 The addition is optional, so every 0.6.2 review is valid under 0.6.3.

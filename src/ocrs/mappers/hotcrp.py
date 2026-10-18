@@ -12,7 +12,10 @@ from ..identifiers import generate_canonical_work_id
 from ..schema import schema_id
 from ..util import (
     first_paragraph,
+    first_present,
+    is_score_field,
     map_recommendation_from_text,
+    match_alias,
     now_iso,
     parse_date_flexible,
     parse_labeled_score,
@@ -69,6 +72,9 @@ def _get_reviewer_id(payload: dict[str, Any]) -> str | None:
         v = payload.get(k)
         if isinstance(v, str) and v:
             return v
+        # HotCRP's contactId is a number
+        if isinstance(v, int) and not isinstance(v, bool):
+            return str(v)
     return None
 
 
@@ -148,7 +154,7 @@ def _collect_findings(payload: dict[str, Any]) -> dict[str, Any]:
         v = payload.get(k)
         canon_key = "questions" if k == "questions_for_authors" else k
         if isinstance(v, list):
-            items = [{"text": str(x)} for x in v if str(x).strip()]
+            items = [{"text": str(x)} for x in v if x is not None and str(x).strip()]
             if items:
                 findings[canon_key] = items
         elif isinstance(v, str) and v.strip():
@@ -189,12 +195,9 @@ def _metric_key_for_label(
     if lcf in idx:
         m = idx[lcf]
         return m["key"], m.get("aspect")
-    if lcf in amap:
-        return amap[lcf], None
-    # Fuzzy matching
-    for alias, key in amap.items():
-        if alias in lcf or lcf in alias:
-            return key, None
+    key = match_alias(lcf, amap)
+    if key:
+        return key, None
     return "other", "other"
 
 
@@ -287,11 +290,10 @@ def from_hotcrp(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str,
         out["findings"] = findings
 
     # Parse overall merit / recommendation
-    rec_raw = None
-    for k in ("overall_merit", "overall", "recommendation", "rating", "score"):
-        if k in payload:
-            rec_raw = payload.get(k)
-            break
+    # The first of these the form fills; a null one does not hide the next
+    rec_raw = first_present(
+        payload, ("overall_merit", "overall", "recommendation", "rating", "score")
+    )
 
     decision: dict[str, Any] = {}
     if rec_raw is not None:
@@ -340,7 +342,7 @@ def from_hotcrp(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str,
             decision["recommendation"] = map_recommendation_from_text(rec_raw) or "borderline"
 
     # Parse reviewer expertise
-    exp_raw = payload.get("reviewer_expertise") or payload.get("expertise")
+    exp_raw = first_present(payload, ("reviewer_expertise", "expertise"))
     if exp_raw is not None:
         parsed = parse_labeled_score(
             exp_raw,
@@ -414,7 +416,7 @@ def from_hotcrp(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str,
         | {"reviewer_expertise", "expertise", "confidence", "score"}
     )
     for k, v in payload.items():
-        if k in skip_keys:
+        if k in skip_keys or not is_score_field(k):
             continue
         # Use enhanced parsing with proper label extraction
         parsed = parse_labeled_score(

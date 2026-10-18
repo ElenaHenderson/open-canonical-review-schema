@@ -1,0 +1,1091 @@
+# Copyright (c) 2026 Valency Systems Inc.
+# SPDX-License-Identifier: Apache-2.0
+"""Tests for writing OCRS reviews in the AI reviewers' own formats (`map_to`)."""
+
+import copy
+import json
+from pathlib import Path
+
+import pytest
+
+from ocrs import map_from, map_to, map_with_record, supported_targets, validate_canonical
+from ocrs.mappers import deepreview, reviewer3
+from ocrs.mappers.ai import extension, findings_of, indented, overall_texts, reviewer_model
+from ocrs.mappers.openaireview import to_openaireview
+
+FIXTURES = Path(__file__).parent / "fixtures"
+AI = FIXTURES / "ai"
+OPENAIREVIEW = json.loads((AI / "openaireview_paper.json").read_text())
+DEEPREVIEW = (AI / "deepreview_report.md").read_text()
+REVIEWER3 = (AI / "reviewer3_report.md").read_text()
+RUN = {
+    "review_id": "3152f8d9-a9e9-4d97-80be-e6b0d7290d42",
+    "source_system": "example-platform",
+    "work_id": "paper-1",
+    "work_type": "preprint",
+    "model_id": "us.anthropic.claude-opus-5-5",
+    "started_at": "2026-10-03T01:00:00Z",
+    "ended_at": "2026-10-03T01:08:00Z",
+}
+
+
+def mapped(source, output):
+    return map_with_record(source, copy.deepcopy(output), **RUN).review
+
+
+def same_review(first, second):
+    """The two reviews are the same, but for when each was imported."""
+    first, second = copy.deepcopy(first), copy.deepcopy(second)
+    for review in (first, second):
+        review["provenance"].pop("imported_at")
+    return first == second
+
+
+def human_review():
+    return map_from(
+        "openreview", json.loads((FIXTURES / "openreview/realistic_review.json").read_text())
+    )
+
+
+DEEPREVIEW_EDGES = """# HIGH LEVEL SUMMARY
+---
+Generated for the authors.
+## Summary
+Short summary.
+## Strengths
+Read with care.
+* **Clear:** Well written.
+## Weaknesses
+* Overview weakness.
+## Potential Issues And Suggestions
+Read these first.
+### [Methods] (Pages: 1-2)
+Part intro text.
+#### Potential Mistakes and Improvements
+
+1. **Wrong sign (Section 2, Page 3):** The sign of Eq. 1 is flipped.
+   It changes the result.
+
+2. **Empty point:**
+
+#### Minor Corrections and Typos
+
+Tier text.
+* **Page 4:** Typo in *"the the results are shown here"*; change "the the" to "the".
+#### Unknown Tier
+* Something odd.
+### [Empty part]
+## Limitations
+Not discussed.
+"""
+
+REVIEWER3_EDGES = """# Review Report
+
+A Paper Title
+
+---
+
+Generated on request.
+
+### Overview
+
+Intro.
+
+- **Idea** — A new method.
+- Plain contribution
+  over two lines.
+
+### AI Text Detection
+
+12.5% AI-generated text detected. See the full Pangram report in the app.
+
+### Fatal Flaws
+
+- **Leakage** — Test data leaks into training.
+
+### Reference Check
+
+Checked **3** references: 1 verified, 1 not found.
+
+| # | Citation | Status | Note |
+| --- | --- | --- | --- |
+| 1 | A. Author, A title with a \\| pipe (2020). | Verified (DOI) | ok |
+| 2 | B. Author (2021). | Not Found | |
+| 3 | C. Author (2022). | | no status |
+
+Some trailing prose.
+
+### Fatal Flaws
+
+A repeated section.
+
+### Reviewer Comments
+
+Comments follow.
+
+1. **Typo** — Page 3–4
+
+> the the
+
+Repeated word.
+
+2. **Figure labels** — Page 5
+
+> Fig 2
+
+Panels are unlabeled.
+
+3. **No explanation**
+
+### Appendix
+
+Extra.
+"""
+
+
+def test_ai_reviewers_are_targets():
+    assert {"openaireview", "deepreview", "reviewer3"} <= set(supported_targets())
+
+
+class TestOpenAIReview:
+    def test_writes_back_what_was_mapped(self):
+        expected = {k: v for k, v in OPENAIREVIEW.items() if k != "paragraphs"}
+        expected["methods"] = {
+            k: v for k, v in OPENAIREVIEW["methods"].items() if k.startswith("progressive__")
+        }
+        assert map_to("openaireview", mapped("openaireview", OPENAIREVIEW)) == expected
+
+    def test_round_trip(self):
+        review = mapped("openaireview", OPENAIREVIEW)
+        assert same_review(mapped("openaireview", map_to("openaireview", review)), review)
+
+    def test_skipped_comment_goes_back_where_it_was(self):
+        output = copy.deepcopy(OPENAIREVIEW)
+        [key] = [k for k in output["methods"] if k.startswith("progressive__")]
+        comments = output["methods"][key]["comments"]
+        comments[1]["explanation"] = ""
+        back = map_to("openaireview", mapped("openaireview", output))
+        assert back["methods"][key]["comments"] == comments
+
+    def test_comments_without_extensions_follow_kept_ones(self):
+        review = mapped("openaireview", OPENAIREVIEW)
+        review["findings"]["weaknesses"].append({"text": "One more."})
+        [method] = map_to("openaireview", review)["methods"].values()
+        assert method["comments"][-1] == {"explanation": "One more."}
+
+    def test_a_review_from_elsewhere(self):
+        review = human_review()
+        paper = map_to("openaireview", review)
+        [(key, method)] = paper["methods"].items()
+        assert key == "progressive__unspecified"
+        assert method["overall_feedback"] == review["opinion"]["summary"]
+        points = [*findings_of(review, "weaknesses"), *findings_of(review, "questions")]
+        assert [c["explanation"] for c in method["comments"]] == [p["text"] for p in points]
+        again = map_with_record("openaireview", paper, **RUN).review
+        validate_canonical(again)
+        assert len(again["findings"]["weaknesses"]) == len(points)
+
+    def test_model_title_tags_quote_and_tokens(self):
+        review = {
+            **mapped("openaireview", OPENAIREVIEW),
+            "target": {"work_id": "doi:10.1234/x", "work_type": "preprint", "title": "T"},
+            "findings": {
+                "weaknesses": [
+                    {
+                        "title": "Gap",
+                        "text": "A gap.",
+                        "tags": ["logical", "other"],
+                        "evidence_links": [
+                            {"type": "figure", "ref": "Fig 1"},
+                            {"type": "paper_section", "ref": "", "quote": "q"},
+                        ],
+                    }
+                ]
+            },
+        }
+        review.pop("extensions")
+        paper = to_openaireview(review)
+        assert paper["title"] == "T" and paper["slug"] == "paper"
+        [(key, method)] = paper["methods"].items()
+        assert key == "progressive__us.anthropic.claude-opus-5-5"
+        assert method["model"] == "us.anthropic.claude-opus-5-5"
+        assert method["comments"] == [
+            {"title": "Gap", "quote": "q", "explanation": "A gap.", "comment_type": "logical"}
+        ]
+        assert (method["prompt_tokens"], method["completion_tokens"]) == (125024, 46844)
+
+    def test_full_text_when_there_is_no_summary(self):
+        review = human_review()
+        review["opinion"] = {"text": "Full view."}
+        review.pop("narrative")
+        [method] = map_to("openaireview", review)["methods"].values()
+        assert method["overall_feedback"] == "Full view."
+
+
+class TestDeepReview:
+    @pytest.mark.parametrize("report", [DEEPREVIEW, DEEPREVIEW_EDGES], ids=["fixture", "edges"])
+    def test_writes_back_the_same_report(self, report):
+        written = map_to("deepreview", mapped("deepreview", report))
+        assert isinstance(written, str)
+        assert deepreview.parse_report(written) == deepreview.parse_report(report)
+
+    @pytest.mark.parametrize("report", [DEEPREVIEW, DEEPREVIEW_EDGES], ids=["fixture", "edges"])
+    def test_round_trip(self, report):
+        review = mapped("deepreview", report)
+        assert same_review(mapped("deepreview", map_to("deepreview", review)), review)
+
+    def test_a_review_from_elsewhere(self):
+        review = human_review()
+        review["opinion"]["contributions"] = [{"title": "Idea", "text": "A method."}]
+        review["findings"]["comments"] = [{"text": "A remark."}]
+        review["checks"] = [{"kind": "statistics", "label": "Stats", "summary": "Fine."}]
+        written = map_to("deepreview", review)
+        report = deepreview.parse_report(written)
+        assert report["summary"] == review["opinion"]["summary"]
+        assert [p["text"] for p in report["strengths"]] == [
+            p["text"] for p in findings_of(review, "strengths")
+        ]
+        # The review's own `##` headings are kept as `###`, inside the Review section
+        detailed = review["narrative"]["detailed_review"]
+        assert report["other"]["Review"] == detailed.replace("## ", "### ")
+        assert len(report["weaknesses"]) == len(findings_of(review, "weaknesses"))
+        assert report["other"]["Contributions"] == "* **Idea:** A method."
+        assert report["other"]["Comments"] == "* A remark."
+        assert report["other"]["Stats"] == "Fine."
+        assert "Questions" in report["other"]
+        validate_canonical(map_with_record("deepreview", written, **RUN).review)
+
+    def test_severity_and_group_place_a_point_under_potential_issues(self):
+        review = human_review()
+        review["findings"] = {
+            "weaknesses": [
+                {"text": "Overview.", "severity": "major", "summarizes": []},
+                {"text": "Critical one.", "severity": "critical", "title": "Crit"},
+                {"text": "Small one.", "severity": "info"},
+                {"text": "Grouped.", "group": ["[Results]"], "severity": "minor"},
+                {"text": "Two levels.", "group": ["[Results]", "Odd Tier"]},
+                {"text": "Plain."},
+            ]
+        }
+        report = deepreview.parse_report(map_to("deepreview", review))
+        assert [p["text"] for p in report["weaknesses"]] == ["Overview.", "Plain."]
+        tiers = {
+            (part["heading"], tier["heading"]): [item["text"] for item in tier["items"]]
+            for part in report["issues"]
+            for tier in part["tiers"]
+        }
+        assert tiers == {
+            ("[General]", "Potential Mistakes and Improvements"): ["Critical one."],
+            ("[General]", "Minor Corrections and Typos"): ["Small one."],
+            ("[Results]", "Minor Corrections and Typos"): ["Grouped."],
+            ("[Results]", "Odd Tier"): ["Two levels."],
+        }
+        mapped_back = map_with_record("deepreview", map_to("deepreview", review), **RUN)
+        severities = [w.get("severity") for w in mapped_back.review["findings"]["weaknesses"]]
+        assert severities == [None, None, "major", "minor", "minor", None]
+
+    def test_demoted(self):
+        assert deepreview.demoted("## A\n### B\n# C\ntext ## D") == "### A\n### B\n# C\ntext ## D"
+
+    def test_places_and_title(self):
+        point = {
+            "title": "Sign",
+            "text": "Flipped.",
+            "evidence_links": [
+                {"type": "paper_section", "ref": "Section 2, Page 3"},
+                {"type": "equation", "ref": "Eq. 1"},
+                {"type": "paper_section", "ref": "", "quote": "a quote"},
+                {"type": "external", "ref": "Reference Paper: X, Y, 2020"},
+            ],
+        }
+        assert deepreview.issue_head(point) == "Sign (Section 2, Page 3; Eq. 1)"
+        assert deepreview.issue_head({"text": "x"}) is None
+
+    @pytest.mark.parametrize(
+        ("head", "text", "expected"),
+        [
+            (None, "Plain.", "* Plain."),
+            ("H", "One line.", "* **H:** One line."),
+            ("H", "- a list\n- of points", "* **H:**\n  - a list\n  - of points"),
+            (
+                "H",
+                "Intro.\n  - indented\n  - list",
+                "* **H:**\n  Intro.\n    - indented\n    - list",
+            ),
+            ("H", "", "* **H:**"),
+            (None, "Intro.\n\n    code()", "* \n  Intro.\n\n      code()"),
+            ("H", "```py\nx\n```", "* **H:**\n  ```py\n  x\n  ```"),
+            (None, "```\nx\n```", "* \n  ```\n  x\n  ```"),
+        ],
+    )
+    def test_write_item(self, head, text, expected):
+        assert deepreview.write_item("*", head, text) == expected
+
+
+class TestReviewer3:
+    @staticmethod
+    def plain_report(markdown):
+        """The parsed report, without the bold the mapper does not keep."""
+        report = reviewer3.parse_report(markdown)
+        references = report.get("reference_check", {})
+        if "summary" in references:
+            references["summary"] = reviewer3.plain(references["summary"])
+        for entry in references.get("entries", []):
+            entry["status"] = reviewer3.plain(entry["status"]) if "status" in entry else None
+            if entry["status"] is None:
+                del entry["status"]
+        return report
+
+    @pytest.mark.parametrize("report", [REVIEWER3, REVIEWER3_EDGES], ids=["fixture", "edges"])
+    def test_writes_back_the_same_report(self, report):
+        written = map_to("reviewer3", mapped("reviewer3", report))
+        assert isinstance(written, str)
+        assert self.plain_report(written) == self.plain_report(report)
+
+    @pytest.mark.parametrize("report", [REVIEWER3, REVIEWER3_EDGES], ids=["fixture", "edges"])
+    def test_round_trip(self, report):
+        review = mapped("reviewer3", report)
+        assert same_review(mapped("reviewer3", map_to("reviewer3", review)), review)
+
+    def test_a_review_from_elsewhere(self):
+        review = human_review()
+        review["target"]["title"] = "The Paper"
+        review["checks"] = [{"kind": "similarity", "label": "Similarity", "summary": "Low."}]
+        written = map_to("reviewer3", review)
+        report = reviewer3.parse_report(written)
+        assert report["title"] == "The Paper"
+        points = [*findings_of(review, "weaknesses"), *findings_of(review, "questions")]
+        assert [c["text"] for c in report["comments"]] == [p["text"] for p in points]
+        assert {c["title"] for c in report["comments"]} <= {"Weakness", "Question"}
+        assert report["other"]["Summary"] == review["opinion"]["summary"]
+        assert report["other"]["Review"] == review["narrative"]["detailed_review"]
+        assert report["other"]["Similarity"] == "Low."
+        assert "Strengths" in report["other"]
+        again = map_with_record("reviewer3", written, **RUN).review
+        validate_canonical(again)
+        assert len(again["findings"]["comments"]) == len(points)
+
+    def test_checks_without_their_own_sentences(self):
+        review = human_review()
+        review["findings"] = {
+            "weaknesses": [{"id": "w1", "text": "Leak.", "severity": "critical"}],
+        }
+        review["checks"] = [
+            {
+                "kind": "ai_text_detection",
+                "performed_by": {"name": "Pangram"},
+                "measurements": [
+                    {"key": "ai_generated", "label": "AI-generated", "value": 0.125},
+                    {"key": "flag", "value": True},
+                ],
+            },
+            {"kind": "ai_text_detection", "summary": "A second run."},
+            {"kind": "fatal_flaw_screen", "outcome": "issues_found", "finding_ids": ["w1"]},
+            {
+                "kind": "reference_verification",
+                "measurements": [
+                    {"key": "checked", "value": 3},
+                    {"key": "not_found", "value": 1},
+                ],
+                "items": [
+                    {
+                        "target": {"type": "bibliography", "ref": "4", "work": {"title": "T"}},
+                        "status": "Unverified",
+                    }
+                ],
+            },
+        ]
+        written = map_to("reviewer3", review)
+        assert (
+            "12.5% AI-generated text detected. flag: True. See the full Pangram report." in written
+        )
+        assert "Checked 3 references: 1 not found." in written
+        assert "| 4 | T | Unverified |" in written
+        assert "- Leak." in written
+        again = map_with_record("reviewer3", written, **RUN).review
+        checks = {check["kind"]: check for check in again["checks"]}
+        assert checks["ai_text_detection"]["performed_by"] == {"name": "Pangram"}
+        assert checks["ai_text_detection"]["measurements"][0]["value"] == 0.125
+        assert checks["fatal_flaw_screen"]["outcome"] == "issues_found"
+        assert checks["reference_verification"]["items"][0]["flagged"] is True
+        assert again["extensions"]["reviewer3"]["other"]["AI Text Detection (2)"] == "A second run."
+
+    @pytest.mark.parametrize(
+        ("check", "expected"),
+        [
+            ({"kind": "fatal_flaw_screen", "outcome": "no_issues"}, reviewer3.NO_FATAL_FLAWS),
+            (
+                {
+                    "kind": "reference_verification",
+                    "measurements": [{"key": "checked", "value": 5}],
+                },
+                "Checked 5 references.",
+            ),
+        ],
+    )
+    def test_sentence_made_from_a_check(self, check, expected):
+        review = human_review()
+        review["checks"] = [check]
+        assert expected in map_to("reviewer3", review)
+
+    def test_detector_without_measurements(self):
+        check = {"kind": "ai_text_detection", "performed_by": {"name": "Detector"}}
+        assert reviewer3.write_ai_text(check) == "See the full Detector report."
+
+    def test_check_its_kind_cannot_say_is_written_in_prose(self):
+        review = human_review()
+        review["checks"] = [
+            {"kind": "reference_verification", "measurements": [{"key": "found", "value": 1}]},
+            {"kind": "other", "outcome": "not_run"},
+        ]
+        report = reviewer3.parse_report(map_to("reviewer3", review))
+        assert report["reference_check"] == {"text": "- found: 1"}
+        assert report["other"]["other"] == "Outcome: not run"
+
+    def test_comment_links(self):
+        def comment(*links):
+            return reviewer3.comment_from({"text": "x", "evidence_links": list(links)}, "Comment")
+
+        figure = comment({"type": "figure", "ref": "Figure 2", "location": {"page": 4}})
+        assert (figure["excerpt"], figure["page"]) == ("Figure 2", 4)
+        assert comment({"type": "figure", "ref": "the second figure"})["excerpt"] is None
+        assert comment({"type": "paper_section", "ref": "Sec 1"})["excerpt"] is None
+        assert reviewer3.comment_from({"text": "x", "title": "T"}, "Comment") == {
+            "title": "T",
+            "text": "x",
+        }
+
+    def test_demoted(self):
+        text = "### A\n#### B\n```\n### code\n```\n## C"
+        assert reviewer3.demoted(text) == "#### A\n#### B\n```\n### code\n```\n## C"
+
+    def test_headings_in_a_comment_stay_in_it(self):
+        review = human_review()
+        review["findings"] = {"comments": [{"title": "T", "text": "Intro.\n\n### Detail\n\nMore."}]}
+        written = map_to("reviewer3", review)
+        [comment] = reviewer3.parse_report(written)["comments"]
+        assert comment["text"] == "Intro.\n\n#### Detail\n\nMore."
+
+    def test_write_comment(self):
+        comment = {"title": "T", "page": 3, "page_end": 3, "excerpt": "a\n\nb", "text": "Why."}
+        assert reviewer3.write_comment(2, comment) == "2. **T** — Page 3\n\n> a\n>\n> b\n\nWhy."
+
+
+class TestHelpers:
+    def test_extension(self):
+        assert extension({}, "x") == {}
+        assert extension({"extensions": {"x": "not a dict"}}, "x") == {}
+        assert extension({"extensions": {"x": {"a": 1}}}, "x") == {"a": 1}
+
+    def test_reviewer_model(self):
+        def review(*models):
+            return {"referee": {"ai_referee": {"system": {"models": list(models)}}}}
+
+        assert reviewer_model({}) is None
+        assert reviewer_model(review({"role": "reviewer", "model_id": "unspecified"})) is None
+        assert reviewer_model(review({"role": "critic", "model_id": "c"})) is None
+        assert reviewer_model(review({"role": "reviewer", "model_id": "m"})) == "m"
+
+    def test_findings_of_keeps_empty_points(self):
+        review = {"findings": {"comments": [{"text": "a"}, {"text": ""}, "junk", {}]}}
+        assert findings_of(review, "comments") == [{"text": "a"}, {"text": ""}]
+        assert findings_of({}, "comments") == []
+
+    def test_overall_texts(self):
+        assert overall_texts({}) == (None, None)
+        assert overall_texts({"opinion": {"summary": "s", "text": "s"}}) == ("s", None)
+        narrative = {"summary": "n", "detailed_review": "d", "confidential_to_editors": "c"}
+        assert overall_texts({"narrative": narrative}) == ("n", "d")
+        assert overall_texts({"opinion": {"text": "t"}, "narrative": narrative}) == ("n", "t")
+
+    def test_indented(self):
+        assert indented("a\n\nb\n c", "  ") == "a\n\n  b\n   c"
+
+
+class TestKeptAndMissing:
+    def test_deepreview_part_with_only_a_skipped_point(self):
+        report = (
+            "## Potential Issues And Suggestions\n### [A]\n"
+            "#### Potential Mistakes and Improvements\n\n1. **Point:** Text.\n"
+            "### [B]\n#### Potential Mistakes and Improvements\n\n1. **Empty (Page 3):**\n"
+        )
+        review = mapped("deepreview", report)
+        written = map_to("deepreview", review)
+        assert "## Summary" not in written
+        assert deepreview.parse_report(written) == deepreview.parse_report(report)
+
+    def test_openaireview_point_removed_after_mapping(self):
+        review = mapped("openaireview", OPENAIREVIEW)
+        review["findings"]["weaknesses"] = review["findings"]["weaknesses"][:1]
+        review["opinion"] = {}
+        [method] = map_to("openaireview", review)["methods"].values()
+        assert len(method["comments"]) == 1 and "overall_feedback" not in method
+
+    def test_reviewer3_comment_removed_after_mapping(self):
+        review = mapped("reviewer3", REVIEWER3_EDGES)
+        review["findings"]["comments"] = review["findings"]["comments"][:1]
+        comments = reviewer3.parse_report(map_to("reviewer3", review))["comments"]
+        assert [comment["title"] for comment in comments] == ["Typo", "No explanation"]
+
+    def test_reviewer3_ai_text_without_a_detector(self):
+        check = {"kind": "ai_text_detection", "measurements": [{"key": "ai", "value": 0.4}]}
+        assert reviewer3.write_ai_text(check) == "40% ai text detected."
+
+
+class TestWhereThingsGoBack:
+    """Each point, row and method goes back where the reviewer had it."""
+
+    def test_openaireview_writes_back_the_method_it_mapped_and_keeps_the_others(self):
+        output = {
+            "methods": {
+                "zero_shot__m": {"overall_feedback": "Z.", "comments": [{"explanation": "z"}]},
+                "progressive__m": {"overall_feedback": "P.", "comments": [{"explanation": "p"}]},
+            }
+        }
+        review = mapped("openaireview", output)
+        assert review["opinion"]["summary"] == "P."
+        back = map_to("openaireview", review)
+        assert back["methods"] == output["methods"]
+        assert same_review(mapped("openaireview", back), review)
+
+    def test_openaireview_skipped_comment_with_no_known_fields(self):
+        comments = [{"paragraph_index": 0}, {"explanation": "Actual.", "paragraph_index": 1}]
+        output = {"methods": {"progressive__m": {"comments": comments}}}
+        [method] = map_to("openaireview", mapped("openaireview", output))["methods"].values()
+        assert method["comments"] == [
+            {"paragraph_index": 0, "explanation": ""},
+            {"paragraph_index": 1, "explanation": "Actual."},
+        ]
+
+    def test_deepreview_new_point_takes_no_place_of_the_reports_own(self):
+        review = mapped("deepreview", DEEPREVIEW_EDGES)
+        mistakes = ["[Methods] (Pages: 1-2)", "Potential Mistakes and Improvements"]
+        new = {"text": "A new point.", "group": mistakes}
+        review["findings"]["weaknesses"].insert(0, new)
+        report = deepreview.parse_report(map_to("deepreview", review))
+        [tier] = [
+            tier
+            for part in report["issues"]
+            for tier in part["tiers"]
+            if [part["heading"], tier["heading"]] == mistakes
+        ]
+        assert [item.get("title") for item in tier["items"]] == ["Wrong sign", "Empty point", None]
+        assert tier["items"][-1]["text"] == "A new point."
+
+    def test_reviewer3_reference_table_without_statuses_is_written_back(self):
+        body = "| # | Citation | Status | Note |\n| --- | --- | --- | --- |\n"
+        body += "| 1 | A. Author (2020). | | |\n| | | | lonely |\n"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Reference Check\n\n{body}"
+        review = mapped("reviewer3", report)
+        assert "checks" not in review
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+
+    def test_reviewer3_keeps_comment_numbers(self):
+        report = REVIEWER3_EDGES.replace("1. **Typo**", "7. **Typo**")
+        review = mapped("reviewer3", report)
+        review["findings"]["comments"].append({"title": "New", "text": "Added."})
+        again = mapped("reviewer3", map_to("reviewer3", review))
+        ids = [comment["id"] for comment in again["findings"]["comments"]]
+        assert ids == ["comment-7", "comment-2", "comment-8"]
+
+    def test_reviewer3_numbered_heading_in_a_comment_stays_in_it(self):
+        review = human_review()
+        text = "Intro.\n\n1. **First item**\n\nDetails."
+        review["findings"] = {"comments": [{"title": "T", "text": text}]}
+        [comment] = reviewer3.parse_report(map_to("reviewer3", review))["comments"]
+        assert comment["text"] == "Intro.\n\n 1. **First item**\n\nDetails."
+
+    def test_reviewer3_measurements_keep_their_units(self):
+        check = {
+            "kind": "ai_text_detection",
+            "measurements": [
+                {"key": "ai", "label": "AI-generated", "value": 0.3, "unit": "fraction"},
+                {"key": "words", "value": 42, "unit": "words"},
+            ],
+        }
+        assert reviewer3.write_ai_text(check) == "30% AI-generated text detected. words: 42 words."
+
+    @pytest.mark.parametrize("target", ["deepreview", "reviewer3"])
+    def test_checks_with_one_heading_are_all_written(self, target):
+        review = human_review()
+        review["checks"] = [
+            {"kind": "statistics", "summary": "First."},
+            {"kind": "statistics", "summary": "Second."},
+        ]
+        written = map_to(target, review)
+        assert "First.\n\nSecond." in written
+
+    def test_reviewer3_extra_column_is_one_column(self):
+        rows = reviewer3.reference_rows({}, [{"number": "1", "status": "", "note": "a"}] * 2)
+        written = reviewer3.write_reference_check({}, {"entries": rows})
+        assert written.splitlines()[0] == "| # | Citation | Status | note |"
+
+
+class TestCopilotRound:
+    def test_deepreview_fenced_headings_are_code(self):
+        review = human_review()
+        review["narrative"]["detailed_review"] = "Intro.\n\n```md\n## Example\n```\n\n## Real"
+        written = map_to("deepreview", review)
+        assert "```md\n## Example\n```" in written
+        report = deepreview.parse_report(written)
+        assert report["other"]["Review"] == "Intro.\n\n```md\n## Example\n```\n\n### Real"
+
+    def test_deepreview_parser_ignores_fenced_headings(self):
+        report = "## Summary\nText.\n\n```\n## Not a section\n```\n"
+        assert deepreview.parse_report(report) == {"summary": "Text.\n\n```\n## Not a section\n```"}
+
+    def test_reviewer3_check_summary_keeps_its_headings(self):
+        review = human_review()
+        summary = "Screen result.\n\n### Evidence\n\nAdditional details."
+        review["checks"] = [{"kind": "fatal_flaw_screen", "summary": summary}]
+        [check] = mapped("reviewer3", map_to("reviewer3", review))["checks"]
+        assert check["summary"] == "Screen result.\n\n#### Evidence\n\nAdditional details."
+
+    def test_openaireview_deleted_comment_takes_its_fields_with_it(self):
+        review = mapped("openaireview", OPENAIREVIEW)
+        del review["findings"]["weaknesses"][0]
+        [method] = map_to("openaireview", review)["methods"].values()
+        [key] = [k for k in OPENAIREVIEW["methods"] if k.startswith("progressive__")]
+        original = OPENAIREVIEW["methods"][key]["comments"]
+        assert [c["id"] for c in method["comments"]] == [c["id"] for c in original[1:]]
+        assert [c["paragraph_index"] for c in method["comments"]] == [
+            c["paragraph_index"] for c in original[1:]
+        ]
+
+    def test_openaireview_new_weakness_follows_the_reports_own(self):
+        review = mapped("openaireview", OPENAIREVIEW)
+        review["findings"]["weaknesses"].insert(0, {"text": "New."})
+        [method] = map_to("openaireview", review)["methods"].values()
+        assert method["comments"][-1] == {"explanation": "New."}
+        assert len(method["comments"]) == 4
+
+
+class TestKeptIdentity:
+    def test_reviewer3_columns_follow_their_row_when_an_item_is_removed(self):
+        body = "| # | Citation | Status | Note |\n| --- | --- | --- | --- |\n"
+        body += "| 1 | A (2020). | Verified | first |\n| 2 | B (2021). | Not Found | second |\n"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Reference Check\n\n{body}"
+        review = mapped("reviewer3", report)
+        del review["checks"][0]["items"][0]
+        [entry] = reviewer3.parse_report(map_to("reviewer3", review))["reference_check"]["entries"]
+        assert entry == {
+            "number": "2",
+            "citation": "B (2021).",
+            "status": "Not Found",
+            "note": "second",
+        }
+
+    def test_deepreview_bare_empty_point_keeps_later_ids(self):
+        report = (
+            "## Potential Issues And Suggestions\n### [A]\n"
+            "#### Minor Corrections and Typos\n\n* **One:** First.\n* \n* **Three:** Third.\n"
+        )
+        review = mapped("deepreview", report)
+        ids = [point["id"] for point in review["findings"]["weaknesses"]]
+        assert ids == ["issue-1.1.1", "issue-1.1.3"]
+        assert same_review(mapped("deepreview", map_to("deepreview", review)), review)
+
+
+def test_deepreview_untitled_point_keeps_its_code_indentation():
+    review = human_review()
+    review["findings"] = {"strengths": [{"text": "Intro.\n\n    code_line()"}]}
+    [point] = deepreview.parse_report(map_to("deepreview", review))["strengths"]
+    assert point == {"text": "Intro.\n\n    code_line()"}
+
+
+def test_reviewer3_contributions_opening_with_code_keep_what_follows():
+    review = human_review()
+    review["opinion"]["contributions"] = [
+        {"title": "Code", "text": "```py\nx = 1\n```"},
+        {"text": "```\ny\n```"},
+        {"text": "Second."},
+    ]
+    report = reviewer3.parse_report(map_to("reviewer3", review))
+    assert report["overview"] == review["opinion"]["contributions"]
+    assert "Overview" not in report.get("other", {})
+
+
+def test_openaireview_new_weakness_follows_even_when_nothing_was_kept():
+    output = {"methods": {"progressive__m": {"comments": [{"explanation": "Original."}]}}}
+    review = mapped("openaireview", output)
+    review["findings"]["weaknesses"].insert(0, {"text": "New."})
+    [method] = map_to("openaireview", review)["methods"].values()
+    assert [c["explanation"] for c in method["comments"]] == ["Original.", "New."]
+
+
+class TestEdgesOfTheFormat:
+    def test_reviewer3_explanation_opening_with_a_quote_stays_the_explanation(self):
+        review = human_review()
+        review["findings"] = {"comments": [{"title": "T", "text": "> The baseline is inadequate."}]}
+        again = mapped("reviewer3", map_to("reviewer3", review))
+        [comment] = again["findings"]["comments"]
+        assert comment["text"] == "> The baseline is inadequate."
+        assert "evidence_links" not in comment
+
+    def test_reviewer3_repeated_numbers_with_a_skipped_comment_keep_their_ids(self):
+        body = "3. **One**\n\nFirst.\n\n3. **Two**\n\n3. **Three**\n\nThird."
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Reviewer Comments\n\n{body}\n"
+        review = mapped("reviewer3", report)
+        assert [c["id"] for c in review["findings"]["comments"]] == ["comment-1", "comment-3"]
+        assert same_review(mapped("reviewer3", map_to("reviewer3", review)), review)
+
+    def test_deepreview_empty_point_at_the_very_end_is_kept(self):
+        report = (
+            "## Potential Issues And Suggestions\n### [A]\n"
+            "#### Minor Corrections and Typos\n\n* **One:** First.\n* \n"
+        )
+        review = mapped("deepreview", report)
+        written = map_to("deepreview", review)
+        assert deepreview.parse_report(written) == deepreview.parse_report(report)
+        assert same_review(mapped("deepreview", written), review)
+
+    @pytest.mark.parametrize(("opening", "closing"), [(0, 2), (2, 0), (0, 3), (1, 1)])
+    def test_fences_indented_differently_hide_no_section(self, opening, closing):
+        text = f"{' ' * opening}```py\nx = 1\n{' ' * closing}```"
+        review = human_review()
+        review["findings"]["strengths"] = [{"title": "Code", "text": text}]
+        review["opinion"]["contributions"] = [{"title": "Code", "text": text}]
+        report = deepreview.parse_report(map_to("deepreview", review))
+        assert len(report["weaknesses"]) == len(findings_of(human_review(), "weaknesses"))
+        r3 = reviewer3.parse_report(map_to("reviewer3", review))
+        assert len(r3["comments"]) == len(findings_of(human_review(), "weaknesses")) + len(
+            findings_of(human_review(), "questions")
+        )
+
+
+class TestFifthReview:
+    def test_deepreview_empty_strength_keeps_the_ids_after_it(self):
+        report = "## Strengths\n* \n* Useful result.\n## Weaknesses\n* \n* Real weakness.\n"
+        review = mapped("deepreview", report)
+        assert [p["id"] for p in review["findings"]["strengths"]] == ["strength-1", "strength-2"]
+        assert same_review(mapped("deepreview", map_to("deepreview", review)), review)
+
+    def test_reviewer3_empty_fatal_flaw_keeps_the_checks_finding_ids(self):
+        body = "- **Leak** — Test data leaks.\n- \n- **Bias** — Selection bias."
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Fatal Flaws\n\n{body}\n"
+        review = mapped("reviewer3", report)
+        assert same_review(mapped("reviewer3", map_to("reviewer3", review)), review)
+
+    def test_reviewer3_standalone_indented_fence_still_hides_headings(self):
+        appendix = "  ```\n### Fatal Flaws\n- **Fake** — Not a flaw.\n  ```"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Appendix\n\n{appendix}\n"
+        review = mapped("reviewer3", report)
+        assert "checks" not in review
+        # A kept section is stripped, as always; the heading stays in the code
+        assert review["extensions"]["reviewer3"]["other"]["Appendix"] == appendix.strip()
+
+    def test_deepreview_standalone_indented_fence_still_hides_headings(self):
+        report = "## Summary\nText.\n\n  ```\n## Not a section\n  ```\n"
+        assert list(deepreview.parse_report(report)) == ["summary"]
+
+    def test_reviewer3_rows_sharing_a_number_keep_their_own_columns(self):
+        body = "| # | Citation | Status | Note |\n| --- | --- | --- | --- |\n"
+        body += "| 7 | A (2020). | Verified | |\n| 7 | B (2021). | Not Found | second |\n"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Reference Check\n\n{body}"
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+
+
+class TestCopilotFourthRound:
+    def test_deepreview_wrapped_title_keeps_its_lines(self):
+        report = "## Strengths\n* **Clear\n  exposition:** Well written.\n"
+        review = mapped("deepreview", report)
+        assert review["findings"]["strengths"][0]["title"] == "Clear\nexposition"
+        assert same_review(mapped("deepreview", map_to("deepreview", review)), review)
+
+    def test_reviewer3_wrapped_titles(self):
+        review = human_review()
+        review["opinion"]["contributions"] = [{"title": "Two\nlines", "text": "A method."}]
+        review["findings"] = {"comments": [{"title": "Also\ntwo", "text": "Why."}]}
+        report = reviewer3.parse_report(map_to("reviewer3", review))
+        assert report["overview"] == [{"title": "Two\nlines", "text": "A method."}]
+        assert report["comments"][0]["title"] == "Also two"
+
+    def test_reviewer3_identical_rows_keep_their_statuses_and_columns(self):
+        body = "| # | Citation | Status | Note |\n| --- | --- | --- | --- |\n"
+        body += "| 7 | A. | Verified | |\n| 7 | A. | Not Found | second |\n"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Reference Check\n\n{body}"
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+        assert same_review(mapped("reviewer3", written), review)
+
+
+class TestSixthReview:
+    def test_reviewer3_parent_fence_after_a_nested_list_hides_no_section(self):
+        overview = "- Main\n  - Nested\n\n  ```py\n  x\n    ```"
+        report = (
+            f"# Review Report\n\nA paper\n\n---\n\n### Overview\n\n{overview}\n\n"
+            "### Fatal Flaws\n\n- **Leak** — Test data leaks.\n"
+        )
+        review = mapped("reviewer3", report)
+        assert [check["kind"] for check in review["checks"]] == ["fatal_flaw_screen"]
+        assert review["findings"]["weaknesses"][0]["severity"] == "critical"
+
+    def test_deepreview_parent_fence_after_a_nested_list_hides_no_section(self):
+        report = "## Strengths\n* Main\n  * Nested\n\n  ```py\n  x\n    ```\n## Weaknesses\n* W.\n"
+        assert deepreview.parse_report(report)["weaknesses"] == [{"text": "W."}]
+
+    def test_heading_after_a_fence_led_list_item_is_demoted(self):
+        review = human_review()
+        text = "- ```py\n  x\n  ```\n\nResult:\n\n## Result\nImportant result."
+        review["opinion"] = {"summary": text}
+        review.pop("narrative")
+        report = deepreview.parse_report(map_to("deepreview", review))
+        assert report["summary"] == text.replace("## Result", "### Result")
+        review["opinion"] = {"summary": text.replace("## Result", "### Result")}
+        r3 = reviewer3.parse_report(map_to("reviewer3", review))
+        assert r3["other"]["Summary"] == text.replace("## Result", "#### Result")
+
+    def test_reviewer3_comments_numbered_down_with_a_skipped_one_keep_their_order(self):
+        body = "3. **Three**\n\nFirst.\n\n2. **Two**\n\n1. **One**\n\nLast."
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Reviewer Comments\n\n{body}\n"
+        review = mapped("reviewer3", report)
+        assert [c["id"] for c in review["findings"]["comments"]] == ["comment-3", "comment-1"]
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+        assert same_review(mapped("reviewer3", written), review)
+
+    def test_reviewer3_fence_after_a_list_marker_in_a_comment(self):
+        review = human_review()
+        text = "- ```\n  1. **Not a comment**\n  ```"
+        review["findings"] = {
+            "comments": [{"title": "A", "text": text}, {"title": "B", "text": "Next."}]
+        }
+        comments = reviewer3.parse_report(map_to("reviewer3", review))["comments"]
+        assert [(c["title"], c["text"]) for c in comments] == [("A", text), ("B", "Next.")]
+
+    def test_reviewer3_fence_after_a_list_marker_before_a_reference_table(self):
+        summary = "Checked 1 references: 1 not found.\n\n- ```\n  | x | y |\n  ```"
+        review = human_review()
+        review["checks"] = [
+            {
+                "kind": "reference_verification",
+                "summary": summary,
+                "items": [{"target": {"type": "bibliography", "ref": "4"}, "status": "Not Found"}],
+            }
+        ]
+        report = reviewer3.parse_report(map_to("reviewer3", review))
+        assert report["reference_check"]["entries"] == [{"number": "4", "status": "Not Found"}]
+
+
+class TestPanelGate:
+    def test_deepreview_places_alone_read_back_as_places(self):
+        review = human_review()
+        links = [{"type": "paper_section", "ref": r} for r in ("Page 2", "Figure 1")]
+        review["findings"] = {
+            "weaknesses": [{"text": "T.", "severity": "minor", "evidence_links": links}]
+        }
+        again = mapped("deepreview", map_to("deepreview", review))
+        [point] = again["findings"]["weaknesses"]
+        assert "title" not in point
+        assert [link["ref"] for link in point["evidence_links"]] == ["Page 2", "Figure 1"]
+
+    def test_deepreview_wrapped_strength_keeps_the_sections_after_its_code(self):
+        report = "## Strengths\n* Main point\nwraps here.\n\n  ```py\n  x\n    ```\n"
+        report += "## Weaknesses\n* W.\n"
+        assert deepreview.parse_report(report)["weaknesses"] == [{"text": "W."}]
+
+
+class TestRepeatedChecks:
+    def test_reviewer3_second_checks_keep_what_they_say(self):
+        review = human_review()
+        review["findings"] = {
+            "weaknesses": [
+                {"id": "w1", "text": "First flaw.", "severity": "critical"},
+                {"id": "w2", "text": "Second flaw.", "severity": "critical"},
+            ]
+        }
+        review["checks"] = [
+            {"kind": "fatal_flaw_screen", "outcome": "issues_found", "finding_ids": ["w1"]},
+            {"kind": "fatal_flaw_screen", "outcome": "issues_found", "finding_ids": ["w2"]},
+            {
+                "kind": "reference_verification",
+                "measurements": [{"key": "checked", "value": 2}],
+            },
+            {
+                "kind": "reference_verification",
+                "measurements": [{"key": "checked", "value": 5}],
+                "items": [{"target": {"type": "bibliography", "ref": "3"}, "status": "Not Found"}],
+            },
+            {
+                "kind": "statistics",
+                "outcome": "issues_found",
+                "measurements": [{"key": "p", "value": 0.04}],
+            },
+        ]
+        written = map_to("reviewer3", review)
+        report = reviewer3.parse_report(written)
+        assert report["fatal_flaws"]["items"] == [{"text": "First flaw."}]
+        assert report["other"]["Fatal Flaws (2)"] == "- Second flaw."
+        assert "| 3 |  | Not Found |" in report["other"]["Reference Check (2)"]
+        assert report["other"]["statistics"] == "Outcome: issues found\n\n- p: 0.04"
+        assert "comments" not in report
+
+    def test_deepreview_checks_keep_what_they_say(self):
+        review = human_review()
+        review["checks"] = [
+            {
+                "kind": "reference_verification",
+                "label": "References",
+                "summary": "Checked.",
+                "performed_by": {"name": "Tool"},
+                "items": [
+                    {
+                        "target": {"type": "bibliography", "ref": "4"},
+                        "status": "Not Found",
+                        "flagged": True,
+                        "notes": "No DOI",
+                    }
+                ],
+            }
+        ]
+        report = deepreview.parse_report(map_to("deepreview", review))
+        assert report["other"]["References"] == (
+            "Checked.\n\nPerformed by: Tool\n\n- 4: Not Found (flagged) — No DOI"
+        )
+
+
+class TestSecondGate:
+    def test_reviewer3_numbered_item_with_code_in_a_comment_keeps_its_shape(self):
+        review = human_review()
+        text = "Steps:\n\n1. **Prepare**\n   ```py\n   x = 1\n   ```\n\nDone."
+        review["findings"] = {
+            "comments": [{"title": "A", "text": text}, {"title": "B", "text": "Next."}]
+        }
+        written = map_to("reviewer3", review)
+        report = reviewer3.parse_report(written)
+        assert [c["title"] for c in report["comments"]] == ["A", "B"]
+        shifted = "Steps:\n\n 1. **Prepare**\n    ```py\n    x = 1\n    ```\n\nDone."
+        assert report["comments"][0]["text"] == shifted
+
+    def test_reviewer3_header_right_after_an_unclosed_list_fence_starts_a_comment(self):
+        body = "1. **A**\n\n- ```\n  code\n2. **B**\n\nNext."
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Reviewer Comments\n\n{body}\n"
+        comments = reviewer3.parse_report(report)["comments"]
+        assert [c["title"] for c in comments] == ["A", "B"]
+
+    @pytest.mark.parametrize(
+        "kind", ["fatal_flaw_screen", "ai_text_detection", "reference_verification"]
+    )
+    def test_reviewer3_outcome_only_checks_are_written(self, kind):
+        review = human_review()
+        review["checks"] = [
+            {"kind": kind, "outcome": "inconclusive"},
+            {"kind": kind, "outcome": "not_run"},
+        ]
+        written = map_to("reviewer3", review)
+        assert "Outcome: inconclusive" in written
+        assert "Outcome: not run" in written
+
+
+class TestCopilotSummaries:
+    def test_reviewer3_bulleted_verdict_keeps_the_flaw_ids(self):
+        body = "- No fatal methodological flaws were identified.\n- **Caveat** — Missing baseline."
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Fatal Flaws\n\n{body}\n"
+        review = mapped("reviewer3", report)
+        assert review["checks"][0]["finding_ids"] == ["fatal-flaw-2"]
+        assert same_review(mapped("reviewer3", map_to("reviewer3", review)), review)
+
+    def test_reviewer3_reference_item_notes_are_written(self):
+        review = human_review()
+        review["checks"] = [
+            {
+                "kind": "reference_verification",
+                "items": [
+                    {
+                        "target": {"type": "bibliography", "ref": "4"},
+                        "status": "Not Found",
+                        "notes": "The DOI resolves to a different paper.",
+                    }
+                ],
+            }
+        ]
+        [entry] = reviewer3.parse_report(map_to("reviewer3", review))["reference_check"]["entries"]
+        assert entry["notes"] == "The DOI resolves to a different paper."
+
+    def test_reviewer3_zero_padded_numbers_keep_their_ids(self):
+        body = "01. **One**\n\nFirst.\n\n02. **Two**\n\n03. **Three**\n\nThird."
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Reviewer Comments\n\n{body}\n"
+        review = mapped("reviewer3", report)
+        assert [c["id"] for c in review["findings"]["comments"]] == ["comment-01", "comment-03"]
+        assert same_review(mapped("reviewer3", map_to("reviewer3", review)), review)
+
+    @pytest.mark.parametrize("section", ["Overview", "Fatal Flaws"])
+    def test_reviewer3_bullet_opening_a_fence_is_a_point(self, section):
+        body = "- ```python\n  x = 1\n  ```\n- **Second** — Plain."
+        report = f"# Review Report\n\nA paper\n\n---\n\n### {section}\n\n{body}\n"
+        parsed = reviewer3.parse_report(report)
+        points = parsed["overview"] if section == "Overview" else parsed["fatal_flaws"]["items"]
+        assert points == [
+            {"text": "```python\nx = 1\n```"},
+            {"title": "Second", "text": "Plain."},
+        ]
+
+
+class TestThirdGate:
+    @pytest.mark.parametrize("section", ["Overview", "Fatal Flaws"])
+    def test_reviewer3_peer_bullet_after_unclosed_code_is_its_own_point(self, section):
+        body = "- ```\n  code\n- **Second** — Peer."
+        report = f"# Review Report\n\nA paper\n\n---\n\n### {section}\n\n{body}\n"
+        parsed = reviewer3.parse_report(report)
+        points = parsed["overview"] if section == "Overview" else parsed["fatal_flaws"]["items"]
+        assert points == [{"text": "```\ncode"}, {"title": "Second", "text": "Peer."}]
+
+    def test_reviewer3_writes_what_a_checks_section_cannot_say(self):
+        review = human_review()
+        review["checks"] = [
+            {"kind": "fatal_flaw_screen", "summary": "Screen ran.", "outcome": "inconclusive"},
+            {
+                "kind": "ai_text_detection",
+                "summary": "Mostly human.",
+                "performed_by": {"name": "Detector"},
+                "measurements": [{"key": "ai", "label": "AI", "value": 0.3, "unit": "fraction"}],
+            },
+        ]
+        report = reviewer3.parse_report(map_to("reviewer3", review))
+        assert report["fatal_flaws"]["text"] == "Screen ran.\n\nOutcome: inconclusive"
+        assert report["ai_text_detection"] == (
+            "Mostly human.\n\nPerformed by: Detector\n\n- AI: 0.3 fraction"
+        )
+
+    def test_reviewer3_nothing_is_added_when_the_section_says_it_all(self):
+        review = mapped("reviewer3", REVIEWER3)
+        written = map_to("reviewer3", review)
+        assert "Outcome:" not in written and "Performed by:" not in written
+
+
+class TestFinalCopilotRound:
+    @pytest.mark.parametrize("section", ["Overview", "Fatal Flaws"])
+    def test_reviewer3_sibling_that_opens_a_fence_is_its_own_point(self, section):
+        body = "- ```python\n  x = 1\n- ```js\n  y\n  ```"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### {section}\n\n{body}\n"
+        parsed = reviewer3.parse_report(report)
+        points = parsed["overview"] if section == "Overview" else parsed["fatal_flaws"]["items"]
+        assert points == [{"text": "```python\nx = 1"}, {"text": "```js\ny\n```"}]
+
+    def test_reviewer3_multi_paragraph_verdict_keeps_its_place(self):
+        body = (
+            "- No fatal methodological flaws were identified.\n\n  Additional caveat.\n"
+            "- **Caveat** — Missing baseline."
+        )
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Fatal Flaws\n\n{body}\n"
+        review = mapped("reviewer3", report)
+        assert review["checks"][0]["finding_ids"] == ["fatal-flaw-2"]
+        assert same_review(mapped("reviewer3", map_to("reviewer3", review)), review)
+
+
+def test_reviewer3_a_huge_flaw_id_lists_no_places():
+    review = human_review()
+    review["findings"] = {"weaknesses": [{"id": "fatal-flaw-1000000000", "text": "Leak."}]}
+    review["checks"] = [
+        {
+            "kind": "fatal_flaw_screen",
+            "summary": "Screened.",
+            "finding_ids": ["fatal-flaw-1000000000"],
+        }
+    ]
+    report = reviewer3.parse_report(map_to("reviewer3", review))
+    assert report["fatal_flaws"] == {"text": "Screened.", "items": [{"text": "Leak."}]}

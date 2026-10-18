@@ -24,15 +24,11 @@ _bullet_pattern = re.compile(r"^\s*(?:[-*•]|\d+[.)\]])\s*", re.MULTILINE)
 
 
 def now_iso() -> str:
-    return _dt.datetime.now(tz=_dt.timezone.utc).isoformat().replace("+00:00", "Z")
+    return _dt.datetime.now(tz=_dt.UTC).isoformat().replace("+00:00", "Z")
 
 
 def epoch_ms_to_iso(ms: int) -> str:
-    return (
-        _dt.datetime.fromtimestamp(ms / 1000.0, tz=_dt.timezone.utc)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
+    return _dt.datetime.fromtimestamp(ms / 1000.0, tz=_dt.UTC).isoformat().replace("+00:00", "Z")
 
 
 def first_paragraph(text: str, max_len: int = 500) -> str:
@@ -44,8 +40,89 @@ def first_paragraph(text: str, max_len: int = 500) -> str:
     return parts[0][:max_len]
 
 
+# Fields that identify the review, the work or the reviewer, or say when it happened. Their
+# values often start with digits (a DOI, an ORCID, a date, a timestamp) but are never scores.
+# Compared without case, `_`, `-` or spaces.
+_NOT_SCORE_FIELDS = {
+    "id", "ids", "pid", "forum", "number", "ordinal", "rtype", "round",
+    "doi", "orcid", "arxiv", "pmid", "pmcid", "isbn", "issn", "url", "link", "version",
+    "email", "revieweremail", "contact", "reviewernumber",
+    "cdate", "tcdate", "mdate", "tmdate", "ddate", "odate", "pdate",
+    "date", "created", "modified", "updated", "submitted", "timesubmitted", "timemodified",
+    "time", "timestamp", "datetime",
+}  # fmt: skip
+# camelCase or snake_case IDs and times: `paperId`, `paper_id`, `createdAt`, `review_date`,
+# `created_timestamp`, `reviewTime`
+_NOT_SCORE_SUFFIX = re.compile(
+    r"(?:^|_|[a-z])(?:Ids?|IDs?|_ids?|At|_at|Date|_date|Time(?:stamp)?|_time(?:stamp)?)$"
+)
+
+
+_NOT_SCORE_LAST_WORDS = {"id", "ids", "at", "date", "time", "timestamp", "doi", "orcid", "url"}
+
+
+def is_score_field(key: str) -> bool:
+    """Whether a source field may hold a score: not an identifier, a link or a time."""
+    plain = re.sub(r"[\s_-]", "", key).casefold()
+    if plain in _NOT_SCORE_FIELDS or plain.endswith(("orcid", "arxivid", "doi")):
+        return False
+    # A last word set off by a space, `_` or `-`, in any case: `Paper ID`, `paper-id`,
+    # `CREATED_AT`; run-together words only by camelCase (`paperId`), so `valid` is a score
+    words = [word for word in re.split(r"[\s_-]+", key.casefold()) if word]
+    if len(words) > 1 and words[-1] in _NOT_SCORE_LAST_WORDS:
+        return False
+    return not _NOT_SCORE_SUFFIX.search(key)
+
+
+_WORD_EDGE = r"(?<![a-z0-9]){}(?![a-z0-9])"
+MIN_PARTIAL_ALIAS = 4
+
+
+def match_alias(label: str, amap: dict[str, str]) -> str | None:
+    """The metric key a field label names, or None.
+
+    The label is an alias, or contains one as whole words (`Soundness score` contains
+    `soundness`; the longest alias wins), or is whole words of aliases that all name the
+    same metric (`presentation`, from `presentation clarity`). A label shorter than four
+    characters is never part of an alias, and one that is part of aliases of different
+    metrics (`quality`) names none.
+    """
+    lcf = label.casefold().strip()
+    if not lcf:
+        return None
+    if lcf in amap:
+        return amap[lcf]
+    for alias in sorted(amap, key=len, reverse=True):
+        if re.search(_WORD_EDGE.format(re.escape(alias)), lcf):
+            return amap[alias]
+    if len(lcf) < MIN_PARTIAL_ALIAS:
+        return None
+    pattern = _WORD_EDGE.format(re.escape(lcf))
+    keys = {key for alias, key in amap.items() if re.search(pattern, alias)}
+    return keys.pop() if len(keys) == 1 else None
+
+
+def first_present_item(mapping: dict[str, Any], keys: tuple[str, ...]) -> tuple[str | None, Any]:
+    """The first of `keys` whose value is not None, blank text or a boolean (never a score,
+    a recommendation or an ID), and its value."""
+    for key in keys:
+        value = mapping.get(key)
+        if value is None or isinstance(value, bool):
+            continue
+        if not (isinstance(value, str) and not value.strip()):
+            return key, value
+    return None, None
+
+
+def first_present(mapping: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    """The value of the first of `keys` whose value is not None, blank text or a boolean."""
+    return first_present_item(mapping, keys)[1]
+
+
 def parse_numeric_prefix(value: Any) -> tuple[int | float | None, str | None]:
-    """Parse strings like '6: Weak Accept' -> (6, 'Weak Accept')."""
+    """Parse strings like '6: Weak Accept' -> (6, 'Weak Accept'). A boolean is not a number."""
+    if isinstance(value, bool):
+        return None, None
     if isinstance(value, (int, float)):
         return value, None
     if not isinstance(value, str):
@@ -127,10 +204,31 @@ def map_recommendation_from_numeric(num: int | float, scale: dict[str, Any]) -> 
     return None
 
 
+_ACCEPT = re.compile(r"\baccept(?:s|ed|ance)?\b")
+_REJECT = re.compile(r"\breject(?:s|ed|ion)?\b")
+_NEGATED_QUALIFIED_ACCEPT = re.compile(
+    r"\b(?:not|never)\s+(?:an?\s+|the\s+)?(?:strong|weak|clear|full)\s+accept\w*"
+)
+_DOUBLE_NEGATIVE = re.compile(r"\b(?:not|never)\s+(?:an?\s+)?unacceptable\b")
+_NEGATED_ACCEPT = re.compile(
+    r"\b(?:not|never|cannot)\s+(?:be\s+)?accept(?:ed|able)?\b|\bunacceptable\b"
+)
+
+
 def map_recommendation_from_text(s: str) -> str | None:
     if not s:
         return None
     x = s.casefold().replace("_", " ")
+    # A negated strong, weak or clear accept says only what it is not, so it is set aside
+    # (alone, it leaves no label and a score decides). A plainly negated acceptance ("not
+    # acceptable") is a rejection
+    # The rest of the label may still state one: "Weak accept (not a strong accept)"
+    x = _NEGATED_QUALIFIED_ACCEPT.sub(" ", x)
+    # A double negative ("not unacceptable") is no clear verdict either way
+    if _DOUBLE_NEGATIVE.search(x):
+        return None
+    if _NEGATED_ACCEPT.search(x):
+        return "reject"
     # Common phrases - order matters for overlapping matches
     if "strong accept" in x:
         return "strong_accept"
@@ -145,9 +243,10 @@ def map_recommendation_from_text(s: str) -> str | None:
     # Check "resubmit/resubmission" before "reject" as "reject and encourage resubmission" -> revise
     if "resubmit" in x or "resubmission" in x:
         return "revise"
-    if x.strip() in {"accept", "yes"} or "accept" in x:
+    # Whole words: "acceptable" is not "accept"
+    if x.strip() in {"accept", "yes"} or _ACCEPT.search(x):
         return "accept"
-    if x.strip() in {"reject", "no"} or "reject" in x:
+    if x.strip() in {"reject", "no"} or _REJECT.search(x):
         return "reject"
     if "major revision" in x:
         return "major_revision"
@@ -285,11 +384,7 @@ def parse_date_flexible(value: str | int | float) -> str:
         # Heuristic: if > 1e11, it's likely milliseconds
         if value > 1e11:
             return epoch_ms_to_iso(int(value))
-        return (
-            _dt.datetime.fromtimestamp(value, tz=_dt.timezone.utc)
-            .isoformat()
-            .replace("+00:00", "Z")
-        )
+        return _dt.datetime.fromtimestamp(value, tz=_dt.UTC).isoformat().replace("+00:00", "Z")
     if not isinstance(value, str):
         return now_iso()
     s = value.strip()
@@ -304,14 +399,14 @@ def parse_date_flexible(value: str | int | float) -> str:
     # Date-only: assume midnight UTC
     try:
         dt = _dt.datetime.strptime(s, "%Y-%m-%d")
-        return dt.replace(tzinfo=_dt.timezone.utc).isoformat().replace("+00:00", "Z")
+        return dt.replace(tzinfo=_dt.UTC).isoformat().replace("+00:00", "Z")
     except ValueError:
         pass
     # Try other common formats
     for fmt in ("%Y/%m/%d", "%d-%m-%Y", "%m/%d/%Y"):
         try:
             dt = _dt.datetime.strptime(s, fmt)
-            return dt.replace(tzinfo=_dt.timezone.utc).isoformat().replace("+00:00", "Z")
+            return dt.replace(tzinfo=_dt.UTC).isoformat().replace("+00:00", "Z")
         except ValueError:
             continue
     # Fallback: return current time

@@ -10,13 +10,13 @@ output, `findings.weaknesses[2].severity` in the OCRS review. Gap paths use
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, JsonValue
 
 
-class Rule(str, Enum):
+class Rule(StrEnum):
     COPIED = "copied"
     LOOKUP = "lookup"
     PARSED = "parsed"
@@ -71,7 +71,7 @@ class Gaps(BaseModel):
     """Quotes from the paper that could not be found in it. None when no paper was given."""
 
 
-class MappingStatus(str, Enum):
+class MappingStatus(StrEnum):
     OK = "ok"
     PARTIAL = "partial"
     FAILED = "failed"

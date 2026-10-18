@@ -11,10 +11,14 @@ Each comment becomes a weakness: `title`, `explanation` as the text,
 `comment_type` as a tag and `quote` as an evidence link. OpenAIReview gives no
 severity and no location other than its own paragraph number, which is kept
 in `extensions.openaireview`.
+
+`to_openaireview` writes an OCRS review back as a paper.json (see its docstring).
 """
 
 from __future__ import annotations
 
+import copy
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -23,9 +27,17 @@ from pydantic import BaseModel
 from ..anchors import Block
 from ..gaps import generic_path
 from ..mapping import MappingResult
-from .ai import Recorder, finish
+from .ai import (
+    UNSPECIFIED,
+    Recorder,
+    extension,
+    findings_of,
+    finish,
+    overall_texts,
+    reviewer_model,
+)
 
-MAPPER_VERSION = "1.0.2"
+MAPPER_VERSION = "1.1.0"
 MERGED_METHOD_PREFIX = "progressive__"
 UNMERGED_METHOD_PREFIX = "progressive_original__"
 IGNORED = {"paragraphs", f"methods.{UNMERGED_METHOD_PREFIX}*"}
@@ -123,19 +135,144 @@ def map_openaireview(
             }
         }
     weaknesses = []
+    skipped = []
     for index, comment in enumerate(method.comments):
         source = f"{prefix}.comments[{index}]"
         if not comment.explanation:
             recorder.skip(source, "no explanation")
+            skipped.append(index)
             continue
         target = f"findings.weaknesses[{len(weaknesses)}]"
-        weaknesses.append(map_comment(comment, source, target, recorder, blocks))
+        # The ID says where the comment was, so it goes back there
+        weaknesses.append(
+            {"id": f"comment-{index + 1}"} | map_comment(comment, source, target, recorder, blocks)
+        )
     if weaknesses:
         review["findings"] = {"weaknesses": weaknesses}
-    return finish(
+    result = finish(
         review,
         recorder,
         output,
         ignored=IGNORED,
         generic=method_wildcard(list(paper.methods)),
     )
+    keep_what_was_mapped(result.review, list(paper.methods), key, len(method.comments), skipped)
+    return result
+
+
+def keep_what_was_mapped(
+    review: dict[str, Any], keys: list[str], key: str, count: int, skipped: list[int]
+) -> None:
+    """Keep in extensions which method was mapped (empty when all of it was) and each skipped
+    comment's empty explanation, so `to_openaireview` puts both back without guessing."""
+    kept = review.setdefault("extensions", {}).setdefault("openaireview", {})
+    methods = kept.get("methods") or {}
+    mapped = dict(methods.get(key) or {})
+    if skipped:
+        comments = list(mapped.get("comments") or [None] * count)
+        for index in skipped:
+            comments[index] = {**(comments[index] or {}), "explanation": ""}
+        mapped["comments"] = comments
+    kept["methods"] = {
+        k: mapped if k == key else methods[k] for k in keys if k == key or k in methods
+    }
+
+
+# OCRS → OpenAIReview
+
+# Findings written as comments, in this order; OpenAIReview has no place for strengths
+COMMENT_KINDS = ("weaknesses", "questions", "changes", "comments")
+COMMENT_ID = re.compile(r"^comment-(\d+)$")
+
+
+def write_comment(point: dict[str, Any], kept: dict[str, Any] | None) -> dict[str, Any]:
+    """One comment from a finding, with what the mapper kept of the comment it came from."""
+    comment: dict[str, Any] = dict(kept or {})
+    if point.get("title"):
+        comment["title"] = point["title"]
+    quotes = [link["quote"] for link in point.get("evidence_links") or [] if link.get("quote")]
+    if quotes:
+        comment["quote"] = quotes[0]
+    comment["explanation"] = point["text"]
+    if point.get("tags"):
+        comment["comment_type"] = point["tags"][0]
+    return comment
+
+
+def write_comments(
+    weaknesses: list[dict[str, Any]],
+    others: list[dict[str, Any]],
+    kept: list[Any],
+    from_openaireview: bool,
+) -> list[dict[str, Any]]:
+    """The comments in the order the reviewer wrote them, then any new ones.
+
+    The mapper keeps the comment list's length in extensions: a comment it skipped kept its
+    empty explanation, and one it mapped is the weakness with ID `comment-<n>` (in a review
+    from OpenAIReview), which gets back the fields the mapper did not read. What is kept of
+    a comment whose weakness is gone goes with it.
+    """
+    by_position: dict[int, dict[str, Any]] = {}
+    new = []
+    for point in weaknesses:
+        place = COMMENT_ID.match(point.get("id", "")) if from_openaireview else None
+        position = int(place.group(1)) - 1 if place else None
+        if position is None or position in by_position:
+            new.append(point)
+        else:
+            by_position[position] = point
+    comments: list[dict[str, Any]] = []
+    for position, entry in enumerate(kept):
+        if isinstance(entry, dict) and "explanation" in entry:
+            comments.append(dict(entry))
+        elif position in by_position:
+            comments.append(write_comment(by_position.pop(position), entry))
+    # Mapped comments past the end of what was kept left nothing there
+    comments += [write_comment(by_position[p], None) for p in sorted(by_position)]
+    return comments + [write_comment(point, None) for point in [*new, *others]]
+
+
+def to_openaireview(canonical: dict[str, Any]) -> dict[str, Any]:
+    """An OCRS review as OpenAIReview's paper.json, with one method.
+
+    The review's summary (or, without one, its full text) is the overall feedback, and each
+    weakness, question, requested change and comment is a comment: its title, its text as
+    the explanation, its first tag as the comment type and its first quote. Token usage is
+    the method's prompt and completion tokens. Strengths, contributions, scores, checks and
+    the decision have no place in paper.json and are left out, as are the paper's own text
+    and text for the editors only.
+    """
+    kept = copy.deepcopy(extension(canonical, "openaireview"))
+    methods = kept.pop("methods", None) or {}
+    model = reviewer_model(canonical) or UNSPECIFIED
+    # The mapper keeps the method it mapped; a merged one wins, as when it picked one
+    merged = [k for k in methods if k.startswith(MERGED_METHOD_PREFIX)]
+    key = next(iter(merged or methods), f"{MERGED_METHOD_PREFIX}{model}")
+    method: dict[str, Any] = (
+        dict(methods[key])
+        if key in methods
+        else {"label": f"Progressive ({model})", "model": model}
+    )
+    summary, text = overall_texts(canonical)
+    feedback = summary or text
+    if feedback:
+        method["overall_feedback"] = feedback
+    others = [point for kind in COMMENT_KINDS[1:] for point in findings_of(canonical, kind)]
+    method["comments"] = write_comments(
+        findings_of(canonical, "weaknesses"), others, method.get("comments") or [], key in methods
+    )
+    outputs = ((canonical.get("referee") or {}).get("ai_referee") or {}).get("outputs") or {}
+    usage = outputs.get("token_usage") or {}
+    if usage.get("input_tokens") is not None and usage.get("output_tokens") is not None:
+        method["prompt_tokens"] = usage["input_tokens"]
+        method["completion_tokens"] = usage["output_tokens"]
+    # A review from elsewhere gets the slug and title OpenAIReview writes; a review from
+    # OpenAIReview gets back its own
+    paper: dict[str, Any] = {} if methods else {"slug": "paper"}
+    title = (canonical.get("target") or {}).get("title")
+    if title and not methods:
+        paper["title"] = title
+    paper |= kept
+    # The other methods the reviewer ran go back as they were
+    paper["methods"] = {k: method if k == key else v for k, v in {**methods, key: None}.items()}
+    return paper

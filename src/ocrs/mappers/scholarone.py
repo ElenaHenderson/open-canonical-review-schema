@@ -15,8 +15,9 @@ from ..scales import (
 from ..schema import schema_id
 from ..util import (
     first_paragraph,
-    map_recommendation_from_numeric,
+    first_present,
     map_recommendation_from_text,
+    match_alias,
     now_iso,
     parse_date_flexible,
     parse_labeled_score,
@@ -52,7 +53,7 @@ def _extract_time(payload: dict[str, Any]) -> str:
 def _get_reviewer_id(payload: dict[str, Any]) -> str | None:
     """Extract reviewer identifier."""
     # ScholarOne often uses reviewer number rather than ID
-    reviewer_num = payload.get("reviewerNumber") or payload.get("reviewer_number")
+    reviewer_num = first_present(payload, ("reviewerNumber", "reviewer_number"))
     if reviewer_num is not None:
         return f"reviewer_{reviewer_num}"
     for k in ("reviewerId", "reviewer_id", "reviewerOrcid"):
@@ -122,32 +123,34 @@ def _get_review_id(payload: dict[str, Any]) -> str:
     """Generate a review identifier from ScholarOne fields."""
     doc_id = payload.get("documentId") or payload.get("document_id") or ""
     sub_id = payload.get("submissionId") or payload.get("submission_id") or ""
-    rev_num = payload.get("reviewerNumber") or payload.get("reviewer_number") or ""
+    rev_num = first_present(payload, ("reviewerNumber", "reviewer_number"))
+    rev_num = "" if rev_num is None else rev_num
 
-    if doc_id and rev_num:
+    if doc_id and rev_num != "":
         return f"{doc_id}_r{rev_num}"
-    if sub_id and rev_num:
+    if sub_id and rev_num != "":
         return f"{sub_id}_r{rev_num}"
     if doc_id:
         return str(doc_id)
     return str(uuid.uuid4())
 
 
+def _recommendation_code(value: Any) -> int | None:
+    """The recommendation code, when it is one of ScholarOne's 1-5."""
+    if isinstance(value, int) and not isinstance(value, bool) and value in S1_RECOMMENDATION_MAP:
+        return value
+    return None
+
+
 def _parse_recommendation(payload: dict[str, Any]) -> str | None:
     """Parse recommendation from ScholarOne payload."""
     # Try numeric recommendation first
     rec_num = payload.get("overallRecommendation")
-    if isinstance(rec_num, int) and rec_num in S1_RECOMMENDATION_MAP:
+    if _recommendation_code(rec_num) is not None:
         return S1_RECOMMENDATION_MAP[rec_num]
 
-    # Try to map numeric to recommendation using scale
-    if isinstance(rec_num, int):
-        scale = {"type": "ordinal", "min": 1, "max": 5}
-        mapped = map_recommendation_from_numeric(rec_num, scale)
-        if mapped:
-            return mapped
-
-    # Try text label
+    # A code outside 1-5 says nothing (and the codes are lower-is-better, so no
+    # higher-is-better scale applies); the label may still say it
     rec_label = payload.get("overallRecommendationLabel")
     if isinstance(rec_label, str):
         return map_recommendation_from_text(rec_label)
@@ -184,7 +187,7 @@ def _map_criteria_to_metrics(
             continue
 
         name = crit.get("criterionName") or crit.get("name") or ""
-        response = crit.get("response") or crit.get("score")
+        response = first_present(crit, ("response", "score"))
         max_response = crit.get("maxResponse") or crit.get("max_response") or 5
 
         if response is None:
@@ -212,14 +215,8 @@ def _map_criteria_to_metrics(
             m = idx[lcf]
             key = m["key"]
             aspect = m.get("aspect", "other")
-        elif lcf in amap:
-            key = amap[lcf]
         else:
-            # Fuzzy match
-            for alias, k in amap.items():
-                if alias in lcf or lcf in alias:
-                    key = k
-                    break
+            key = match_alias(lcf, amap) or "other"
 
         # Look up aspect from catalog if we found a key
         if key != "other":
@@ -343,7 +340,7 @@ def from_scholarone(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[
         # Also add overall metric if we have numeric recommendation
         rec_num = payload.get("overallRecommendation")
         rec_label = payload.get("overallRecommendationLabel")
-        if rec_num is not None:
+        if _recommendation_code(rec_num) is not None:
             # Note: ScholarOne uses lower=better for recommendations (1=Accept, 5=Reject)
             # But we normalize so 1.0 = best, using the SCHOLARONE_RECOMMENDATION scale
             parsed = parse_labeled_score(
@@ -423,7 +420,7 @@ def to_scholarone(canonical: dict[str, Any]) -> dict[str, Any]:
         "documentId": source_work_id(canonical.get("target", {})),
     }
 
-    if reviewer_num:
+    if reviewer_num is not None:
         out["reviewerNumber"] = reviewer_num
 
     # Map venue
