@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Python package
+
+- New mapper `reviewer3` for Reviewer3's Markdown report: `map_with_record` takes the
+  report's text as `output`. The Overview becomes `opinion.contributions`; AI Text
+  Detection, Fatal Flaws and Reference Check become `checks`, with an `outcome` only for
+  Fatal Flaws, which states one; Reviewer Comments become `findings.comments`, with no
+  severity, and each comment's page and excerpt become an evidence link. The schema is
+  unchanged.
+
 ## 0.6.1
 
 All additions are optional, so every 0.6.0 review is valid under 0.6.1.

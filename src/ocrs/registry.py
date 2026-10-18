@@ -10,7 +10,7 @@ from typing import Any
 from pydantic import AwareDatetime, validate_call
 
 from .anchors import Block
-from .mappers import deepreview, openaireview
+from .mappers import deepreview, openaireview, reviewer3
 from .mappers.ai import AIReviewMapper, build_review
 from .mappers.cmt import from_cmt, to_cmt
 from .mappers.editorialmanager import from_editorialmanager, to_editorialmanager
@@ -34,10 +34,12 @@ _FROM: dict[str, Callable[..., dict[str, Any]]] = {
 _FROM_WITH_RECORD: dict[str, AIReviewMapper] = {
     "deepreview": deepreview.map_deepreview,
     "openaireview": openaireview.map_openaireview,
+    "reviewer3": reviewer3.map_reviewer3,
 }
 _MAPPER_VERSIONS = {
     "deepreview": deepreview.MAPPER_VERSION,
     "openaireview": openaireview.MAPPER_VERSION,
+    "reviewer3": reviewer3.MAPPER_VERSION,
 }
 
 _TO: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {

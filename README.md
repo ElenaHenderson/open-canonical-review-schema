@@ -30,6 +30,7 @@ OCRS provides bidirectional mappers for converting between the canonical schema 
 | **Journal Narrative** | Full | Full | Minimal free-text reviews with DOI/journal metadata |
 | **OpenAIReview** | Full | – | AI reviewer ([ChicagoHAI/OpenAIReview](https://github.com/ChicagoHAI/OpenAIReview)): `paper.json` |
 | **DeepReview** | Full | – | Google's AI reviewer: the Markdown that its "Copy Report" gives |
+| **Reviewer3** | Full | – | AI reviewer: the Markdown export of its report |
 
 **Legend:**
 - **Full**: Complete mapping with all relevant fields preserved
@@ -63,7 +64,7 @@ note_like = map_to("openreview", canonical)
 
 ## AI reviewers
 
-The OpenAIReview and DeepReview mappers copy the reviewer's own output into OCRS; they never rewrite or invent text. Whatever has no OCRS field is kept, unchanged, in `extensions.<reviewer>`.
+The OpenAIReview, DeepReview and Reviewer3 mappers copy the reviewer's own output into OCRS; they never rewrite or invent text. Whatever has no OCRS field is kept, unchanged, in `extensions.<reviewer>`.
 
 `map_with_record` also returns a record of how each field was mapped and where the result falls short of OCRS:
 
@@ -114,6 +115,24 @@ result = map_with_record(
     started_at="2026-10-15T17:40:00Z",
     ended_at="2026-10-15T18:05:00Z",
 )
+```
+
+Reviewer3's report is Markdown too. Its Overview becomes `opinion.contributions`: what the paper contributes, as the reviewer reads it, without judgment. Its AI Text Detection, Fatal Flaws and Reference Check become `checks`, with the report's own sentence as each check's `summary`; percentages become 0–1 fractions, reference counts become integers, and each unverified reference becomes an item with its citation as printed and its status in the report's words. Only Fatal Flaws states a verdict, so it is the only check with an `outcome`. Reviewer Comments become `findings.comments`, because the report does not say whether each is a weakness, a question or a remark, so they have no severity. A comment's page and excerpt become an evidence link.
+
+```python
+from ocrs import map_with_record
+
+result = map_with_record(
+    "reviewer3",
+    reviewer3_report,
+    review_id="…",
+    source_system="reviewer3",
+    work_id="…",
+    work_type="preprint",
+    started_at="2026-10-15T17:00:00Z",
+    ended_at="2026-10-15T17:30:00Z",
+)
+result.review["checks"]  # AI-text detection, fatal-flaw screen, reference check
 ```
 
 ## Example
