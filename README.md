@@ -3,13 +3,13 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/valency-oss/open-canonical-review-schema/ci.yml?branch=main&label=CI)](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/ci.yml)
 [![Links](https://img.shields.io/github/actions/workflow/status/valency-oss/open-canonical-review-schema/links.yml?branch=main&label=links)](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/links.yml)
 [![Docs](https://img.shields.io/github/actions/workflow/status/valency-oss/open-canonical-review-schema/docs.yml?branch=main&label=docs)](https://github.com/valency-oss/open-canonical-review-schema/actions/workflows/docs.yml)
-[![Schema version](https://img.shields.io/badge/schema-v0.6.1-blue)](CHANGELOG.md#061)
+[![Schema version](https://img.shields.io/badge/schema-v0.6.2-blue)](CHANGELOG.md#062)
 [![Status: draft](https://img.shields.io/badge/status-draft-orange)](CONTRIBUTING.md#versioning)
 [![JSON Schema draft 2020-12](https://img.shields.io/badge/JSON%20Schema-draft%202020--12-blue)](https://json-schema.org/draft/2020-12)
 [![Python 3.10 | 3.11 | 3.12](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)](pyproject.toml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
-**Status: v0.6.1, a draft. Feedback wanted:** [tell us how you use OCRS](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=adoption-story.yml) or [propose a schema change](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=schema-change.yml).
+**Status: v0.6.2, a draft. Feedback wanted:** [tell us how you use OCRS](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=adoption-story.yml) or [propose a schema change](https://github.com/valency-oss/open-canonical-review-schema/issues/new?template=schema-change.yml).
 
 A standardized JSON schema and Python mapping utilities for peer review data. OCRS enables interoperability between different peer review systems by providing a canonical representation that preserves rich metadata including reviewer information, decision recommendations, structured findings, metrics, and AI provenance tracking.
 
@@ -48,13 +48,13 @@ OCRS provides bidirectional mappers for converting between the canonical schema 
 The schema is at a permanent URL, one per version:
 
 ```
-https://valency-oss.github.io/open-canonical-review-schema/v0.6.1/canonical-review.schema.json
+https://valency-oss.github.io/open-canonical-review-schema/v0.6.2/canonical-review.schema.json
 ```
 
 Validate a review with any JSON Schema (draft 2020-12) validator, for example [check-jsonschema](https://github.com/python-jsonschema/check-jsonschema):
 
 ```bash
-uvx check-jsonschema --schemafile https://valency-oss.github.io/open-canonical-review-schema/v0.6.1/canonical-review.schema.json review.json
+uvx check-jsonschema --schemafile https://valency-oss.github.io/open-canonical-review-schema/v0.6.2/canonical-review.schema.json review.json
 ```
 
 For complete reviews, see [examples/](examples/). The Python package below also maps reviews from other systems to OCRS.
@@ -289,10 +289,11 @@ The `target.identifiers` field supports structured metadata for papers and other
 | PubMed ID | numeric | `https://pubmed.ncbi.nlm.nih.gov/{value}` | PubMed/MEDLINE abstract ID |
 | PMCID | `PMCnnnnnnn` | `https://pmc.ncbi.nlm.nih.gov/articles/{value}` | PubMed Central full-text ID |
 | OpenAlex ID | `Wnnnnnnn` | `https://openalex.org/{value}` | OpenAlex Work ID |
+| Valency ID | `W_xxxxxxxx`, `W_xxxxxxxx_vN` | `https://hub.valency.io/works/{value}` | Valency Hub work (e.g., [W_6r533gdt](https://hub.valency.io/works/W_6r533gdt)), or one version of it |
 | Permalink | URI | — | Stable URL for the work |
 | Internal ID | `{field_name, value}` | — | System-specific ID (HotCRP pid, ScholarOne documentId, etc.) |
 
-**Resolution Priority**: When multiple identifiers are present, OCRS resolves in this order: DOI → arXiv → S2CID → PubMed → PMCID → OpenAlex → permalink → internal_id.
+**Resolution Priority**: When multiple identifiers are present, OCRS resolves in this order: DOI → arXiv → S2CID → PubMed → PMCID → OpenAlex → Valency → permalink → internal_id.
 
 ### Reviewer Identifiers
 
@@ -302,6 +303,7 @@ The `referee.human_referee` object supports author/reviewer identification:
 |------------|---------|--------------|-------------|
 | ORCID | `0000-0000-0000-000X` | `https://orcid.org/{value}` | Open Researcher and Contributor ID (with checksum validation) |
 | OpenAlex Author ID | `Annnnnnn` | `https://openalex.org/{value}` | OpenAlex Author ID |
+| Valency Author ID | `A_xxxxxxxx` | `https://hub.valency.io/authors/{value}` | Valency Hub author (e.g., [A_7zdytxzb](https://hub.valency.io/authors/A_7zdytxzb)) |
 | Scopus Author ID | 10-12 digits | — | Elsevier Scopus author identifier |
 | Google Scholar ID | 12 alphanumeric | — | Google Scholar profile ID |
 | Third-party ID | `{key, value}` | — | Other identifiers (Publons, ResearcherID, etc.) |
@@ -338,6 +340,57 @@ The schema also supports OpenAlex Author IDs for reviewer identification:
       "orcid": "0000-0001-5000-0007",
       "openalex_id": "A5023888391",
       "name": "Dr. Jane Smith"
+    }
+  }
+}
+```
+
+### Valency Hub Integration
+
+[Valency Hub](https://hub.valency.io/) publishes scholarly works. Its IDs are `W_` for a work and `A_` for an author, then at least 8 characters from a-z and 2-9 without the easily confused `i`, `l` and `o`. A work's ID with `_vN` names version N, the exact version a reviewer read:
+
+```python
+from ocrs import build_work_identifiers, validate_valency_author, validate_valency_work
+from ocrs.util import migrate_work_id_to_identifiers
+
+identifiers = build_work_identifiers(valency_id="W_6r533gdt_v1")
+assert identifiers["valency_id"] == {
+    "value": "W_6r533gdt_v1",
+    "hyperlink": "https://hub.valency.io/works/W_6r533gdt_v1",
+}
+
+# A Hub work page or a Hub citation given as a work ID becomes a Valency ID
+hub_work = {
+    "valency_id": {
+        "value": "W_6r533gdt",
+        "hyperlink": "https://hub.valency.io/works/W_6r533gdt",
+    }
+}
+assert migrate_work_id_to_identifiers("https://hub.valency.io/works/W_6r533gdt") == hub_work
+assert migrate_work_id_to_identifiers("vlnc:W_6r533gdt") == hub_work
+
+assert validate_valency_work("W_6r533gdt")
+assert validate_valency_author("A_7zdytxzb")
+```
+
+A review of a Hub work, by a reviewer with a Hub author page:
+```json
+{
+  "target": {
+    "work_id": "valency_id:W_6r533gdt",
+    "work_type": "preprint",
+    "identifiers": {
+      "valency_id": {
+        "value": "W_6r533gdt",
+        "hyperlink": "https://hub.valency.io/works/W_6r533gdt"
+      }
+    }
+  },
+  "referee": {
+    "referee_type": "human",
+    "identity_mode": "open",
+    "human_referee": {
+      "valency_id": "A_7zdytxzb"
     }
   }
 }

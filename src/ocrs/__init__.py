@@ -17,6 +17,8 @@ from .identifiers import (
     validate_openalex_work,
     validate_orcid,
     validate_pmcid,
+    validate_valency_author,
+    validate_valency_work,
 )
 from .registry import (
     map_from,
@@ -56,6 +58,8 @@ __all__ = [
     "validate_doi",
     "validate_openalex_author",
     "validate_openalex_work",
+    "validate_valency_author",
+    "validate_valency_work",
     "validate_orcid",
     "validate_pmcid",
 ]

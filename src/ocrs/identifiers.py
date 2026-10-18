@@ -2,7 +2,7 @@
 
 This module provides validation, normalization, and resolution utilities for
 scholarly identifiers used in the OCRS schema, including DOI, ORCID, arXiv,
-PubMed, Semantic Scholar, OpenAlex, and other standard identifiers.
+PubMed, Semantic Scholar, OpenAlex, Valency, and other standard identifiers.
 """
 
 from __future__ import annotations
@@ -31,8 +31,15 @@ PMCID_PATTERN = re.compile(r"^PMC\d+$")
 # OpenAlex Work ID: W followed by digits
 OPENALEX_WORK_PATTERN = re.compile(r"^W\d+$")
 
+# Valency work ID: W_ and 8+ characters from an alphabet without the confusable
+# i, l, o, 0 and 1; a version's ID adds _v and the version number (W_6r533gdt_v2)
+VALENCY_WORK_PATTERN = re.compile(r"^W_[a-hjkmnp-z2-9]{8,}(_v[1-9]\d*)?$")
+
 # OpenAlex Author ID: A followed by digits
 OPENALEX_AUTHOR_PATTERN = re.compile(r"^A\d+$")
+
+# Valency author ID: A_ and 8+ characters from the same alphabet as work IDs
+VALENCY_AUTHOR_PATTERN = re.compile(r"^A_[a-hjkmnp-z2-9]{8,}$")
 
 # Scopus Author ID: 10-12 digits, no leading zero
 SCOPUS_AUTHOR_PATTERN = re.compile(r"^[1-9]\d{9,11}$")
@@ -71,6 +78,7 @@ IDENTIFIER_PRIORITY = [
     "pubmed_id",  # MEDLINE abstracts
     "pmcid",  # PubMed Central full text
     "openalex_id",  # OpenAlex
+    "valency_id",  # Valency Hub
     "handle",  # Handle System (repositories, theses)
     "ark",  # Archival Resource Key
     "isbn",  # Books and chapters
@@ -129,6 +137,8 @@ RESOLVERS = {
     "pubmed_id": "https://pubmed.ncbi.nlm.nih.gov/",
     "pmcid": "https://pmc.ncbi.nlm.nih.gov/articles/",
     "openalex_id": "https://openalex.org/",
+    "valency_id": "https://hub.valency.io/works/",
+    "valency_author_id": "https://hub.valency.io/authors/",
     "s2cid": "https://api.semanticscholar.org/CorpusID:",
     "orcid": "https://orcid.org/",
     "handle": "https://hdl.handle.net/",
@@ -287,6 +297,19 @@ def validate_openalex_work(openalex_id: str) -> bool:
     return bool(OPENALEX_WORK_PATTERN.match(openalex_id))
 
 
+def validate_valency_work(valency_id: str) -> bool:
+    """Validate Valency work ID format.
+
+    Args:
+        valency_id: Valency work ID (e.g., "W_6r533gdt"), or a version's ID
+            (e.g., "W_6r533gdt_v2")
+
+    Returns:
+        True if format is valid
+    """
+    return bool(VALENCY_WORK_PATTERN.match(valency_id))
+
+
 def validate_openalex_author(openalex_id: str) -> bool:
     """Validate OpenAlex Author ID format.
 
@@ -297,6 +320,18 @@ def validate_openalex_author(openalex_id: str) -> bool:
         True if format is valid
     """
     return bool(OPENALEX_AUTHOR_PATTERN.match(openalex_id))
+
+
+def validate_valency_author(valency_id: str) -> bool:
+    """Validate Valency author ID format.
+
+    Args:
+        valency_id: Valency author ID (e.g., "A_7zdytxzb")
+
+    Returns:
+        True if format is valid
+    """
+    return bool(VALENCY_AUTHOR_PATTERN.match(valency_id))
 
 
 def validate_scopus_author(scopus_id: str) -> bool:
@@ -520,6 +555,7 @@ def build_work_identifiers(
     pubmed_id: str | None = None,
     pmcid: str | None = None,
     openalex_id: str | None = None,
+    valency_id: str | None = None,
     handle: str | None = None,
     ark: str | None = None,
     isbn: str | None = None,
@@ -545,6 +581,7 @@ def build_work_identifiers(
         pubmed_id: PubMed ID
         pmcid: PubMed Central ID
         openalex_id: OpenAlex Work ID
+        valency_id: Valency work ID, or a version's ID
         handle: Handle, without resolver prefix
         ark: Archival Resource Key, including the "ark:" label
         isbn: ISBN-10 or ISBN-13, digits only
@@ -595,6 +632,11 @@ def build_work_identifiers(
         identifiers["openalex_id"] = {
             "value": openalex_id,
             "hyperlink": build_resolver_url("openalex_id", openalex_id),
+        }
+    if valency_id:
+        identifiers["valency_id"] = {
+            "value": valency_id,
+            "hyperlink": build_resolver_url("valency_id", valency_id),
         }
     if handle:
         identifiers["handle"] = {

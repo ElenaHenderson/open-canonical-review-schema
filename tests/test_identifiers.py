@@ -32,6 +32,8 @@ from ocrs.identifiers import (
     validate_pmcid,
     validate_scopus_author,
     validate_uuid,
+    validate_valency_author,
+    validate_valency_work,
 )
 from ocrs.util import migrate_work_id_to_identifiers, source_work_id
 
@@ -172,6 +174,75 @@ class TestOpenalexValidation:
         assert not validate_openalex_work("A123")  # Wrong prefix for work
         assert not validate_openalex_author("W123")  # Wrong prefix for author
         assert not validate_openalex_work("W")  # No number
+
+
+VALENCY_WORK_IDS = ["W_6r533gdt", "W_6r533gdt_v1", "W_6r533gdt_v12", "W_k7pm3xn2ab"]
+NOT_VALENCY_WORK_IDS = [
+    "W_6r533gd",  # 7 characters
+    "W_6r533gdi",  # i is not in the alphabet
+    "W_6r533gd0",  # nor is 0
+    "W_6R533GDT",  # upper case
+    "W_6r533gdt_v0",  # versions start at 1
+    "A_7zdytxzb",  # an author
+    "W2741809807",  # an OpenAlex work
+]
+
+
+class TestValencyValidation:
+    """Tests for Valency Hub identifier validation."""
+
+    @pytest.mark.parametrize("value", VALENCY_WORK_IDS)
+    def test_valid_work_id(self, value):
+        assert validate_valency_work(value)
+
+    @pytest.mark.parametrize("value", NOT_VALENCY_WORK_IDS)
+    def test_invalid_work_id(self, value):
+        assert not validate_valency_work(value)
+
+    def test_author_id(self):
+        assert validate_valency_author("A_7zdytxzb")
+        assert not validate_valency_author("A_7zdytxzb_v1")  # authors have no versions
+        assert not validate_valency_author("W_6r533gdt")
+        assert not validate_valency_author("A5023888391")
+
+    @pytest.mark.parametrize("value", VALENCY_WORK_IDS + NOT_VALENCY_WORK_IDS)
+    def test_schema_work_pattern_matches_python(self, value):
+        import re
+
+        identifiers = load_schema()["$defs"]["workIdentifiers"]["properties"]
+        schema_pattern = identifiers["valency_id"]["properties"]["value"]["pattern"]
+        assert bool(re.match(schema_pattern, value)) == validate_valency_work(value)
+
+    @pytest.mark.parametrize("value", ["A_7zdytxzb", "A_7zdytxz", "A_7zdytxzl", "W_6r533gdt"])
+    def test_schema_author_pattern_matches_python(self, value):
+        import re
+
+        human_referee = load_schema()["$defs"]["humanReferee"]["properties"]
+        schema_pattern = human_referee["valency_id"]["pattern"]
+        assert bool(re.match(schema_pattern, value)) == validate_valency_author(value)
+
+    def test_review_of_a_hub_work_validates(self):
+        from ocrs import validate_canonical
+
+        validate_canonical(
+            {
+                "review_id": "review-1",
+                "version": "1.0.0",
+                "created_at": "2026-10-17T12:00:00Z",
+                "provenance": {"source_system": "valency-hub"},
+                "referee": {
+                    "referee_type": "human",
+                    "identity_mode": "open",
+                    "human_referee": {"valency_id": "A_7zdytxzb"},
+                },
+                "target": {
+                    "work_id": "valency_id:W_6r533gdt_v1",
+                    "work_type": "preprint",
+                    "identifiers": build_work_identifiers(valency_id="W_6r533gdt_v1"),
+                },
+                "opinion": {"summary": "A sound paper."},
+            }
+        )
 
 
 class TestScopusValidation:
@@ -327,6 +398,7 @@ class TestResolutionPriority:
             "pubmed_id",
             "pmcid",
             "openalex_id",
+            "valency_id",
             "handle",
             "ark",
             "isbn",
@@ -403,6 +475,8 @@ class TestCanonicalWorkId:
             "doi:10.1234/x",
             "internal_id:paperId:42",
             "uuid:123e4567-e89b-12d3-a456-426614174000",
+            "valency_id:W_6r533gdt",
+            "valency_id:W_6r533gdt_v2",
             "unknown",
             "paper-1",
             "internal_id:42",
@@ -517,6 +591,16 @@ class TestBuildWorkIdentifiers:
         assert ids["purl"] == "https://purl.org/example/1"
         assert ids["uuid"] == {"value": "123e4567-e89b-12d3-a456-426614174000"}
 
+    def test_build_with_valency_id(self):
+        ids = build_work_identifiers(arxiv_id="2401.12345", valency_id="W_6r533gdt_v2")
+        assert ids["valency_id"] == {
+            "value": "W_6r533gdt_v2",
+            "hyperlink": "https://hub.valency.io/works/W_6r533gdt_v2",
+        }
+        assert generate_canonical_work_id(ids) == "arxiv_id:2401.12345"
+        del ids["arxiv_id"]
+        assert generate_canonical_work_id(ids) == "valency_id:W_6r533gdt_v2"
+
     def test_build_empty_raises(self):
         """Test that building with no identifiers raises."""
         with pytest.raises(ValueError, match="At least one identifier"):
@@ -570,6 +654,8 @@ class TestResolversDict:
             "pubmed_id",
             "pmcid",
             "openalex_id",
+            "valency_id",
+            "valency_author_id",
             "s2cid",
             "orcid",
             "handle",
@@ -599,6 +685,41 @@ class TestWorkIdHelpers:
         }
         assert migrate_work_id_to_identifiers("purl:https://purl.org/x") == {
             "purl": "https://purl.org/x"
+        }
+
+    def test_migrate_reads_hub_work_pages(self):
+        """Test that a Hub work page or citation becomes a Valency ID, and other Hub URLs stay
+        permalinks."""
+        for url, value in [
+            ("https://hub.valency.io/works/W_6r533gdt", "W_6r533gdt"),
+            ("https://hub.valency.io/works/W_6r533gdt_v2/", "W_6r533gdt_v2"),
+            ("https://hub.valency.io/works/W_6r533gdt?utm_source=share", "W_6r533gdt"),
+            ("https://hub.valency.io/works/W_6r533gdt#abstract", "W_6r533gdt"),
+            ("https://hub.valency.io/works/W_6r533gdt_v2/?tab=details#refs", "W_6r533gdt_v2"),
+        ]:
+            assert migrate_work_id_to_identifiers(url) == {
+                "valency_id": {"value": value, "hyperlink": url}
+            }
+        for url in [
+            "https://hub.valency.io/works/W_6r533gdt/figures",
+            "https://hub.valency.io/authors/A_7zdytxzb",
+        ]:
+            assert migrate_work_id_to_identifiers(url) == {"permalink": url}
+        assert migrate_work_id_to_identifiers("vlnc:W_6r533gdt_v2") == {
+            "valency_id": {
+                "value": "W_6r533gdt_v2",
+                "hyperlink": "https://hub.valency.io/works/W_6r533gdt_v2",
+            }
+        }
+        # A citation of another kind of Hub entity is not a work
+        assert migrate_work_id_to_identifiers("vlnc:A_7zdytxzb", "hub") == {
+            "internal_id": {"field_name": "hub", "value": "vlnc:A_7zdytxzb"}
+        }
+        assert migrate_work_id_to_identifiers("valency_id:W_6r533gdt") == {
+            "valency_id": {
+                "value": "W_6r533gdt",
+                "hyperlink": "https://hub.valency.io/works/W_6r533gdt",
+            }
         }
 
     def test_migrate_still_reads_bare_ids(self):

@@ -7,6 +7,7 @@ from __future__ import annotations
 import datetime as _dt
 import re
 from typing import Any
+from urllib.parse import urlsplit
 
 from .scales import (
     ScaleDefinition,
@@ -186,6 +187,8 @@ def migrate_work_id_to_identifiers(
     Auto-detects identifier type from format:
     - Canonical work ID ("doi:10.xxxx/...", "internal_id:paperId:42") -> that identifier
     - DOI format (10.xxxx/...) -> doi
+    - Valency Hub work page (https://hub.valency.io/works/W_...) or citation
+      (vlnc:W_...) -> valency_id
     - URL format -> permalink
     - Otherwise -> internal_id with source_system as field_name
 
@@ -196,7 +199,13 @@ def migrate_work_id_to_identifiers(
     Returns:
         Dictionary matching workIdentifiers schema
     """
-    from .identifiers import DOI_PATTERN, build_resolver_url, parse_canonical_work_id
+    from .identifiers import (
+        DOI_PATTERN,
+        RESOLVERS,
+        VALENCY_WORK_PATTERN,
+        build_resolver_url,
+        parse_canonical_work_id,
+    )
 
     work_id = work_id.strip()
 
@@ -216,6 +225,24 @@ def migrate_work_id_to_identifiers(
     # Check if it's a DOI
     if DOI_PATTERN.match(work_id):
         return {"doi": {"value": work_id, "hyperlink": f"https://doi.org/{work_id}"}}
+
+    # Check if it's a Valency Hub work page, or a Hub citation ("vlnc:W_..."). A page's
+    # query and fragment (?utm_source=share, #abstract) don't name the work.
+    hub_works = RESOLVERS["valency_id"]
+    if work_id.startswith(hub_works):
+        works_path = urlsplit(hub_works).path
+        valency_id = urlsplit(work_id).path.removeprefix(works_path).rstrip("/")
+        if VALENCY_WORK_PATTERN.match(valency_id):
+            return {"valency_id": {"value": valency_id, "hyperlink": work_id}}
+    if work_id.startswith("vlnc:"):
+        valency_id = work_id.removeprefix("vlnc:")
+        if VALENCY_WORK_PATTERN.match(valency_id):
+            return {
+                "valency_id": {
+                    "value": valency_id,
+                    "hyperlink": build_resolver_url("valency_id", valency_id),
+                }
+            }
 
     # Check if it's a URL
     if work_id.startswith("http://") or work_id.startswith("https://"):

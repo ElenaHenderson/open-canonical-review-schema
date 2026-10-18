@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://valency-oss.github.io/open-canonical-review-schema/v0.6.1/canonical-review.schema.json",
+  "$id": "https://valency-oss.github.io/open-canonical-review-schema/v0.6.2/canonical-review.schema.json",
   "$comment": "Copyright (c) 2026 Valency Systems Inc. Licensed under Apache-2.0.",
   "title": "Open Canonical Review Schema",
   "description": "One peer review of one scholarly work, in a form shared by journals, conferences and AI reviewers",
@@ -116,7 +116,7 @@
         "work_id": {
           "type": "string",
           "description": "The work's primary identifier, as '<type>:<value>', where <type> is its key in identifiers (e.g., 'doi:10.7554/eLife.112155.1'). An internal ID also names its field: 'internal_id:<field_name>:<value>' (e.g., 'internal_id:openreview_forum:2dnO3LLiJ1'). It is the identifier that comes first in the resolution priority of identifiers, or 'unknown' if the source names none",
-          "pattern": "^(unknown|(doi|arxiv_id|s2cid|pubmed_id|pmcid|openalex_id|handle|ark|isbn|ecli|accession|purl|permalink|uuid):\\S.*|internal_id:[^:\\s]+:\\S.*)$"
+          "pattern": "^(unknown|(doi|arxiv_id|s2cid|pubmed_id|pmcid|openalex_id|valency_id|handle|ark|isbn|ecli|accession|purl|permalink|uuid):\\S.*|internal_id:[^:\\s]+:\\S.*)$"
         },
         "title": {
           "description": "Title of the work, as the review gives it",
@@ -672,7 +672,7 @@
     "workIdentifiers": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Optional structured identifiers for the work. They cover Crossref's identifier types (doi, arxiv, pmid, pmcid, handle, ark, isbn, issn, ecli, accession, purl, uri as permalink, uuid, other as internal_id), plus S2CID and OpenAlex. Resolution priority: DOI > arXiv > S2CID > PubMed ID > PMCID > OpenAlex > Handle > ARK > ISBN > ECLI > accession > PURL > permalink > UUID > internal_id. ISSN identifies the journal or series, not the work, so it is never the primary identifier",
+      "description": "Optional structured identifiers for the work. They cover Crossref's identifier types (doi, arxiv, pmid, pmcid, handle, ark, isbn, issn, ecli, accession, purl, uri as permalink, uuid, other as internal_id), plus S2CID, OpenAlex and Valency. Resolution priority: DOI > arXiv > S2CID > PubMed ID > PMCID > OpenAlex > Valency > Handle > ARK > ISBN > ECLI > accession > PURL > permalink > UUID > internal_id. ISSN identifies the journal or series, not the work, so it is never the primary identifier",
       "properties": {
         "doi": {
           "type": "object",
@@ -753,6 +753,25 @@
             },
             "hyperlink": {
               "description": "The OpenAlex page (https://openalex.org/...)",
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "valency_id": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Valency Hub work ID (e.g., W_6r533gdt), or the ID of one version of the work (e.g., W_6r533gdt_v2)",
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "description": "The Valency work ID: 'W_' and at least 8 characters from a-z and 2-9, without i, l and o. A version's ID adds '_v' and the version number",
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^W_[a-hjkmnp-z2-9]{8,}(_v[1-9]\\d*)?$"
+            },
+            "hyperlink": {
+              "description": "The work's Valency Hub page (https://hub.valency.io/works/...)",
               "type": "string",
               "format": "uri"
             }
@@ -1146,6 +1165,11 @@
           "type": "string",
           "pattern": "^A\\d+$",
           "description": "OpenAlex Author ID (e.g., A5023888391)"
+        },
+        "valency_id": {
+          "type": "string",
+          "pattern": "^A_[a-hjkmnp-z2-9]{8,}$",
+          "description": "Valency Hub author ID (e.g., A_7zdytxzb): 'A_' and at least 8 characters from a-z and 2-9, without i, l and o. The author's page is https://hub.valency.io/authors/<id>"
         },
         "google_scholar_id": {
           "type": "string",

@@ -1,8 +1,26 @@
 # Changelog
 
-## Unreleased
+## 0.6.2
+
+All additions are optional, so every 0.6.1 review is valid under 0.6.2.
+
+### Schema
+
+- `target.identifiers.valency_id` gives the work's Valency Hub ID: `W_` and at least 8
+  characters from a-z and 2-9 without `i`, `l` and `o` (`W_6r533gdt`), or one version's ID,
+  with `_v` and the version number (`W_6r533gdt_v2`). Its page is
+  `https://hub.valency.io/works/<id>`. `target.work_id` takes `valency_id:<id>`, which comes
+  after OpenAlex in the resolution priority.
+- `referee.human_referee.valency_id` gives the reviewer's Valency Hub author ID (`A_7zdytxzb`),
+  whose page is `https://hub.valency.io/authors/<id>`.
 
 ### Python package
+
+- `validate_valency_work` and `validate_valency_author` check the two ID formats, and
+  `build_work_identifiers` takes `valency_id`, adding its Hub link.
+- A `work_id` given as a Hub work page (`https://hub.valency.io/works/W_…`) or as a Hub
+  citation (`vlnc:W_…`) becomes `identifiers.valency_id`, not a `permalink` or an
+  `internal_id`.
 
 - New mapper `reviewer3` for Reviewer3's Markdown report: `map_with_record` takes the
   report's text as `output`. The Overview becomes `opinion.contributions`; AI Text
