@@ -11,6 +11,8 @@ from pathlib import Path
 from json_schema_for_humans.generate import generate_from_filename
 from json_schema_for_humans.generation_configuration import GenerationConfiguration
 
+from ocrs.registry import supported_sources, supported_targets
+
 
 def stroke_icon(paths: str) -> str:
     return (
@@ -34,31 +36,33 @@ def badge(text: str, background: str, color: str = "#fff", underline: str = "") 
 # Google publishes no Deep Review logo, so DeepReview shows Google's, from Google's own CDN.
 GOOGLE_LOGO = "https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png"
 
-# The review sources drawn flowing into OCRS, in order: name, group, what it gives, icon.
-# Logos are in site/logos/. OpenReview, CMT and HotCRP have no logo legible at icon size, so
-# their icons are in their sites' own colors; ScholarOne's is the book cropped from its wordmark.
+# The review sources drawn mapping into OCRS, in order: registry key, name, type, icon. A source
+# with an exporter in the registry also gets an arrow back. Logos are in site/logos/. OpenReview,
+# CMT and HotCRP have no logo legible at icon size, so their icons are in their sites' own colors;
+# ScholarOne's is the book cropped from its wordmark.
 SOURCES = [
-    ("OpenReview", "conference", "API note", badge("OR", "#8c1b13")),
-    ("CMT", "conference", "export", badge("CMT", "#007ea3")),
-    ("HotCRP", "conference", "review JSON", badge("H", "#ffbbbb", "#f33360", "#f33360")),
-    ("Editorial Manager", "journal", "export", logo("logos/editorialmanager.png")),
+    ("openreview", "OpenReview", "conference", badge("OR", "#8c1b13")),
+    ("cmt", "CMT", "conference", badge("CMT", "#007ea3")),
+    ("hotcrp", "HotCRP", "conference", badge("H", "#ffbbbb", "#f33360", "#f33360")),
+    ("openaireview", "OpenAI<wbr>Review", "ai", logo("logos/openaireview.png")),
+    ("reviewer3", "Reviewer3", "ai", logo("logos/reviewer3.png")),
+    ("deepreview", "DeepReview", "ai", logo(GOOGLE_LOGO)),
+    ("editorialmanager", "Editorial Manager", "journal", logo("logos/editorialmanager.png")),
     (
+        "scholarone",
         "ScholarOne",
         "journal",
-        "export",
         f'<span class="crop">{logo("logos/scholarone.png")}</span>',
     ),
     (
+        "journal_narrative",
         "Journal narrative",
         "journal",
-        "full_text",
         stroke_icon('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h6"/>'),
     ),
-    ("OpenAI<wbr>Review", "ai", "paper.json", logo("logos/openaireview.png")),
-    ("Reviewer3", "ai", "report", logo("logos/reviewer3.png")),
-    ("DeepReview", "ai", "report.md", logo(GOOGLE_LOGO)),
 ]
-# The groups the sources meet in on the way: key, name, referee type, color, icon.
+# The review types labelling the sources above them, in the same order as the sources:
+# key, name, referee type, color, icon.
 GROUPS = [
     (
         "conference",
@@ -71,16 +75,6 @@ GROUPS = [
         ),
     ),
     (
-        "journal",
-        "Journal",
-        "referee: human",
-        "#2563eb",
-        stroke_icon(
-            '<path d="M2.5 4.5h6a3.5 3.5 0 0 1 3.5 3.5v12a3 3 0 0 0-3-3H2.5z"/>'
-            '<path d="M21.5 4.5h-6A3.5 3.5 0 0 0 12 8v12a3 3 0 0 1 3-3h6.5z"/>'
-        ),
-    ),
-    (
         "ai",
         "AI reviewers",
         "referee: ai",
@@ -88,6 +82,16 @@ GROUPS = [
         stroke_icon(
             '<path d="M10 3.5l1.8 4.7 4.7 1.8-4.7 1.8L10 16.5l-1.8-4.7L3.5 10l4.7-1.8z"/>'
             '<path d="M18 14l.9 2.1 2.1.9-2.1.9L18 20l-.9-2.1-2.1-.9 2.1-.9z"/>'
+        ),
+    ),
+    (
+        "journal",
+        "Journal",
+        "referee: human",
+        "#2563eb",
+        stroke_icon(
+            '<path d="M2.5 4.5h6a3.5 3.5 0 0 1 3.5 3.5v12a3 3 0 0 0-3-3H2.5z"/>'
+            '<path d="M21.5 4.5h-6A3.5 3.5 0 0 0 12 8v12a3 3 0 0 1 3-3h6.5z"/>'
         ),
     ),
 ]
@@ -272,7 +276,7 @@ def create_landing_page(docs_dir: Path, versions: list[str]):
             text-decoration: none;
         }
         .flow {
-            --line: #dcdcdc;
+            --line: #c8c8c8;
             position: relative;
             margin-bottom: 3rem;
             padding: 3.5rem 1.5rem 3rem;
@@ -292,7 +296,20 @@ def create_landing_page(docs_dir: Path, versions: list[str]):
             fill: none;
             stroke: var(--line);
             stroke-width: 1;
+            stroke-linecap: round;
+            stroke-linejoin: round;
             transition: stroke 0.2s;
+        }
+        .flow-lines .source-head {
+            fill: var(--line);
+            transition: fill 0.2s, stroke 0.2s;
+        }
+        /* The arrowhead into OCRS is larger and darker, so it holds up where all the lines meet. */
+        .flow-lines .hub-head {
+            fill: var(--hub-head, #737373);
+            stroke: var(--hub-head, #737373);
+            stroke-width: 1.5;
+            transition: fill 0.2s, stroke 0.2s;
         }
         .flow-row {
             position: relative;
@@ -305,7 +322,9 @@ def create_landing_page(docs_dir: Path, versions: list[str]):
             gap: 0.25rem;
         }
         .flow-groups {
-            margin-top: 5.5rem;
+            /* The source row's gap, so each type spans exactly its three sources. */
+            gap: 0.25rem;
+            margin-bottom: 1.75rem;
         }
         .node {
             display: flex;
@@ -358,25 +377,56 @@ def create_landing_page(docs_dir: Path, versions: list[str]):
             color: #737373;
         }
         .flow-groups .node {
+            position: relative;
             flex-direction: row;
             justify-content: center;
-            gap: 0.65rem;
+            gap: 0.55rem;
+            padding-bottom: 1rem;
             text-align: left;
         }
+        /* A bracket under each type, over the sources it labels. */
+        .flow-groups .node::after {
+            content: "";
+            position: absolute;
+            left: 0.75rem;
+            right: 0.75rem;
+            bottom: 0;
+            height: 0.45rem;
+            border: 1.5px solid var(--group);
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            opacity: 0.5;
+        }
         .flow-groups .node-icon {
+            width: 22px;
+            height: 22px;
             margin: 0;
             color: var(--group);
         }
+        .flow-groups .node-icon svg {
+            width: 22px;
+            height: 22px;
+        }
         .flow-groups .node-name {
-            font-size: 0.95rem;
+            font-size: 0.9rem;
+            font-weight: 600;
         }
         .node-text {
             display: flex;
             flex-direction: column;
         }
+        /* Text for screen readers only, such as what the arrows say about each source. */
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip-path: inset(50%);
+            white-space: nowrap;
+        }
         .flow-hub {
             position: relative;
-            margin: 5rem auto 0;
+            margin: 6rem auto 0;
             width: fit-content;
             display: flex;
             flex-direction: column;
@@ -397,8 +447,7 @@ def create_landing_page(docs_dir: Path, versions: list[str]):
             .flow {
                 padding: 2.5rem 0.5rem 2rem;
             }
-            .flow-leaves .node-name,
-            .flow-leaves .node-sub {
+            .flow-leaves .node-name {
                 position: absolute;
                 width: 1px;
                 height: 1px;
@@ -409,12 +458,17 @@ def create_landing_page(docs_dir: Path, versions: list[str]):
                 margin: 0;
             }
             .flow-groups {
-                margin-top: 4rem;
+                margin-bottom: 1.25rem;
             }
             .flow-groups .node {
                 flex-direction: column;
-                gap: 0.4rem;
+                gap: 0.3rem;
+                padding-bottom: 0.8rem;
                 text-align: center;
+            }
+            .flow-groups .node::after {
+                left: 0.35rem;
+                right: 0.35rem;
             }
             .flow-groups .node-name {
                 font-size: 0.8rem;
@@ -423,7 +477,7 @@ def create_landing_page(docs_dir: Path, versions: list[str]):
                 font-size: 0.6rem;
             }
             .flow-hub {
-                margin-top: 4rem;
+                margin-top: 4.5rem;
             }
         }
         @media (prefers-reduced-motion: reduce) {
@@ -440,13 +494,13 @@ def create_landing_page(docs_dir: Path, versions: list[str]):
             <p class="subtitle">Open Canonical Review Schema - Documentation</p>
         </header>
 
-        <figure class="flow" aria-label="Review sources mapped into OCRS">
+        <figure class="flow" aria-label="Review sources mapped into OCRS, and back where supported">
             <svg class="flow-lines" aria-hidden="true"></svg>
-            <ul class="flow-row flow-leaves">
-FLOW_LEAVES
-            </ul>
             <ul class="flow-row flow-groups">
 FLOW_GROUPS
+            </ul>
+            <ul class="flow-row flow-leaves">
+FLOW_LEAVES
             </ul>
             <div class="flow-hub">
                 <div class="hub-title">OCRS_ICON OCRS</div>
@@ -496,7 +550,7 @@ VERSION_LINKS
         </footer>
     </div>
     <script>
-        // Draw lines from each source down to its group, and from each group down to OCRS.
+        // Draw a two-way arrow between each source and OCRS, in the color of the source's type.
         (() => {
             const NS = "http://www.w3.org/2000/svg";
             const flow = document.querySelector(".flow");
@@ -512,31 +566,52 @@ VERSION_LINKS
             };
 
             // Each edge runs from the bottom of `from` to the top of `to`, each centered on `x`,
-            // with a dot that travels it every `duration` seconds, starting `delay` seconds in.
+            // with an arrowhead into OCRS and a dot that travels it every `duration` seconds,
+            // starting `delay` seconds in. A `twoWay` edge also has an arrowhead back at the
+            // source, and its dot goes down to OCRS, then back up.
             const edges = [];
-            const addEdge = (from, to, color, delay, duration) => {
+            const addEdge = (from, to, color, delay, duration, twoWay) => {
+                const line = svgElement("g", {});
                 const path = svgElement("path", {});
+                const heads = [
+                    svgElement("path", { class: "source-head" }),
+                    svgElement("path", { class: "hub-head" }),
+                ];
                 const dot = svgElement("circle", { r: 2.5, fill: color, opacity: 0 });
-                svg.append(path, dot);
-                edges.push({ from, to, path, dot, delay, duration, length: 0 });
-                return path;
+                line.append(path, ...(twoWay ? heads : heads.slice(1)));
+                svg.append(line, dot);
+                edges.push({ from, to, path, heads, dot, delay, duration, twoWay, length: 0 });
+                return line;
             };
 
-            const groups = [...flow.querySelectorAll(".flow-groups .node")];
-            const colorOf = (group) => getComputedStyle(group).getPropertyValue("--group").trim();
+            // Hovering a source lights its arrow; hovering a type lights all of its sources'
+            // arrows. A lit arrow is raised, so the shared arrowhead into OCRS shows its color.
+            const highlight = (element, lines, color) => {
+                element.addEventListener("mouseenter", () => lines.forEach((line) => {
+                    line.style.setProperty("--line", color);
+                    line.style.setProperty("--hub-head", color);
+                    svg.append(line);
+                }));
+                element.addEventListener("mouseleave", () => lines.forEach((line) => {
+                    line.style.removeProperty("--line");
+                    line.style.removeProperty("--hub-head");
+                }));
+            };
+            const groupLines = new Map();
             flow.querySelectorAll(".flow-leaves .node").forEach((leaf, i) => {
                 const group = flow.querySelector(`#group-${leaf.dataset.group}`);
-                const color = colorOf(group);
-                const path = addEdge(
-                    { box: leafRow, x: leaf }, { box: group, x: group }, color, i * 0.45, 2.6,
+                const color = getComputedStyle(group).getPropertyValue("--group").trim();
+                const line = addEdge(
+                    { box: leafRow, x: leaf }, { box: hub, x: hub }, color, i * 0.4, 2.8,
+                    leaf.dataset.twoWay === "true",
                 );
-                leaf.addEventListener("mouseenter", () => (path.style.stroke = color));
-                leaf.addEventListener("mouseleave", () => (path.style.stroke = ""));
+                highlight(leaf, [line], color);
+                if (!groupLines.has(group)) groupLines.set(group, { color, lines: [] });
+                groupLines.get(group).lines.push(line);
             });
-            groups.forEach((group, i) => {
-                const delay = 0.9 + i * 0.7;
-                addEdge({ box: group, x: group }, { box: hub, x: hub }, colorOf(group), delay, 2);
-            });
+            for (const [group, { color, lines }] of groupLines) {
+                highlight(group, lines, color);
+            }
 
             const layout = () => {
                 const origin = flow.getBoundingClientRect();
@@ -545,15 +620,27 @@ VERSION_LINKS
                     const box = element.getBoundingClientRect();
                     return box.left + box.width / 2 - origin.left;
                 };
+                // A solid arrowhead with its tip at (x, y), pointing up (-1) or down (1). The line
+                // meets the middle of its base, so it enters the head straight.
+                const SOURCE_HEAD = { halfWidth: 3.5, length: 6 };
+                const HUB_HEAD = { halfWidth: 7, length: 11 };
+                const head = (x, y, direction, { halfWidth, length }) =>
+                    `M${x - halfWidth},${y - length * direction} L${x},${y} ` +
+                    `L${x + halfWidth},${y - length * direction} Z`;
                 for (const edge of edges) {
-                    const { from, to, path } = edge;
+                    const { from, to, path, heads, twoWay } = edge;
                     const x1 = centerX(from.x);
                     const y1 = from.box.getBoundingClientRect().bottom - origin.top + 10;
                     const x2 = centerX(to.x);
                     const y2 = to.box.getBoundingClientRect().top - origin.top - 10;
-                    const bend = (y2 - y1) / 2;
-                    const d = `M${x1},${y1} C${x1},${y1 + bend} ${x2},${y2 - bend} ${x2},${y2}`;
+                    const start = twoWay ? y1 + SOURCE_HEAD.length : y1;
+                    const end = y2 - HUB_HEAD.length;
+                    const bend = (end - start) / 2;
+                    const d =
+                        `M${x1},${start} C${x1},${start + bend} ${x2},${end - bend} ${x2},${end}`;
                     path.setAttribute("d", d);
+                    heads[0].setAttribute("d", head(x1, y1, -1, SOURCE_HEAD));
+                    heads[1].setAttribute("d", head(x2, y2, 1, HUB_HEAD));
                     edge.length = path.getTotalLength();
                 }
             };
@@ -562,11 +649,12 @@ VERSION_LINKS
 
             const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
             const tick = (now) => {
-                for (const { path, dot, delay, duration, length } of edges) {
+                for (const { path, dot, delay, duration, twoWay, length } of edges) {
                     const elapsed = now / 1000 - delay;
                     if (elapsed < 0) continue;
                     const t = (elapsed % duration) / duration;
-                    const point = path.getPointAtLength(ease(t) * length);
+                    const down = !twoWay || Math.floor(elapsed / duration) % 2 === 0;
+                    const point = path.getPointAtLength((down ? ease(t) : 1 - ease(t)) * length);
                     dot.setAttribute("cx", point.x);
                     dot.setAttribute("cy", point.y);
                     dot.setAttribute("opacity", Math.min(1, t / 0.15, (1 - t) / 0.15));
@@ -585,11 +673,23 @@ VERSION_LINKS
         f'{" " * 20}<li><a href="{version}/canonical-review.schema.json">{version}</a></li>'
         for version in reversed(versions)
     )
+    unknown = {key for key, *_ in SOURCES} - set(supported_sources())
+    if unknown:
+        raise ValueError(f"Diagram sources missing from the registry: {sorted(unknown)}")
+    targets = supported_targets()
+    # What each source's arrow shows, for its tooltip and for screen readers.
+    directions = {
+        key: "maps to and from OCRS" if key in targets else "maps to OCRS only"
+        for key, *_ in SOURCES
+    }
     flow_leaves = "\n".join(
-        f'{" " * 16}<li class="node" data-group="{group}" title="{name.replace("<wbr>", "")}">'
+        f'{" " * 16}<li class="node" data-group="{group}" '
+        f'data-two-way="{str(key in targets).lower()}" '
+        f'title="{name.replace("<wbr>", "")}: {directions[key]}">'
         f'<span class="node-icon" aria-hidden="true">{icon}</span>'
-        f'<span class="node-name">{name}</span><span class="node-sub">{gives}</span></li>'
-        for name, group, gives, icon in SOURCES
+        f'<span class="node-name">{name}</span>'
+        f'<span class="visually-hidden">, {directions[key]}</span></li>'
+        for key, name, group, icon in SOURCES
     )
     flow_groups = "\n".join(
         f'{" " * 16}<li class="node" id="group-{key}" style="--group: {color}">'

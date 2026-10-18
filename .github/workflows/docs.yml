@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'src/ocrs/schemas/**'
+      - 'src/ocrs/registry.py'  # the homepage diagram's arrows follow its exporters
       - 'versions/**'
       - 'site/**'
       - 'scripts/generate_docs.py'

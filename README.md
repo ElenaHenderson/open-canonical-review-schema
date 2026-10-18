@@ -14,7 +14,7 @@
 A standardized JSON schema and Python mapping utilities for peer review data. OCRS enables interoperability between different peer review systems by providing a canonical representation that preserves rich metadata including reviewer information, decision recommendations, structured findings, metrics, and AI provenance tracking.
 
 <p align="center">
-  <img src="site/review-flow.png" width="800" alt="Reviews from OpenReview, CMT, HotCRP, Editorial Manager, ScholarOne, journal narratives, OpenAIReview, Reviewer3 and DeepReview flow through conference, journal and AI-reviewer groups into OCRS">
+  <img src="site/review-flow.png" width="800" alt="Reviews from conference systems (OpenReview, CMT, HotCRP), AI reviewers (OpenAIReview, Reviewer3, DeepReview) and journals (Editorial Manager, ScholarOne, journal narratives) all map to and from OCRS v0.6.3, shown as two-way arrows">
 </p>
 
 ## Why OCRS?
