@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://valency-oss.github.io/open-canonical-review-schema/v0.7.0/canonical-review.schema.json",
+  "$id": "https://valency-oss.github.io/open-canonical-review-schema/v0.7.1/canonical-review.schema.json",
   "$comment": "Copyright (c) 2026 Valency Systems Inc. Licensed under Apache-2.0.",
   "title": "Open Canonical Review Schema",
   "description": "One peer review of one scholarly work, in a form shared by journals, conferences and AI reviewers",
@@ -16,7 +16,7 @@
   ],
   "properties": {
     "$schema": {
-      "description": "The URL of the OCRS schema this review follows: the `$id` of a published version (e.g., 'https://valency-oss.github.io/open-canonical-review-schema/v0.7.0/canonical-review.schema.json'). It tells validators and editors which version to check the review against; it is not part of the review",
+      "description": "The URL of the OCRS schema this review follows: the `$id` of a published version (e.g., 'https://valency-oss.github.io/open-canonical-review-schema/v0.7.1/canonical-review.schema.json'). It tells validators and editors which version to check the review against; it is not part of the review",
       "type": "string",
       "format": "uri"
     },
@@ -2653,6 +2653,8 @@
             "experiment",
             "theory",
             "writing",
+            "figure",
+            "references",
             "artifact",
             "ethics",
             "other"

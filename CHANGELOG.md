@@ -1,8 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.7.1
 
-The schema is unchanged.
+The addition is optional, so every 0.7.0 review is valid under 0.7.1.
+
+### Schema
+
+- An action item's `scope` takes two new kinds of change. `figure` is a change to a
+  figure, plot or table: a missing error bar, an unreadable axis, a panel that does not
+  match the text. `references` is a change to the work's references: a missing citation,
+  a wrong or retracted one, or a reference that does not say what it is cited for. Before
+  0.7.1 such changes had to be `writing`, `typo`, `artifact` or `other`.
 
 ### Python package
 
