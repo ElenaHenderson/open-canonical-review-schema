@@ -1,0 +1,21 @@
+{
+  "rating": {
+    "min": 1,
+    "max": 6,
+    "labels": {
+      "1": "Strong Reject",
+      "2": "Reject",
+      "3": "Borderline reject",
+      "4": "Borderline accept",
+      "5": "Accept: Technically solid paper",
+      "6": "Strong Accept"
+    }
+  },
+  "confidence": {
+    "min": 1,
+    "max": 5,
+    "labels": {"4": "You are confident in your assessment."}
+  },
+  "quality": {"min": 1, "max": 4, "labels": {"3": "good"}},
+  "clarity": {"min": 1, "max": 4}
+}

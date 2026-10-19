@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+The schema is unchanged.
+
+### Python package
+
+- `from_openreview` reads API v2 notes, whose form fields are `{"value": …}`. Before, such a
+  note gave no opinion, findings or scores, and `map_from` raised "has no review content".
+  API v1 notes are read as before.
+- `map_from("openreview", note, scale_bounds=…, submission=…)` takes the review form's
+  bounds for each score field (`{"rating": {"min": 1, "max": 6, "labels": {"6": "Strong
+  Accept"}}}`), so scores are on the form's scale with its descriptions as anchors, and the
+  work reviewed (`id`, `title`, `venue`, `venueid`, `doi`, `arxiv_id`), which fills `target`.
+  Both are optional, and giving either to another source raises `ValueError`.
+- A `Meta_Review` or `Decision` note, known by its invitation, has `review_context.review_type`
+  `meta_review` or `recommendation`. Its `metareview` or `comment` becomes the opinion and
+  narrative, and its `recommendation` or `decision` the decision.
+
 ## 0.7.0
 
 A breaking change: a review that says nothing about the work, which 0.6.3 accepted by

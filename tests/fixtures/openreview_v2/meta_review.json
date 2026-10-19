@@ -1,0 +1,13 @@
+{
+  "id": "v2meta0001",
+  "forum": "v2forum001",
+  "replyto": "v2forum001",
+  "invitations": ["Example.cc/2025/Conference/Submission12/-/Meta_Review"],
+  "signatures": ["Example.cc/2025/Conference/Submission12/Area_Chair_Qq12"],
+  "cdate": 1753000000000,
+  "content": {
+    "metareview": {"value": "The reviewers agree the method is novel and well evaluated."},
+    "recommendation": {"value": "Accept (Poster)"},
+    "confidence": {"value": 4}
+  }
+}

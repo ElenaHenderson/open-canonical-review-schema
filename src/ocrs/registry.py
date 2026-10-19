@@ -64,14 +64,32 @@ def supported_targets():
     return sorted(_TO.keys())
 
 
-def map_from(source: str, payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, Any]:
+def map_from(
+    source: str,
+    payload: dict[str, Any],
+    *,
+    keep_raw: bool = False,
+    scale_bounds: dict[str, Any] | None = None,
+    submission: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Map a review to OCRS. For an AI reviewer, `payload` holds map_with_record's arguments,
-    `output` included."""
+    `output` included.
+
+    For `openreview`, `payload` is a note (API v1, or v2 with `{"value": …}` fields);
+    `scale_bounds` is its review form's bounds for each score field (`{"rating": {"min": 1,
+    "max": 6, "labels": {"6": "Strong Accept"}}}`) and `submission` the work reviewed
+    (`id`, `title`, `venue`, `venueid`, `doi`, `arxiv_id`). Other sources take neither."""
+    if (scale_bounds is not None or submission is not None) and source != "openreview":
+        raise ValueError(f"scale_bounds and submission apply to openreview, not {source}")
     if source in _FROM_WITH_RECORD:
         out = map_with_record(source, **payload).review
         if keep_raw:
             raw = payload["output"]
             out["provenance"]["raw_payload"] = raw if isinstance(raw, dict) else {"text": raw}
+    elif source == "openreview":
+        out = from_openreview(
+            payload, keep_raw=keep_raw, scale_bounds=scale_bounds, submission=submission
+        )
     elif source in _FROM:
         out = _FROM[source](payload, keep_raw=keep_raw)
     else:

@@ -4,11 +4,13 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
 from ..catalog import alias_map, load_catalog
 from ..identifiers import generate_canonical_work_id
+from ..scales import normalized_to_recommendation
 from ..schema import schema_id
 from ..util import (
     epoch_ms_to_iso,
@@ -29,6 +31,8 @@ from ..util import (
 
 KNOWN_TEXT_KEYS = {
     "summary",
+    "metareview",
+    "comment",
     "paper_summary",
     "review_summary",
     "review",
@@ -63,9 +67,31 @@ def _extract_time(note: dict[str, Any]) -> str:
     return now_iso()
 
 
+# The kind of note an invitation makes: `…/-/Official_Review`, `…/-/Meta_Review`, `…/-/Decision`
+_INVITATION_KIND = re.compile(r"/-/(?:[^/]+/)?(Official_Review|Meta_Review|Decision)$")
+_REVIEW_TYPES = {"Meta_Review": "meta_review", "Decision": "recommendation"}
+
+
 def _get_content(note: dict[str, Any]) -> dict[str, Any]:
+    """The review form's fields. API v2 wraps each as `{"value": …}` (with its readers beside
+    it, when they differ from the note's); API v1 gives the value itself."""
     c = note.get("content")
-    return c if isinstance(c, dict) else {}
+    if not isinstance(c, dict):
+        return {}
+    return {k: v["value"] if isinstance(v, dict) and "value" in v else v for k, v in c.items()}
+
+
+def _note_kind(note: dict[str, Any]) -> str | None:
+    """`Official_Review`, `Meta_Review` or `Decision`, by the invitation (`invitations` in
+    API v2, `invitation` in v1), or None."""
+    invitations = note.get("invitations")
+    names = [*invitations] if isinstance(invitations, list) else []
+    names.append(note.get("invitation"))
+    for name in names:
+        found = _INVITATION_KIND.search(name) if isinstance(name, str) else None
+        if found:
+            return found.group(1)
+    return None
 
 
 def _get_signer(note: dict[str, Any]) -> str | None:
@@ -76,8 +102,10 @@ def _get_signer(note: dict[str, Any]) -> str | None:
     return None
 
 
-def _build_target_identifiers(note: dict[str, Any]) -> dict[str, Any]:
-    """Build structured identifiers from OpenReview note."""
+def _build_target_identifiers(
+    note: dict[str, Any], submission: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Build structured identifiers from OpenReview note, and from the submission it reviews."""
     from ..identifiers import ARXIV_PATTERN, DOI_PATTERN
 
     content = _get_content(note)
@@ -103,8 +131,26 @@ def _build_target_identifiers(note: dict[str, Any]) -> dict[str, Any]:
                 }
                 break
 
+    # The submission is the authority for the work's own DOI and arXiv ID
+    sub = submission or {}
+    doi = sub.get("doi")
+    if isinstance(doi, str):
+        doi = re.sub(r"^(?:https?://(?:dx\.)?doi\.org/|doi:)", "", doi.strip(), flags=re.I)
+        if DOI_PATTERN.match(doi):
+            identifiers["doi"] = {"value": doi, "hyperlink": f"https://doi.org/{doi}"}
+    arxiv = sub.get("arxiv_id")
+    if isinstance(arxiv, str):
+        arxiv = re.sub(
+            r"^(?:https?://)?arxiv\.org/(?:abs|pdf)/|^arxiv:", "", arxiv.strip(), flags=re.I
+        )
+        if ARXIV_PATTERN.match(arxiv):
+            identifiers["arxiv_id"] = {
+                "value": arxiv,
+                "hyperlink": f"https://arxiv.org/abs/{arxiv}",
+            }
+
     # OpenReview forum/note ID as internal_id
-    forum_id = note.get("forum")
+    forum_id = note.get("forum") or sub.get("id")
     if isinstance(forum_id, str) and forum_id:
         identifiers["internal_id"] = {
             "field_name": "openreview_forum",
@@ -131,14 +177,24 @@ def _build_target_identifiers(note: dict[str, Any]) -> dict[str, Any]:
     return identifiers
 
 
-def _build_target(note: dict[str, Any], content: dict[str, Any]) -> dict[str, Any]:
-    """Build target object with identifiers."""
-    identifiers = _build_target_identifiers(note)
+def _build_target(
+    note: dict[str, Any], content: dict[str, Any], submission: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Build target object with identifiers; the submission also gives its title and venue."""
+    identifiers = _build_target_identifiers(note, submission)
     target: dict[str, Any] = {
         "identifiers": identifiers,
         "work_id": generate_canonical_work_id(identifiers),
         "work_type": "preprint",
     }
+
+    sub = submission or {}
+    title = sub.get("title")
+    if isinstance(title, str) and title.strip():
+        target["title"] = title.strip()
+    venue = sub.get("venue") or sub.get("venueid")
+    if isinstance(venue, str) and venue.strip():
+        target["venue"] = venue.strip()
 
     # Add version if present
     version = content.get("version")
@@ -152,7 +208,7 @@ def _best_text_opinion(content: dict[str, Any]) -> str:
     for k in ("summary", "paper_summary", "review_summary"):
         if isinstance(content.get(k), str) and content[k].strip():
             return content[k].strip()
-    for k in ("review", "comments", "main_review", "detailed_review"):
+    for k in ("review", "comments", "main_review", "detailed_review", "metareview", "comment"):
         if isinstance(content.get(k), str) and content[k].strip():
             return first_paragraph(content[k].strip(), max_len=500)
     return ""
@@ -193,7 +249,61 @@ def _metric_key_for_label(
     return "other", "other"
 
 
-def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str, Any]:
+def _bounded_scale(field: str, num: int | float, bounds: dict[str, Any] | None) -> dict[str, Any]:
+    """The scale of a score: the review form's own bounds for the field (`{"min": 1, "max": 6,
+    "labels": {"6": "Strong Accept"}}`), else a guess from the value."""
+    if not _has_bounds(field, bounds):
+        return guess_scale_from_value(num)
+    given = (bounds or {})[field]
+    scale: dict[str, Any] = {"type": "ordinal", "min": given["min"], "max": given["max"]}
+    labels = given.get("labels")
+    anchors = []
+    for value, label in labels.items() if isinstance(labels, dict) else []:
+        number, _ = parse_numeric_prefix(value)
+        if number is not None and isinstance(label, str) and label.strip():
+            anchors.append({"value": number, "label": label.strip()})
+    if anchors:
+        scale["anchors"] = sorted(anchors, key=lambda a: a["value"])
+    return scale
+
+
+def _has_bounds(field: str, bounds: dict[str, Any] | None) -> bool:
+    """Whether the form gave numeric bounds for `field`."""
+    given = (bounds or {}).get(field)
+    return isinstance(given, dict) and all(
+        isinstance(given.get(k), (int, float)) and not isinstance(given.get(k), bool)
+        for k in ("min", "max")
+    )
+
+
+def _form_label(field: str, num: int | float, bounds: dict[str, Any] | None) -> str | None:
+    """The form's description of a score's value ("Accept: Technically solid paper"), which
+    API v2 leaves out of the note when the value is a number."""
+    given = (bounds or {}).get(field)
+    labels = given.get("labels") if isinstance(given, dict) else None
+    if not isinstance(labels, dict):
+        return None
+    for value, label in labels.items():
+        if parse_numeric_prefix(value)[0] == num and isinstance(label, str):
+            return label.strip() or None
+    return None
+
+
+def from_openreview(
+    note: dict[str, Any],
+    *,
+    keep_raw: bool = False,
+    scale_bounds: dict[str, Any] | None = None,
+    submission: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Map an OpenReview note (API v1, or v2 with its `{"value": …}` fields) to OCRS.
+
+    `scale_bounds` holds the review form's bounds for its score fields, `{field: {"min": 1,
+    "max": 6, "labels": {"6": "Strong Accept"}}}`, so scores are on the form's own scales, not
+    guessed ones. `submission` (`id`, `title`, `venue`, `venueid`, `doi`, `arxiv_id`) fills what
+    the work is, which a review note does not carry. A Meta_Review or Decision note, known by
+    its invitation, has `review_context.review_type` `meta_review` or `recommendation`.
+    """
     catalog = load_catalog()
     amap = alias_map(catalog)
     # also index by metric key as lowercase to allow exact_key match
@@ -225,12 +335,18 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
             "identity_mode": "confidential",
             "human_referee": {},
         },
-        "target": _build_target(note, content),
+        "target": _build_target(note, content, submission),
         "metric_catalog_ref": catalog.get("catalog_id"),
         "metrics": [],
         "opinion": {"summary": summary} if (summary := _best_text_opinion(content)) else {},
     }
 
+    kind = _note_kind(note)
+    if kind in _REVIEW_TYPES:
+        out["review_context"] = {"review_type": _REVIEW_TYPES[kind]}
+    venueid = (submission or {}).get("venueid")
+    if isinstance(venueid, str) and venueid.strip():
+        out["extensions"] = {"openreview": {"venueid": venueid.strip()}}
     if isinstance(note.get("id"), str):
         out["provenance"]["source_review_id"] = note["id"]
     if signer:
@@ -246,6 +362,8 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
         ("comments", "detailed_review"),
         ("main_review", "detailed_review"),
         ("detailed_review", "detailed_review"),
+        ("metareview", "detailed_review"),
+        ("comment", "detailed_review"),
         ("confidential_comments", "confidential_to_editors"),
         ("confidential_to_chairs", "confidential_to_editors"),
         ("author_questions", "author_questions"),
@@ -283,15 +401,21 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
     if rec_raw is not None:
         num, rest = parse_numeric_prefix(rec_raw)
         if num is not None:
-            scale = guess_scale_from_value(num)
-            # The reviewer's own words first, as for CMT and HotCRP, then the number
+            scale = _bounded_scale(rec_key, num, scale_bounds)
+            n01 = normalize_linear(num, scale)
+            # The reviewer's own words first, as for CMT and HotCRP (the form's description
+            # of the value when the note gives only the number), then the number
+            label = rest or _form_label(rec_key, num, scale_bounds)
             decision["recommendation"] = (
-                map_recommendation_from_text(rest or "")
+                map_recommendation_from_text(label or "")
                 or map_recommendation_from_numeric(num, scale)
-                or "borderline"
+                or (
+                    normalized_to_recommendation(n01)
+                    if _has_bounds(rec_key, scale_bounds) and n01 is not None
+                    else "borderline"
+                )
             )
             # also store overall metric
-            n01 = normalize_linear(num, scale)
             out["metrics"].append(
                 {
                     "key": "overall",
@@ -311,7 +435,8 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
     if conf_raw is not None:
         num, conf_label = parse_numeric_prefix(conf_raw)
         if num is not None:
-            scale = guess_scale_from_value(num)
+            scale = _bounded_scale(conf_key, num, scale_bounds)
+            conf_label = conf_label or _form_label(conf_key, num, scale_bounds)
             # treat confidence as metric; decision.confidence expects 0..1
             n01 = normalize_linear(num, scale)
             out["metrics"].append(
@@ -365,7 +490,7 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
                 break
         if aspect is None:
             aspect = "other"
-        scale = guess_scale_from_value(num)
+        scale = _bounded_scale(k, num, scale_bounds)
         norm = normalize_linear(num, scale)
         metric = {
             "key": key,

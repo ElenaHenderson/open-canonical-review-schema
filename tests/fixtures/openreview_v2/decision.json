@@ -1,0 +1,12 @@
+{
+  "id": "v2dec00001",
+  "forum": "v2forum001",
+  "replyto": "v2forum001",
+  "invitations": ["Example.cc/2025/Conference/Submission12/-/Decision"],
+  "signatures": ["Example.cc/2025/Conference/Program_Chairs"],
+  "cdate": 1754000000000,
+  "content": {
+    "decision": {"value": "Accept (Oral)"},
+    "comment": {"value": "Authors should add the comparisons discussed."}
+  }
+}

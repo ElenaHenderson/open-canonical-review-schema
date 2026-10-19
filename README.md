@@ -105,6 +105,34 @@ Each review links back to the page. `provenance.source_url` opens the forum at t
 
 The review's text is copied as Markdown. Its Summary becomes `opinion.summary`; the points under its Strengths, Weaknesses and Minor headings become `findings`, with the heading in `group` and `severity: minor` for Minor; Questions become `findings.questions`; Rating, Confidence and the other numeric scores become `metrics`; Final Justification becomes `decision.summary_rationale`. A page names a score's label (`5: Accept: ...`) but not its scale, so a metric keeps the value and the label as an anchor, with no `normalized` value, and the Rating's first words (`Accept`, `Borderline reject`) set `decision.recommendation`. The saved page holds rendered mathematics, not the reviewer's TeX, so formulas are rebuilt from its MathML and may differ from what the reviewer typed.
 
+## OpenReview notes from the API
+
+`map_from("openreview", note)` takes a note from OpenReview's API, version 1 (`content["rating"]` is the value) or version 2 (`content["rating"]` is `{"value": …}`). A note carries the form's answers only, so two keyword arguments say what it cannot:
+
+- `scale_bounds` gives the review form's bounds for each score field. A score is then on the form's own scale, with the form's description of each value as an anchor, and its normalized value and the recommendation it implies follow from the real bounds. Without them the scale is guessed from the value. The bounds are the form's own, so pass those of the note's form: a meta-review form can scale `confidence` differently from the official-review form.
+- `submission` gives the work reviewed (`id`, `title`, `venue`, `venueid`, `doi`, `arxiv_id`), which fills `target`.
+
+A note made by a `Meta_Review` or `Decision` invitation has `review_context.review_type` `meta_review` or `recommendation`; its `metareview` or `comment` text becomes the opinion and its `recommendation` or `decision` the decision.
+
+```python
+from ocrs import map_from, validate_canonical
+
+note = {
+    "id": "r1",
+    "forum": "f1",
+    "invitations": ["Example.cc/2025/Conference/Submission12/-/Official_Review"],
+    "content": {"summary": {"value": "A method."}, "rating": {"value": 5}},
+}
+canonical = map_from(
+    "openreview",
+    note,
+    scale_bounds={"rating": {"min": 1, "max": 6, "labels": {"5": "Accept"}}},
+    submission={"id": "f1", "title": "A Paper", "venue": "Example 2025"},
+)
+validate_canonical(canonical)
+assert canonical["decision"]["recommendation"] == "accept"
+```
+
 ## AI reviewers
 
 The OpenAIReview, DeepReview and Reviewer3 mappers copy the reviewer's own output into OCRS; they never rewrite or invent text. Whatever has no OCRS field is kept, unchanged, in `extensions.<reviewer>`.

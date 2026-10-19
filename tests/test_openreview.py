@@ -11,8 +11,11 @@ import pytest
 from ocrs import map_from, map_to, validate_canonical
 from ocrs.catalog import alias_map, load_catalog
 from ocrs.mappers.openreview import _metric_key_for_label, to_openreview
+from ocrs.scales import normalized_to_recommendation
 
 FIXTURES = Path(__file__).parent / "fixtures" / "openreview"
+# API v2 notes, and the form bounds and submission that go with them (not notes themselves)
+V2_FIXTURES = Path(__file__).parent / "fixtures" / "openreview_v2"
 
 # A summary, so reviews built to test something else have review content.
 TEXT = {"summary": "A summary."}
@@ -21,6 +24,11 @@ TEXT = {"summary": "A summary."}
 def load_fixture(name: str) -> dict:
     """Load a JSON fixture file."""
     return json.loads((FIXTURES / name).read_text())
+
+
+def load_v2(name: str) -> dict:
+    """Load a JSON fixture of API v2 notes."""
+    return json.loads((V2_FIXTURES / name).read_text())
 
 
 def note(content: dict, **fields) -> dict:
@@ -675,3 +683,240 @@ def test_openreview_fallback_confidence_keeps_its_label():
     [metric] = [m for m in canon["metrics"] if m["key"] == "confidence"]
     assert metric["justification"] == "I have substantial expertise"
     assert canon["decision"]["confidence"] == 0.75
+
+
+# API v2 notes, form scale bounds, the submission, meta-reviews and decisions
+
+
+def unwrapped(value):
+    """A v2 note's content as API v1 gives it."""
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    if isinstance(value, dict):
+        return {k: unwrapped(v) for k, v in value.items()}
+    return value
+
+
+def without_times(review: dict) -> dict:
+    """A review without the time it was mapped."""
+    out = json.loads(json.dumps(review))
+    out["provenance"].pop("imported_at")
+    return out
+
+
+def test_a_v2_note_maps_like_its_v1_equivalent():
+    v2 = load_v2("review.json")
+    v1 = {**v2, "content": unwrapped(v2["content"])}
+
+    canon = map_from("openreview", v2)
+
+    assert without_times(canon) == without_times(map_from("openreview", v1))
+    assert canon["opinion"]["summary"] == (
+        "The paper predicts attention sparsity with a small network."
+    )
+    assert [f["text"] for f in canon["findings"]["strengths"]] == [
+        "1. Novel predictor.",
+        "2. Strong results on all tasks.",
+    ]
+    assert len(canon["findings"]["weaknesses"]) == 2
+    assert [f["text"] for f in canon["findings"]["questions"]] == [
+        "How sensitive is it to the predictor?"
+    ]
+    assert {m["label"]: m["value"] for m in canon["metrics"]} == {
+        "Overall Assessment": 5,
+        "Reviewer Confidence": 4,
+        "quality": 3,
+        "clarity": 4,
+    }
+
+
+def test_a_v2_note_with_only_wrapped_fields_is_a_review():
+    canon = map_from(
+        "openreview",
+        {
+            "id": "r",
+            "forum": "f",
+            "content": {
+                "summary": {"value": "A method."},
+                "rating": {"value": 6},
+                "weaknesses": {"value": "One.\nTwo."},
+            },
+        },
+    )
+
+    assert canon["opinion"]["summary"] == "A method."
+    assert metric(canon, "overall")["value"] == 6
+    assert [f["text"] for f in canon["findings"]["weaknesses"]] == ["One.", "Two."]
+
+
+def test_unwrapping_leaves_v1_values_alone():
+    odd = {"id": "r", "forum": "f", "content": {**TEXT, "questions": ["Why?", "How?"]}}
+
+    canon = map_from("openreview", odd)
+
+    assert [f["text"] for f in canon["findings"]["questions"]] == ["Why?", "How?"]
+    assert canon["opinion"]["summary"] == "A summary."
+
+
+def test_scores_are_guessed_without_the_forms_bounds():
+    canon = map_from("openreview", load_v2("review.json"))
+
+    assert metric(canon, "overall")["scale"] == {"type": "ordinal", "min": 1, "max": 5}
+
+
+def test_scores_use_the_forms_bounds_and_labels():
+    bounds = load_v2("scale_bounds.json")
+
+    canon = map_from("openreview", load_v2("review.json"), scale_bounds=bounds)
+
+    overall = metric(canon, "overall")
+    assert overall["scale"]["type"] == "ordinal"
+    assert (overall["scale"]["min"], overall["scale"]["max"]) == (1, 6)
+    assert overall["scale"]["anchors"][4] == {
+        "value": 5,
+        "label": "Accept: Technically solid paper",
+    }
+    assert overall["normalized"]["value_0_1"] == pytest.approx(0.8)
+    # The note gives the number only; the form says what 5 means
+    assert canon["decision"]["recommendation"] == "accept"
+    confidence = metric(canon, "confidence")
+    assert confidence["scale"]["max"] == 5
+    assert confidence["justification"] == "You are confident in your assessment."
+    assert canon["decision"]["confidence"] == pytest.approx(0.75)
+    quality = next(m for m in canon["metrics"] if m["label"] == "quality")
+    assert quality["scale"]["max"] == 4
+    assert quality["normalized"]["value_0_1"] == pytest.approx(2 / 3)
+    validate_canonical(canon)
+
+
+def test_a_score_without_a_label_gets_its_recommendation_from_the_bounds():
+    bounds = {"rating": {"min": 1, "max": 6}}
+    low = map_from("openreview", note({**TEXT, "rating": 1}), scale_bounds=bounds)
+    high = map_from("openreview", note({**TEXT, "rating": 6}), scale_bounds=bounds)
+
+    assert low["decision"]["recommendation"] == normalized_to_recommendation(0.0)
+    assert high["decision"]["recommendation"] == normalized_to_recommendation(1.0)
+    assert low["decision"]["recommendation"] != high["decision"]["recommendation"]
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [
+        {"rating": {"min": "1", "max": 6}},
+        {"rating": {"min": 1}},
+        {"rating": {"min": True, "max": 6}},
+        {"rating": "1-6"},
+        {"other_field": {"min": 1, "max": 6}},
+        {},
+    ],
+)
+def test_unusable_bounds_leave_the_scale_guessed(bounds):
+    canon = map_from("openreview", note({**TEXT, "rating": "5"}), scale_bounds=bounds)
+
+    assert metric(canon, "overall")["scale"] == {"type": "ordinal", "min": 1, "max": 5}
+
+
+def test_the_submission_fills_what_the_work_is():
+    canon = map_from(
+        "openreview",
+        load_v2("review.json"),
+        submission=load_v2("submission.json"),
+    )
+
+    target = canon["target"]
+    assert target["title"] == "Sparse Attention That Learns Where To Look"
+    assert target["venue"] == "Example 2025 poster"
+    assert target["identifiers"]["doi"] == {
+        "value": "10.1234/abc.5678",
+        "hyperlink": "https://doi.org/10.1234/abc.5678",
+    }
+    assert target["identifiers"]["arxiv_id"]["value"] == "2401.12345"
+    assert target["identifiers"]["internal_id"]["value"] == "v2forum001"
+    assert target["work_id"] == "doi:10.1234/abc.5678"
+    assert canon["extensions"] == {"openreview": {"venueid": "Example.cc/2025/Conference"}}
+    validate_canonical(canon)
+
+
+def test_a_submission_without_identifiers_or_venue_adds_only_what_it_has():
+    canon = map_from(
+        "openreview",
+        {"id": "r", "content": {**TEXT}},
+        submission={"id": "sub1", "doi": "not a doi", "arxiv_id": 5, "venue": "  "},
+    )
+
+    assert canon["target"]["work_id"] == "internal_id:openreview_forum:sub1"
+    assert set(canon["target"]["identifiers"]) == {"internal_id"}
+    assert "title" not in canon["target"] and "venue" not in canon["target"]
+    assert "extensions" not in canon
+
+
+def test_a_meta_review_is_a_meta_review_with_a_recommendation():
+    canon = map_from("openreview", load_v2("meta_review.json"))
+
+    assert canon["review_context"] == {"review_type": "meta_review"}
+    assert canon["decision"]["recommendation"] == "accept"
+    assert canon["opinion"]["summary"] == (
+        "The reviewers agree the method is novel and well evaluated."
+    )
+    assert canon["narrative"]["detailed_review"] == canon["opinion"]["summary"]
+    assert metric(canon, "confidence")["value"] == 4
+    validate_canonical(canon)
+
+
+def test_a_decision_is_a_recommendation_with_its_comment():
+    canon = map_from("openreview", load_v2("decision.json"))
+
+    assert canon["review_context"] == {"review_type": "recommendation"}
+    assert canon["decision"]["recommendation"] == "accept"
+    assert canon["opinion"]["summary"] == "Authors should add the comparisons discussed."
+    validate_canonical(canon)
+
+
+@pytest.mark.parametrize(
+    ("fields", "kind"),
+    [
+        ({"invitation": "Example.cc/2025/Conference/Submission1/-/Meta_Review"}, "meta_review"),
+        ({"invitation": "Example.cc/2025/Conference/-/Meta_Review"}, "meta_review"),
+        ({"invitations": ["x/-/Other", "x/Submission2/-/Decision"]}, "recommendation"),
+        ({"invitations": ["x/-/Official_Review"]}, None),
+        ({"invitation": "x/-/Meta_Review_Extra"}, None),
+        ({"invitations": "not a list"}, None),
+        ({}, None),
+    ],
+)
+def test_the_invitation_decides_what_kind_of_note_it_is(fields, kind):
+    canon = map_from("openreview", note({**TEXT}, **fields))
+
+    assert canon.get("review_context", {}).get("review_type") == kind
+
+
+def test_a_rejecting_decision_is_a_rejection():
+    canon = map_from(
+        "openreview",
+        note({"decision": {"value": "Reject"}}, invitations=["x/Submission3/-/Decision"]),
+    )
+
+    assert canon["decision"]["recommendation"] == "reject"
+
+
+def test_the_options_belong_to_openreview():
+    with pytest.raises(ValueError, match="scale_bounds and submission apply to openreview"):
+        map_from("cmt", {}, scale_bounds={})
+    with pytest.raises(ValueError, match="apply to openreview"):
+        map_from("hotcrp", {}, submission={"id": "x"})
+
+
+def test_map_from_still_takes_a_note_alone():
+    import inspect
+
+    parameters = inspect.signature(map_from).parameters
+    assert {"keep_raw", "scale_bounds", "submission"} <= set(parameters)
+    assert parameters["scale_bounds"].default is None
+    assert parameters["submission"].default is None
+    assert map_from("openreview", load_fixture("minimal_review.json"))["review_id"] == "or_min_1"
+
+
+def test_keep_raw_keeps_the_v2_note_as_received():
+    v2 = load_v2("review.json")
+
+    assert map_from("openreview", v2, keep_raw=True)["provenance"]["raw_payload"] == v2

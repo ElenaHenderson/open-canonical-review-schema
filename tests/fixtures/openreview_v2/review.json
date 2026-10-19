@@ -1,0 +1,22 @@
+{
+  "id": "v2rev00001",
+  "forum": "v2forum001",
+  "replyto": "v2forum001",
+  "number": 1,
+  "invitations": ["Example.cc/2025/Conference/Submission12/-/Official_Review"],
+  "signatures": ["Example.cc/2025/Conference/Submission12/Reviewer_abcd"],
+  "readers": ["everyone"],
+  "cdate": 1751509680000,
+  "mdate": 1761683280000,
+  "content": {
+    "summary": {"value": "The paper predicts attention sparsity with a small network."},
+    "strengths": {"value": "1. Novel predictor.\n2. Strong results on all tasks."},
+    "weaknesses": {"value": "Training overhead of about 15%.\nNo comparison with Flash Attention."},
+    "questions": {"value": "How sensitive is it to the predictor?", "readers": ["everyone"]},
+    "quality": {"value": 3},
+    "clarity": {"value": 4},
+    "rating": {"value": 5},
+    "confidence": {"value": 4},
+    "code_of_conduct": {"value": "Yes"}
+  }
+}
