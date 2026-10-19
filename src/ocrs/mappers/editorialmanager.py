@@ -130,13 +130,13 @@ def _parse_recommendation(payload: dict[str, Any]) -> str | None:
     return None
 
 
-def _best_opinion_text(payload: dict[str, Any]) -> str:
-    """Find the best text for the opinion summary."""
+def _best_opinion_text(payload: dict[str, Any]) -> str | None:
+    """Find the best text for the opinion summary, if the review has any."""
     for k in ("commentsToAuthor", "comments_to_author", "summary", "comments"):
         v = payload.get(k)
         if isinstance(v, str) and v.strip():
             return first_paragraph(v.strip(), max_len=500)
-    return "No summary provided."
+    return None
 
 
 def _map_ratings_to_metrics(
@@ -274,7 +274,7 @@ def from_editorialmanager(payload: dict[str, Any], *, keep_raw: bool = False) ->
         },
         "metric_catalog_ref": catalog.get("catalog_id"),
         "metrics": [],
-        "opinion": {"summary": _best_opinion_text(payload)},
+        "opinion": {"summary": summary} if (summary := _best_opinion_text(payload)) else {},
     }
 
     if keep_raw:

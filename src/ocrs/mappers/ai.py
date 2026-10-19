@@ -44,7 +44,7 @@ from ..mapping import (
     Step,
     UnanchoredQuote,
 )
-from ..schema import load_schema, schema_id, validate_canonical
+from ..schema import load_schema, require_content, schema_id, validate_canonical
 from ..util import migrate_work_id_to_identifiers
 
 __all__ = [
@@ -619,6 +619,7 @@ def finish(
     left = leftover(output, recorder.read, ignored, generic)
     if left:
         review["extensions"] = {framework: left}
+    require_content(review, framework)
     validate_canonical(review)
     gaps = Gaps(
         unmapped=count_unmapped(left, generic),

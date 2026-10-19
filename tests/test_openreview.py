@@ -14,6 +14,9 @@ from ocrs.mappers.openreview import _metric_key_for_label, to_openreview
 
 FIXTURES = Path(__file__).parent / "fixtures" / "openreview"
 
+# A summary, so reviews built to test something else have review content.
+TEXT = {"summary": "A summary."}
+
 
 def load_fixture(name: str) -> dict:
     """Load a JSON fixture file."""
@@ -81,36 +84,70 @@ def test_openreview_realistic():
 
 def test_openreview_created_at_prefers_tcdate():
     """Test that tcdate wins over the other OpenReview timestamps."""
-    canon = map_from("openreview", note({}, cdate=0, tcdate=1735689600000))
+    canon = map_from(
+        "openreview",
+        note(
+            {
+                **TEXT,
+            },
+            cdate=0,
+            tcdate=1735689600000,
+        ),
+    )
     assert canon["created_at"] == "2025-01-01T00:00:00Z"
 
 
 def test_openreview_created_at_from_mdate():
     """Test that mdate is used when it is the only integer timestamp."""
-    canon = map_from("openreview", note({}, cdate="2024-01-01", mdate=1735689600000))
+    canon = map_from(
+        "openreview",
+        note(
+            {
+                **TEXT,
+            },
+            cdate="2024-01-01",
+            mdate=1735689600000,
+        ),
+    )
     assert canon["created_at"] == "2025-01-01T00:00:00Z"
 
 
 def test_openreview_created_at_defaults_to_now():
     """Test that a note without timestamps gets the import time."""
     before = dt.datetime.now(tz=dt.UTC)
-    canon = map_from("openreview", note({}))
+    canon = map_from("openreview", note(TEXT))
     created = dt.datetime.fromisoformat(canon["created_at"].replace("Z", "+00:00"))
     assert created >= before.replace(microsecond=0)
 
 
 def test_openreview_review_id_generated_without_note_id():
     """Test that a note without a string ID gets a generated review ID."""
-    canon = map_from("openreview", {"id": 17, "forum": "f1", "content": {}})
+    canon = map_from("openreview", {"id": 17, "forum": "f1", "content": TEXT})
     assert isinstance(canon["review_id"], str) and len(canon["review_id"]) == 36
     assert "source_review_id" not in canon["provenance"]
 
 
 def test_openreview_non_string_signature_is_ignored():
     """Test that a signature that is not a string does not become the referee ID."""
-    canon = map_from("openreview", note({}, signatures=[{"id": "~Reviewer1"}]))
+    canon = map_from(
+        "openreview",
+        note(
+            {
+                **TEXT,
+            },
+            signatures=[{"id": "~Reviewer1"}],
+        ),
+    )
     assert "referee_id" not in canon["referee"]
-    canon = map_from("openreview", note({}, signatures=[]))
+    canon = map_from(
+        "openreview",
+        note(
+            {
+                **TEXT,
+            },
+            signatures=[],
+        ),
+    )
     assert "referee_id" not in canon["referee"]
 
 
@@ -119,7 +156,7 @@ def test_openreview_non_string_signature_is_ignored():
 
 def test_openreview_doi_identifier():
     """Test that a valid DOI in the review form becomes the primary identifier."""
-    canon = map_from("openreview", note({"doi": "10.1234/abc.2024"}))
+    canon = map_from("openreview", note({**TEXT, "doi": "10.1234/abc.2024"}))
     identifiers = canon["target"]["identifiers"]
     assert identifiers["doi"] == {
         "value": "10.1234/abc.2024",
@@ -131,14 +168,16 @@ def test_openreview_doi_identifier():
 
 def test_openreview_invalid_doi_is_dropped():
     """Test that a DOI that does not match the DOI pattern is ignored."""
-    canon = map_from("openreview", note({"doi": "not-a-doi"}))
+    canon = map_from("openreview", note({**TEXT, "doi": "not-a-doi"}))
     assert "doi" not in canon["target"]["identifiers"]
     assert canon["target"]["work_id"] == "internal_id:openreview_forum:or_forum_1"
 
 
 def test_openreview_arxiv_identifier_from_url():
     """Test that an arXiv abs URL is reduced to its ID."""
-    canon = map_from("openreview", {"content": {"arxiv": "https://arxiv.org/abs/2401.12345v2"}})
+    canon = map_from(
+        "openreview", {"content": {**TEXT, "arxiv": "https://arxiv.org/abs/2401.12345v2"}}
+    )
     identifiers = canon["target"]["identifiers"]
     assert identifiers["arxiv_id"] == {
         "value": "2401.12345v2",
@@ -151,14 +190,14 @@ def test_openreview_arxiv_identifier_skips_invalid_keys():
     """Test that an invalid arXiv value falls through to the next arXiv key."""
     canon = map_from(
         "openreview",
-        note({"arxiv_id": "not an id", "arXiv": "http://arxiv.org/abs/hep-th/9901001"}),
+        note({**TEXT, "arxiv_id": "not an id", "arXiv": "http://arxiv.org/abs/hep-th/9901001"}),
     )
     assert canon["target"]["identifiers"]["arxiv_id"]["value"] == "hep-th/9901001"
 
 
 def test_openreview_internal_id_falls_back_to_note_id():
     """Test that the note ID is the internal ID when the note has no forum."""
-    canon = map_from("openreview", {"id": "note_9", "content": {}})
+    canon = map_from("openreview", {"id": "note_9", "content": TEXT})
     assert canon["target"]["identifiers"]["internal_id"] == {
         "field_name": "openreview_note",
         "value": "note_9",
@@ -169,7 +208,7 @@ def test_openreview_internal_id_falls_back_to_note_id():
 
 def test_openreview_internal_id_falls_back_to_form_paper_id():
     """Test that a paper ID in the review form is used when the note has no IDs."""
-    canon = map_from("openreview", {"content": {"paper_id": "", "submission_id": "S-7"}})
+    canon = map_from("openreview", {"content": {**TEXT, "paper_id": "", "submission_id": "S-7"}})
     assert canon["target"]["identifiers"]["internal_id"] == {
         "field_name": "submission_id",
         "value": "S-7",
@@ -186,9 +225,9 @@ def test_openreview_no_identifiers():
 
 def test_openreview_target_version():
     """Test that a version string in the review form is trimmed onto the target."""
-    canon = map_from("openreview", note({"version": "  v2 "}))
+    canon = map_from("openreview", note({**TEXT, "version": "  v2 "}))
     assert canon["target"]["version"] == "v2"
-    canon = map_from("openreview", note({"version": "   "}))
+    canon = map_from("openreview", note({**TEXT, "version": "   "}))
     assert "version" not in canon["target"]
 
 
@@ -211,11 +250,17 @@ def test_openreview_opinion_from_first_review_paragraph():
 
 
 def test_openreview_opinion_without_text():
-    """Test the opinion placeholder when the review form has no text."""
+    """Test that a review form with a rating but no text has no opinion summary."""
     canon = map_from("openreview", note({"rating": 5}))
-    assert canon["opinion"]["summary"] == "No summary provided."
+    assert "summary" not in canon["opinion"]
     assert "narrative" not in canon
     assert "findings" not in canon
+
+
+def test_openreview_empty_form_is_refused():
+    """Test that a review form with no text or scores is refused: it says nothing."""
+    with pytest.raises(ValueError, match="has no review content"):
+        map_from("openreview", note({}))
 
 
 def test_openreview_narrative_keeps_first_detailed_review():
@@ -301,7 +346,7 @@ def test_openreview_numeric_recommendation_without_mapping_is_borderline():
 
 def test_openreview_non_text_recommendation_is_ignored():
     """Test that a recommendation that is neither a number nor text adds no decision."""
-    canon = map_from("openreview", note({"recommendation": ["Accept"]}))
+    canon = map_from("openreview", note({**TEXT, "recommendation": ["Accept"]}))
     assert "decision" not in canon
     assert canon["metrics"] == []
 
@@ -316,7 +361,7 @@ def test_openreview_reviewer_confidence():
 
 def test_openreview_non_numeric_confidence_is_ignored():
     """Test that text-only confidence adds neither a metric nor a decision."""
-    canon = map_from("openreview", note({"confidence": "very high"}))
+    canon = map_from("openreview", note({**TEXT, "confidence": "very high"}))
     assert canon["metrics"] == []
     assert "decision" not in canon
 

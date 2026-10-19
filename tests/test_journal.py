@@ -6,10 +6,15 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from ocrs import map_from, map_to
 from ocrs.mappers.journal import to_journal_narrative
 
 FIXTURES = Path(__file__).parent / "fixtures" / "journal"
+
+# Review text, so reviews built to test something else have review content.
+TEXT = {"full_text": "A review."}
 
 
 def load_fixture(name: str) -> dict:
@@ -60,19 +65,21 @@ class TestFromJournalNarrative:
 
     def test_id_fallback(self):
         """id is used for review_id and source_review_id when they are missing."""
-        canon = map_from("journal_narrative", {"id": 42, "journal": "J"})
+        canon = map_from("journal_narrative", {**TEXT, "id": 42, "journal": "J"})
         assert canon["review_id"] == "42"
         assert canon["provenance"]["source_review_id"] == "42"
 
     def test_no_ids_generates_review_id(self):
         """Without any id a UUID review_id is generated."""
-        canon = map_from("journal_narrative", {"journal": "J"})
+        canon = map_from("journal_narrative", {**TEXT, "journal": "J"})
         assert len(canon["review_id"]) == 36
         assert canon["provenance"]["source_review_id"] == ""
 
     def test_work_id_fallback_and_invalid_doi(self):
         """An invalid DOI is ignored and a non-string work_id becomes internal_id."""
-        canon = map_from("journal_narrative", {"doi": "nope", "work_id": 17, "journal": "J"})
+        canon = map_from(
+            "journal_narrative", {**TEXT, "doi": "nope", "work_id": 17, "journal": "J"}
+        )
         assert canon["target"]["identifiers"] == {
             "internal_id": {"field_name": "work_id", "value": "17"}
         }
@@ -80,26 +87,29 @@ class TestFromJournalNarrative:
 
     def test_no_identifiers(self):
         """Without DOI, manuscript_id or work_id the work is unknown."""
-        canon = map_from("journal_narrative", {"journal": "J"})
+        canon = map_from("journal_narrative", {**TEXT, "journal": "J"})
         assert canon["target"]["identifiers"] == {}
         assert canon["target"]["work_id"] == "unknown"
 
     def test_blank_text_and_non_string_fields(self):
-        """Blank text gives a placeholder opinion; a non-string created_at is replaced."""
+        """Blank text is no review content, so the review is refused."""
+        with pytest.raises(ValueError, match="has no review content"):
+            map_from(
+                "journal_narrative",
+                {"journal": "J", "created_at": 1700000000, "full_text": "  \n  "},
+            )
+
+    def test_non_string_created_at_is_replaced(self):
+        """A non-string created_at is replaced with the import time."""
         before = datetime.now(UTC)
-        canon = map_from(
-            "journal_narrative",
-            {"journal": "J", "created_at": 1700000000, "full_text": "  \n  "},
-        )
-        assert canon["opinion"]["summary"] == "No opinion text provided."
-        assert canon["narrative"] == {}
+        canon = map_from("journal_narrative", {**TEXT, "journal": "J", "created_at": 1700000000})
         created = datetime.fromisoformat(canon["created_at"].replace("Z", "+00:00"))
         assert before <= created <= datetime.now(UTC)
 
     def test_non_string_full_text_ignored(self):
-        """A non-string full_text is treated as empty."""
-        canon = map_from("journal_narrative", {"journal": "J", "full_text": ["a"]})
-        assert canon["opinion"]["summary"] == "No opinion text provided."
+        """A non-string full_text is treated as empty, so the review is refused."""
+        with pytest.raises(ValueError, match="has no review content"):
+            map_from("journal_narrative", {"journal": "J", "full_text": ["a"]})
 
 
 class TestToJournalNarrative:

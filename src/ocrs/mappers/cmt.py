@@ -132,7 +132,7 @@ def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, An
         },
         "metric_catalog_ref": catalog.get("catalog_id"),
         "metrics": [],
-        "opinion": {"summary": "No summary provided."},
+        "opinion": {},
     }
     # Add venue/track only if present
     if venue:
@@ -152,7 +152,7 @@ def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, An
     review_text = payload.get("commentsToAuthors") or payload.get("reviewText")
     if isinstance(review_text, str) and review_text.strip():
         nar["detailed_review"] = review_text.strip()
-        if out["opinion"]["summary"] == "No summary provided.":
+        if "summary" not in out["opinion"]:
             out["opinion"]["summary"] = first_paragraph(review_text.strip())
     chairs = payload.get("commentsToChairs")
     if isinstance(chairs, str) and chairs.strip():
@@ -264,8 +264,6 @@ def from_cmt(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, An
     for m in out["metrics"]:
         if m.get("normalized") is None:
             m.pop("normalized", None)
-    if not out.get("opinion", {}).get("summary") and not out.get("opinion", {}).get("text"):
-        out["opinion"] = {"summary": "No opinion text provided."}
     return out
 
 

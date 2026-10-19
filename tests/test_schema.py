@@ -11,6 +11,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from ocrs import load_schema, map_from, map_with_record, schema_id, validate_canonical
+from ocrs.schema import has_content
 
 
 def test_schema_id_names_the_package_version():
@@ -342,3 +343,107 @@ def test_publication_stage_is_no_longer_a_review_type() -> None:
 def test_stage_takes_only_the_two_values(stage: str) -> None:
     with pytest.raises(jsonschema.ValidationError):
         validate_canonical(_review_in_context({"stage": stage}))
+
+
+def _review_saying(**content) -> dict:
+    """A minimal review whose only content is `content`."""
+    review = {key: value for key, value in MINIMAL_REVIEW.items() if key != "opinion"}
+    return {**review, "opinion": {}, **content}
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        {"opinion": {"summary": "A sound paper."}},
+        {"opinion": {"text": "The paper is sound."}},
+        {"opinion": {"contributions": [{"text": "A new method."}]}},
+        {"findings": {"strengths": [{"text": "Clear."}]}},
+        {"findings": {"weaknesses": [{"text": "Small sample."}]}},
+        {"findings": {"questions": [{"text": "Why this baseline?"}]}},
+        {"findings": {"comments": [{"text": "Typo on page 2."}]}},
+        {"findings": {"changes": [{"text": "Add an ablation."}]}},
+        {"decision": {"recommendation": "accept"}},
+        {"decision": {"revision_requirement": "minor"}},
+        {
+            "metrics": [
+                {
+                    "key": "overall",
+                    "label": "Overall",
+                    "scale": {"type": "ordinal", "min": 1, "max": 5},
+                    "value": 4,
+                }
+            ]
+        },
+        {
+            "claim_assessments": [
+                {"claim_id": "c1", "claim_text": "It works.", "status": "supported"}
+            ]
+        },
+        {
+            "artifact_assessments": [
+                {"artifact_type": "code", "availability": "public", "assessment": "good"}
+            ]
+        },
+        {"checks": [{"kind": "reference_verification", "summary": "All references found."}]},
+        {"narrative": {"detailed_review": "The paper is sound."}},
+        {"narrative": {"sections": [{"title": "Methods", "content": "Sound."}]}},
+        {
+            "narrative": {
+                "sections": [{"title": "", "content": ""}, {"title": "", "content": "Sound."}]
+            }
+        },
+        {"opinion": {"stance": "positive"}},
+        {"opinion": {"high_level_reasons": ["The method is new."]}},
+        {"findings": {"weaknesses": [{"title": "No ablation", "text": ""}]}},
+        {"decision": {"summary_rationale": "The results hold up."}},
+        {"ethics_and_risk": {"ethical_concerns": True}},
+        {"ethics_and_risk": {"notes": "The dataset exposes participant identities."}},
+        {"ethics_and_risk": {"concern_categories": ["privacy"]}},
+        {"ethics_and_risk": {"required_mitigations": [{"text": "Anonymize the dataset."}]}},
+        {"written_report": {"content_type": "pdf", "filename": "review.pdf"}},
+    ],
+)
+def test_a_review_with_any_assessment_has_content(content: dict) -> None:
+    review = _review_saying(**content)
+    validate_canonical(review)
+    assert has_content(review)
+
+
+@pytest.mark.parametrize("flagged", [True, False])
+def test_a_review_of_only_the_citations_is_a_review(flagged: bool) -> None:
+    """A citation review checks the references and says nothing else, not even a summary."""
+    reference = {
+        "target": {"type": "bibliography", "ref": "12"},
+        "status": "Not found" if flagged else "Verified",
+        "flagged": flagged,
+    }
+    review = _review_saying(
+        review_context={"review_type": "citation_review"},
+        checks=[{"kind": "reference_verification", "items": [reference]}],
+    )
+    validate_canonical(review)
+    assert has_content(review)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        {},
+        {"findings": {}},
+        {"findings": {"strengths": [], "changes": []}},
+        {"decision": {"confidence": 0.8}},
+        {"metrics": [], "checks": [], "claim_assessments": [], "artifact_assessments": []},
+        {"narrative": {"detailed_review": "", "sections": []}},
+        {"narrative": {"sections": [{"title": "", "content": ""}]}},
+        {"narrative": {"summary": "  \n"}},
+        {"opinion": {"summary": " ", "high_level_reasons": ["", " "], "contributions": []}},
+        {"findings": {"strengths": [{"text": ""}], "comments": [{"title": " ", "text": " "}]}},
+        {"decision": {"confidence": 0.8, "summary_rationale": ""}},
+        {"ethics_and_risk": {"ethical_concerns": False, "notes": "", "required_mitigations": []}},
+    ],
+)
+def test_a_review_that_says_nothing_is_invalid(content: dict) -> None:
+    review = _review_saying(**content)
+    assert not has_content(review)
+    with pytest.raises(jsonschema.ValidationError):
+        validate_canonical(review)

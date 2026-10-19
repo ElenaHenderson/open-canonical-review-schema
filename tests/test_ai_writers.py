@@ -575,7 +575,8 @@ class TestWhereThingsGoBack:
     def test_reviewer3_reference_table_without_statuses_is_written_back(self):
         body = "| # | Citation | Status | Note |\n| --- | --- | --- | --- |\n"
         body += "| 1 | A. Author (2020). | | |\n| | | | lonely |\n"
-        report = f"# Review Report\n\nA paper\n\n---\n\n### Reference Check\n\n{body}"
+        overview = "### Overview\n\n- **A contribution** — Text.\n\n"
+        report = f"# Review Report\n\nA paper\n\n---\n\n{overview}### Reference Check\n\n{body}"
         review = mapped("reviewer3", report)
         assert "checks" not in review
         written = map_to("reviewer3", review)
@@ -769,7 +770,8 @@ class TestFifthReview:
 
     def test_reviewer3_standalone_indented_fence_still_hides_headings(self):
         appendix = "  ```\n### Fatal Flaws\n- **Fake** — Not a flaw.\n  ```"
-        report = f"# Review Report\n\nA paper\n\n---\n\n### Appendix\n\n{appendix}\n"
+        overview = "### Overview\n\n- **A contribution** — Text.\n\n"
+        report = f"# Review Report\n\nA paper\n\n---\n\n{overview}### Appendix\n\n{appendix}\n"
         review = mapped("reviewer3", report)
         assert "checks" not in review
         # A kept section is stripped, as always; the heading stays in the code

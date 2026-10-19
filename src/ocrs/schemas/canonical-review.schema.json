@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://valency-oss.github.io/open-canonical-review-schema/v0.6.3/canonical-review.schema.json",
+  "$id": "https://valency-oss.github.io/open-canonical-review-schema/v0.7.0/canonical-review.schema.json",
   "$comment": "Copyright (c) 2026 Valency Systems Inc. Licensed under Apache-2.0.",
   "title": "Open Canonical Review Schema",
   "description": "One peer review of one scholarly work, in a form shared by journals, conferences and AI reviewers",
@@ -16,7 +16,7 @@
   ],
   "properties": {
     "$schema": {
-      "description": "The URL of the OCRS schema this review follows: the `$id` of a published version (e.g., 'https://valency-oss.github.io/open-canonical-review-schema/v0.6.3/canonical-review.schema.json'). It tells validators and editors which version to check the review against; it is not part of the review",
+      "description": "The URL of the OCRS schema this review follows: the `$id` of a published version (e.g., 'https://valency-oss.github.io/open-canonical-review-schema/v0.7.0/canonical-review.schema.json'). It tells validators and editors which version to check the review against; it is not part of the review",
       "type": "string",
       "format": "uri"
     },
@@ -182,7 +182,7 @@
       "additionalProperties": false,
       "properties": {
         "review_type": {
-          "description": "Kind of review: feedback the authors asked for before submission, a referee's first review, review of a revision, response to a rebuttal, meta-review or editor's report, shepherding, review of a replication, an author's comment or response, a community comment, an aggregate of several reviews, or an editor's or recommender's recommendation. Whether it came before or after publication goes in stage",
+          "description": "Kind of review: feedback the authors asked for before submission, a referee's first review, review of a revision, response to a rebuttal, meta-review or editor's report, shepherding, review of a replication, a citation review (one of only the work's references, such as whether each exists and says what it is cited for), an author's comment or response, a community comment, an aggregate of several reviews, or an editor's or recommender's recommendation. Whether it came before or after publication goes in stage",
           "type": "string",
           "enum": [
             "pre_submission",
@@ -192,6 +192,7 @@
             "meta_review",
             "shepherding",
             "replication",
+            "citation_review",
             "author_comment",
             "community_comment",
             "aggregate",
@@ -511,32 +512,94 @@
       ]
     },
     {
+      "$anchor": "reviewContent",
+      "description": "A review says something about the work. It has at least one of: an opinion summary, text, stance, reason or contribution; a finding; a recommendation, revision requirement or decision rationale; a metric, claim assessment, artifact assessment or check; an ethical concern, its notes, categories or mitigations; narrative text; or a written report. Text counts only when it has a character other than whitespace",
       "anyOf": [
         {
-          "properties": {
-            "opinion": {
-              "required": [
-                "summary"
-              ]
-            }
-          },
           "required": [
             "opinion"
-          ]
-        },
-        {
+          ],
           "properties": {
             "opinion": {
-              "required": [
-                "text"
+              "anyOf": [
+                {
+                  "required": [
+                    "summary"
+                  ],
+                  "properties": {
+                    "summary": {
+                      "pattern": "\\S"
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "text"
+                  ],
+                  "properties": {
+                    "text": {
+                      "pattern": "\\S"
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "stance"
+                  ]
+                },
+                {
+                  "required": [
+                    "high_level_reasons"
+                  ],
+                  "properties": {
+                    "high_level_reasons": {
+                      "contains": {
+                        "pattern": "\\S"
+                      }
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "contributions"
+                  ],
+                  "properties": {
+                    "contributions": {
+                      "contains": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "title"
+                            ],
+                            "properties": {
+                              "title": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          },
+                          {
+                            "required": [
+                              "text"
+                            ],
+                            "properties": {
+                              "text": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
               ]
             }
-          },
-          "required": [
-            "opinion"
-          ]
+          }
         },
         {
+          "required": [
+            "findings"
+          ],
           "properties": {
             "findings": {
               "anyOf": [
@@ -546,7 +609,30 @@
                   ],
                   "properties": {
                     "strengths": {
-                      "minItems": 1
+                      "contains": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "title"
+                            ],
+                            "properties": {
+                              "title": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          },
+                          {
+                            "required": [
+                              "text"
+                            ],
+                            "properties": {
+                              "text": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          }
+                        ]
+                      }
                     }
                   }
                 },
@@ -556,7 +642,30 @@
                   ],
                   "properties": {
                     "weaknesses": {
-                      "minItems": 1
+                      "contains": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "title"
+                            ],
+                            "properties": {
+                              "title": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          },
+                          {
+                            "required": [
+                              "text"
+                            ],
+                            "properties": {
+                              "text": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          }
+                        ]
+                      }
                     }
                   }
                 },
@@ -566,7 +675,30 @@
                   ],
                   "properties": {
                     "questions": {
-                      "minItems": 1
+                      "contains": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "title"
+                            ],
+                            "properties": {
+                              "title": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          },
+                          {
+                            "required": [
+                              "text"
+                            ],
+                            "properties": {
+                              "text": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          }
+                        ]
+                      }
                     }
                   }
                 },
@@ -576,14 +708,254 @@
                   ],
                   "properties": {
                     "comments": {
-                      "minItems": 1
+                      "contains": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "title"
+                            ],
+                            "properties": {
+                              "title": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          },
+                          {
+                            "required": [
+                              "text"
+                            ],
+                            "properties": {
+                              "text": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "changes"
+                  ],
+                  "properties": {
+                    "changes": {
+                      "contains": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "title"
+                            ],
+                            "properties": {
+                              "title": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          },
+                          {
+                            "required": [
+                              "text"
+                            ],
+                            "properties": {
+                              "text": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          }
+                        ]
+                      }
                     }
                   }
                 }
               ]
             }
           }
-        }
+        },
+        {
+          "required": [
+            "decision"
+          ],
+          "properties": {
+            "decision": {
+              "anyOf": [
+                {
+                  "required": [
+                    "recommendation"
+                  ]
+                },
+                {
+                  "required": [
+                    "revision_requirement"
+                  ]
+                },
+                {
+                  "required": [
+                    "summary_rationale"
+                  ],
+                  "properties": {
+                    "summary_rationale": {
+                      "pattern": "\\S"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {"required": ["metrics"], "properties": {"metrics": {"minItems": 1}}},
+        {"required": ["claim_assessments"], "properties": {"claim_assessments": {"minItems": 1}}},
+        {"required": ["artifact_assessments"], "properties": {"artifact_assessments": {"minItems": 1}}},
+        {"required": ["checks"], "properties": {"checks": {"minItems": 1}}},
+        {
+          "required": [
+            "ethics_and_risk"
+          ],
+          "properties": {
+            "ethics_and_risk": {
+              "anyOf": [
+                {
+                  "required": [
+                    "ethical_concerns"
+                  ],
+                  "properties": {
+                    "ethical_concerns": {
+                      "const": true
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "notes"
+                  ],
+                  "properties": {
+                    "notes": {
+                      "pattern": "\\S"
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "concern_categories"
+                  ],
+                  "properties": {
+                    "concern_categories": {
+                      "minItems": 1
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "required_mitigations"
+                  ],
+                  "properties": {
+                    "required_mitigations": {
+                      "contains": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "title"
+                            ],
+                            "properties": {
+                              "title": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          },
+                          {
+                            "required": [
+                              "text"
+                            ],
+                            "properties": {
+                              "text": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "required": [
+            "narrative"
+          ],
+          "properties": {
+            "narrative": {
+              "anyOf": [
+                {
+                  "required": [
+                    "summary"
+                  ],
+                  "properties": {
+                    "summary": {
+                      "pattern": "\\S"
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "detailed_review"
+                  ],
+                  "properties": {
+                    "detailed_review": {
+                      "pattern": "\\S"
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "author_questions"
+                  ],
+                  "properties": {
+                    "author_questions": {
+                      "pattern": "\\S"
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "confidential_to_editors"
+                  ],
+                  "properties": {
+                    "confidential_to_editors": {
+                      "pattern": "\\S"
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "sections"
+                  ],
+                  "properties": {
+                    "sections": {
+                      "contains": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "content"
+                            ],
+                            "properties": {
+                              "content": {
+                                "pattern": "\\S"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {"required": ["written_report"]}
       ]
     }
   ],

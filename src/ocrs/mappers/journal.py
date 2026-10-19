@@ -80,13 +80,9 @@ def from_journal_narrative(
             "work_type": "article",
         },
         "metrics": [],
-        "opinion": {
-            "summary": (
-                first_paragraph(full_text, max_len=500)
-                if full_text.strip()
-                else "No opinion text provided."
-            )
-        },
+        "opinion": {"summary": first_paragraph(full_text, max_len=500)}
+        if full_text.strip()
+        else {},
         "narrative": {"detailed_review": full_text.strip()} if full_text.strip() else {},
     }
 

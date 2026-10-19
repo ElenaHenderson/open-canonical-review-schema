@@ -138,13 +138,13 @@ def _build_human_referee(payload: dict[str, Any]) -> dict[str, Any]:
     return human_referee
 
 
-def _best_opinion_text(payload: dict[str, Any]) -> str:
-    """Find the best text for the opinion summary."""
+def _best_opinion_text(payload: dict[str, Any]) -> str | None:
+    """Find the best text for the opinion summary, if the review has any."""
     for k in ("paper_summary", "summary", "comments", "detailed_comments"):
         v = payload.get(k)
         if isinstance(v, str) and v.strip():
             return first_paragraph(v.strip(), max_len=500)
-    return "No summary provided."
+    return None
 
 
 def _collect_findings(payload: dict[str, Any]) -> dict[str, Any]:
@@ -260,7 +260,7 @@ def from_hotcrp(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str,
         },
         "metric_catalog_ref": catalog.get("catalog_id"),
         "metrics": [],
-        "opinion": {"summary": _best_opinion_text(payload)},
+        "opinion": {"summary": summary} if (summary := _best_opinion_text(payload)) else {},
     }
 
     if keep_raw:

@@ -5,10 +5,15 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from ocrs import map_from, map_to, validate_canonical
 from ocrs.mappers.cmt import from_cmt, to_cmt
 
 FIXTURES = Path(__file__).parent / "fixtures" / "cmt"
+
+# A summary, so reviews built to test something else have review content.
+TEXT = {"summary": "A summary."}
 
 
 def load_fixture(name: str) -> dict:
@@ -253,13 +258,18 @@ def test_cmt_to_stub():
 
 
 def test_cmt_without_paper_id_or_text():
-    """Test a CMT row with no paper ID, narrative, recommendation or confidence."""
-    canon = map_from("cmt", {"reviewId": "r1"})
+    """Test that a CMT row with no text, recommendation or scores is refused."""
+    with pytest.raises(ValueError, match="has no review content"):
+        map_from("cmt", {"reviewId": "r1"})
+
+
+def test_cmt_without_paper_id():
+    """Test a CMT row with only a summary: no paper ID, decision or metrics."""
+    canon = map_from("cmt", {"reviewId": "r1", "summary": "A summary."})
 
     assert canon["target"]["identifiers"] == {}
     assert canon["target"]["work_id"] == "unknown"
-    assert canon["opinion"]["summary"] == "No summary provided."
-    assert "narrative" not in canon
+    assert canon["opinion"] == {"summary": "A summary."}
     assert "decision" not in canon
     assert "referee_id" not in canon["referee"]
     assert "raw_payload" not in canon["provenance"]
@@ -268,7 +278,9 @@ def test_cmt_without_paper_id_or_text():
 
 def test_cmt_id_and_created_at_fallbacks():
     """Test the id fallback for the review ID and a non-string createdAt."""
-    canon = map_from("cmt", {"id": 7, "paperId": 1, "createdAt": 1735689600, "reviewerId": 99})
+    canon = map_from(
+        "cmt", {"id": 7, "paperId": 1, "createdAt": 1735689600, "reviewerId": 99, **TEXT}
+    )
 
     assert canon["review_id"] == "7"
     assert canon["provenance"]["source_review_id"] == "7"
@@ -317,7 +329,7 @@ def test_cmt_unrecognized_text_recommendation_is_borderline():
 
 def test_cmt_non_text_recommendation_is_ignored():
     """Test that a recommendation that is neither a number nor text adds no decision."""
-    canon = map_from("cmt", {"reviewId": "r1", "paperId": 1, "recommendation": ["Accept"]})
+    canon = map_from("cmt", {"reviewId": "r1", "paperId": 1, "recommendation": ["Accept"], **TEXT})
     assert "decision" not in canon
     assert canon["metrics"] == []
 
@@ -365,7 +377,7 @@ def test_cmt_confidence_ratio():
 
 def test_cmt_non_numeric_confidence_is_ignored():
     """Test that text-only confidence adds neither a metric nor a decision."""
-    canon = map_from("cmt", {"reviewId": "r1", "paperId": 1, "confidence": "high"})
+    canon = map_from("cmt", {"reviewId": "r1", "paperId": 1, "confidence": "high", **TEXT})
     assert canon["metrics"] == []
     assert "decision" not in canon
 
@@ -510,7 +522,7 @@ def test_cmt_a_zero_score_is_a_score():
 
 
 def test_cmt_booleans_are_not_scores():
-    canon = map_from("cmt", {"reviewId": "r", "paperId": 1, "conflict": True})
+    canon = map_from("cmt", {"reviewId": "r", "paperId": 1, "conflict": True, **TEXT})
     assert canon["metrics"] == []
 
 

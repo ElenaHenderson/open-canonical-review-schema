@@ -1,8 +1,40 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
+
+A breaking change: a review that says nothing about the work, which 0.6.3 accepted by
+mistake, is invalid. Every other 0.6.3 review is valid under 0.7.0.
+
+### Schema
+
+- A review must have content (the rule's `$anchor` is `reviewContent`), at least one of:
+  an opinion `summary`, `text`, `stance`, `high_level_reasons` or `contributions`; a
+  finding of any kind, `changes` included; a `decision.recommendation`,
+  `revision_requirement` or `summary_rationale`; a metric, claim assessment, artifact
+  assessment or check; `ethics_and_risk` with `ethical_concerns: true`, `notes`,
+  `concern_categories` or `required_mitigations`; narrative text, or a narrative section
+  with content; or a `written_report`. Text counts only when it has a character other
+  than whitespace, and a list only when one of its items has such text. Before 0.7.0 the
+  schema stated a narrower rule (an opinion summary or text, or a strength, weakness,
+  question or comment), but its findings branch passed whenever `findings` was absent, so
+  a review with `"opinion": {}` and nothing else was valid. Migration: a review with none
+  of these, or only blank text, must gain one, or it is not a review; one whose content is
+  something that rule left out (a check, a recommendation, scores, ethics notes, a written
+  report and so on) needs no change.
+- `review_context.review_type` takes `citation_review`, a review of only the work's
+  references, such as whether each exists and says what it is cited for. Crossref has no
+  such type. Its findings usually go in a `reference_verification` check, one item per
+  reference.
 
 ### Python package
+
+- Mappers no longer invent an opinion summary. When the source has no text, CMT, Editorial
+  Manager, HotCRP, the journal narrative mapper, OpenReview and ScholarOne leave `opinion`
+  empty, where they wrote `No summary provided.` or `No opinion text provided.`; a review
+  with scores or a recommendation is still valid.
+- `map_from` and `map_with_record` raise `ValueError` ("The <source> review has no review
+  content: …") for a source that says nothing, rather than return a review that fails
+  validation. `ocrs.schema.has_content` tells whether a review meets the rule.
 
 - `map_to` writes an OCRS review in each AI reviewer's own format: `openaireview` gives
   OpenAIReview's `paper.json` as a dict, `deepreview` and `reviewer3` give the report's

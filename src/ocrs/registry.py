@@ -19,7 +19,7 @@ from .mappers.journal import from_journal_narrative, to_journal_narrative
 from .mappers.openreview import from_openreview, to_openreview
 from .mappers.scholarone import from_scholarone, to_scholarone
 from .mapping import MappingResult
-from .schema import validate_canonical
+from .schema import require_content, validate_canonical
 
 _FROM: dict[str, Callable[..., dict[str, Any]]] = {
     "cmt": from_cmt,
@@ -76,6 +76,7 @@ def map_from(source: str, payload: dict[str, Any], *, keep_raw: bool = False) ->
         out = _FROM[source](payload, keep_raw=keep_raw)
     else:
         raise ValueError(f"Unsupported source: {source}. Supported: {supported_sources()}")
+    require_content(out, source)
     validate_canonical(out)
     return out
 

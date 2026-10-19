@@ -228,7 +228,7 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
         "target": _build_target(note, content),
         "metric_catalog_ref": catalog.get("catalog_id"),
         "metrics": [],
-        "opinion": {"summary": _best_text_opinion(content) or "No summary provided."},
+        "opinion": {"summary": summary} if (summary := _best_text_opinion(content)) else {},
     }
 
     if isinstance(note.get("id"), str):
@@ -387,10 +387,6 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
     for m in out["metrics"]:
         if m.get("normalized") is None:
             m.pop("normalized", None)
-
-    # Ensure opinion exists even if blank
-    if not out.get("opinion", {}).get("summary") and not out.get("opinion", {}).get("text"):
-        out["opinion"] = {"summary": "No opinion text provided."}
     return out
 
 

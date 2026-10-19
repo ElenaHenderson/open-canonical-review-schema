@@ -61,6 +61,26 @@ def schema_id() -> str:
     return ocrs_schema()["$id"]
 
 
+def has_content(review: dict[str, Any]) -> bool:
+    """Whether a review says something about the work, by the schema's `#reviewContent`
+    rule: an opinion, a finding, a decision, a metric, a claim or artifact assessment, a
+    check, an ethical concern, narrative text or a written report. Text counts only when
+    it has a character other than whitespace."""
+    [rule] = [r for r in ocrs_schema()["allOf"] if r.get("$anchor") == "reviewContent"]
+    return Draft202012Validator(rule).is_valid(review)
+
+
+def require_content(review: dict[str, Any], source: str) -> None:
+    """Raise ValueError when a mapped review has no content, so an empty source is
+    reported as such rather than as a schema error."""
+    if not has_content(review):
+        raise ValueError(
+            f"The {source} review has no review content: no opinion, finding, decision, "
+            "metric, claim or artifact assessment, check, ethical concern, narrative text "
+            "or written report"
+        )
+
+
 def _evidence_links(value: Any, node: Any, schema: dict[str, Any]):
     """Every evidence link in `value`, found by following the OCRS schema: only where the
     schema puts an evidenceLink, never inside free-form or source data."""

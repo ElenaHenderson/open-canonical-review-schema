@@ -6,10 +6,15 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from ocrs import map_from, map_to, validate_canonical
 from ocrs.mappers.hotcrp import from_hotcrp, to_hotcrp
 
 FIXTURES = Path(__file__).parent / "fixtures" / "hotcrp"
+
+# A summary, so reviews built to test something else have review content.
+TEXT = {"summary": "A summary."}
 
 
 def load_fixture(name: str) -> dict:
@@ -220,18 +225,18 @@ class TestFromHotcrpTimestamps:
 
     def test_time_submitted_epoch(self):
         """timeSubmitted is used when submitted_at is missing."""
-        canon = map_from("hotcrp", {"id": 1, "pid": 1, "timeSubmitted": 1735689600})
+        canon = map_from("hotcrp", {**TEXT, "id": 1, "pid": 1, "timeSubmitted": 1735689600})
         assert canon["created_at"].startswith("2025-01-01T00:00:00")
 
     def test_cdate_epoch(self):
         """cdate is the last timestamp fallback."""
-        canon = map_from("hotcrp", {"id": 1, "pid": 1, "cdate": 1735689600})
+        canon = map_from("hotcrp", {**TEXT, "id": 1, "pid": 1, "cdate": 1735689600})
         assert canon["created_at"].startswith("2025-01-01T00:00:00")
 
     def test_no_timestamp_uses_now(self):
         """Without any timestamp field, created_at is the import time."""
         before = datetime.now(UTC)
-        canon = map_from("hotcrp", {"id": 1, "pid": 1})
+        canon = map_from("hotcrp", {**TEXT, "id": 1, "pid": 1})
         created = datetime.fromisoformat(canon["created_at"].replace("Z", "+00:00"))
         assert before <= created <= datetime.now(UTC)
 
@@ -241,30 +246,33 @@ class TestFromHotcrpReviewerAndTarget:
 
     def test_reviewer_dict_skips_non_string_ids(self):
         """A non-string reviewer.user falls through to reviewer.email."""
-        canon = map_from("hotcrp", {"id": 1, "pid": 1, "reviewer": {"user": 5, "email": "r@x.org"}})
+        canon = map_from(
+            "hotcrp", {**TEXT, "id": 1, "pid": 1, "reviewer": {"user": 5, "email": "r@x.org"}}
+        )
         assert canon["referee"]["referee_id"] == "r@x.org"
 
     def test_reviewer_dict_without_ids_falls_back_to_top_level(self):
         """With no usable id in reviewer, top-level reviewer_id is used."""
-        payload = {"id": 1, "pid": 1, "reviewer": {"name": "Ada"}, "reviewer_id": "rev-9"}
+        payload = {**TEXT, "id": 1, "pid": 1, "reviewer": {"name": "Ada"}, "reviewer_id": "rev-9"}
         canon = map_from("hotcrp", payload)
         assert canon["referee"]["referee_id"] == "rev-9"
         assert canon["referee"]["human_referee"] == {"name": "Ada"}
 
     def test_reviewer_email_top_level(self):
         """reviewerEmail is used when there is no reviewer object."""
-        canon = map_from("hotcrp", {"id": 1, "pid": 1, "reviewerEmail": "r@x.org"})
+        canon = map_from("hotcrp", {**TEXT, "id": 1, "pid": 1, "reviewerEmail": "r@x.org"})
         assert canon["referee"]["referee_id"] == "r@x.org"
 
     def test_no_reviewer_id(self):
         """Without any reviewer identifier, referee_id is omitted."""
-        canon = map_from("hotcrp", {"id": 1, "pid": 1})
+        canon = map_from("hotcrp", {**TEXT, "id": 1, "pid": 1})
         assert "referee_id" not in canon["referee"]
         assert canon["referee"]["human_referee"] == {}
 
     def test_reviewer_identity_fields(self):
         """ORCID, name and affiliation come from the reviewer object."""
         payload = {
+            **TEXT,
             "id": 1,
             "pid": 1,
             "reviewer": {
@@ -284,6 +292,7 @@ class TestFromHotcrpReviewerAndTarget:
     def test_top_level_orcid_url_is_normalized(self):
         """A top-level reviewerOrcid URL is normalized when reviewer is not a dict."""
         payload = {
+            **TEXT,
             "id": 1,
             "pid": 1,
             "reviewer": "anonymous",
@@ -294,13 +303,13 @@ class TestFromHotcrpReviewerAndTarget:
 
     def test_invalid_orcid_is_dropped(self):
         """An ORCID that fails normalization is not recorded."""
-        payload = {"id": 1, "pid": 1, "reviewer": {"orcid": "not-an-orcid"}}
+        payload = {**TEXT, "id": 1, "pid": 1, "reviewer": {"orcid": "not-an-orcid"}}
         canon = map_from("hotcrp", payload)
         assert canon["referee"]["human_referee"] == {}
 
     def test_doi_becomes_primary_identifier(self):
         """A valid DOI is added to identifiers and drives the work_id."""
-        canon = map_from("hotcrp", {"id": 1, "pid": 5, "doi": "10.1145/3290605"})
+        canon = map_from("hotcrp", {**TEXT, "id": 1, "pid": 5, "doi": "10.1145/3290605"})
         idents = canon["target"]["identifiers"]
         assert idents["doi"] == {
             "value": "10.1145/3290605",
@@ -311,24 +320,24 @@ class TestFromHotcrpReviewerAndTarget:
 
     def test_invalid_doi_is_ignored(self):
         """A string that is not a DOI is not added to identifiers."""
-        canon = map_from("hotcrp", {"id": 1, "pid": 5, "doi": "not a doi"})
+        canon = map_from("hotcrp", {**TEXT, "id": 1, "pid": 5, "doi": "not a doi"})
         assert "doi" not in canon["target"]["identifiers"]
         assert canon["target"]["work_id"] == "internal_id:hotcrp_pid:5"
 
     def test_submission_id_fallback(self):
         """submission_id is used when pid/paperId/paper_id are missing."""
-        canon = map_from("hotcrp", {"id": 1, "submission_id": "S-9"})
+        canon = map_from("hotcrp", {**TEXT, "id": 1, "submission_id": "S-9"})
         assert canon["target"]["work_id"] == "internal_id:hotcrp_pid:S-9"
 
     def test_no_work_id(self):
         """Without a paper id the work_id is unknown and identifiers are empty."""
-        canon = map_from("hotcrp", {"id": 1})
+        canon = map_from("hotcrp", {**TEXT, "id": 1})
         assert canon["target"]["identifiers"] == {}
         assert canon["target"]["work_id"] == "unknown"
 
     def test_missing_id_generates_review_id(self):
         """Without an id a UUID review_id is generated and source_review_id is omitted."""
-        canon = map_from("hotcrp", {"pid": 1})
+        canon = map_from("hotcrp", {**TEXT, "pid": 1})
         assert canon["review_id"].startswith("hotcrp_")
         assert len(canon["review_id"]) == len("hotcrp_") + 36
         assert "source_review_id" not in canon["provenance"]
@@ -338,9 +347,14 @@ class TestFromHotcrpText:
     """Opinion, narrative and findings."""
 
     def test_no_text_fields(self):
-        """Without any text field, a placeholder summary is used and narrative is omitted."""
-        canon = map_from("hotcrp", {"id": 1, "pid": 1})
-        assert canon["opinion"]["summary"] == "No summary provided."
+        """Without any text field or score, the review is refused: it says nothing."""
+        with pytest.raises(ValueError, match="has no review content"):
+            map_from("hotcrp", {"id": 1, "pid": 1})
+
+    def test_no_text_fields_with_a_score(self):
+        """With a score but no text, the opinion is absent, not invented."""
+        canon = map_from("hotcrp", {"id": 1, "pid": 1, "overall_merit": 4})
+        assert canon["opinion"] == {}
         assert "narrative" not in canon
         assert "findings" not in canon
 
@@ -427,7 +441,7 @@ class TestFromHotcrpRecommendation:
 
     def test_non_string_non_numeric_rating_is_ignored(self):
         """A rating that is neither text nor a number yields no decision."""
-        canon = map_from("hotcrp", {"id": 1, "pid": 1, "overall_merit": ["4"]})
+        canon = map_from("hotcrp", {**TEXT, "id": 1, "pid": 1, "overall_merit": ["4"]})
         assert "decision" not in canon
         assert canon["metrics"] == []
 
@@ -457,7 +471,7 @@ class TestFromHotcrpExpertiseAndConfidence:
 
     def test_text_only_expertise_is_ignored(self):
         """Expertise text without a number adds neither a metric nor a level."""
-        canon = map_from("hotcrp", {"id": 1, "pid": 1, "reviewer_expertise": "Expert"})
+        canon = map_from("hotcrp", {**TEXT, "id": 1, "pid": 1, "reviewer_expertise": "Expert"})
         assert canon["metrics"] == []
         assert "review_context" not in canon
 
@@ -488,7 +502,7 @@ class TestFromHotcrpExpertiseAndConfidence:
 
     def test_text_only_confidence_is_ignored(self):
         """Confidence text without a number adds nothing."""
-        canon = map_from("hotcrp", {"id": 1, "pid": 1, "confidence": "High"})
+        canon = map_from("hotcrp", {**TEXT, "id": 1, "pid": 1, "confidence": "High"})
         assert canon["metrics"] == []
         assert "decision" not in canon
 
@@ -536,7 +550,7 @@ class TestFromHotcrpExtraMetrics:
 
     def test_non_numeric_fields_are_skipped(self):
         """Text fields without a numeric prefix do not become metrics."""
-        canon = map_from("hotcrp", {"id": 1, "pid": 1, "topic": "Databases"})
+        canon = map_from("hotcrp", {**TEXT, "id": 1, "pid": 1, "topic": "Databases"})
         assert canon["metrics"] == []
 
 
@@ -545,15 +559,15 @@ class TestFromHotcrpRound:
 
     def test_plain_digit_string(self):
         """A digit string other than '1' is parsed as an int."""
-        assert map_from("hotcrp", {"id": 1, "round": "4"})["review_context"] == {"round": 4}
+        assert map_from("hotcrp", {**TEXT, "id": 1, "round": "4"})["review_context"] == {"round": 4}
 
     def test_unparseable_round(self):
         """A round label that is not a number is dropped."""
-        assert "review_context" not in map_from("hotcrp", {"id": 1, "round": "final"})
+        assert "review_context" not in map_from("hotcrp", {**TEXT, "id": 1, "round": "final"})
 
     def test_non_string_round(self):
         """A float round is dropped."""
-        assert "review_context" not in map_from("hotcrp", {"id": 1, "round": 2.5})
+        assert "review_context" not in map_from("hotcrp", {**TEXT, "id": 1, "round": 2.5})
 
     def test_round_merges_with_expertise(self):
         """Round is added next to expertise in review_context."""
@@ -672,7 +686,7 @@ def test_hotcrp_identifiers_and_dates_are_not_scores():
 
 
 def test_hotcrp_numeric_contact_id_is_the_referee():
-    canon = map_from("hotcrp", {"pid": 1, "contactId": 77})
+    canon = map_from("hotcrp", {**TEXT, "pid": 1, "contactId": 77})
     assert canon["referee"]["referee_id"] == "77"
     assert canon["metrics"] == []
 

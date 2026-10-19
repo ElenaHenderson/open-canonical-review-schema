@@ -5,10 +5,15 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from ocrs import map_from, map_to, validate_canonical
 from ocrs.mappers.editorialmanager import from_editorialmanager, to_editorialmanager
 
 FIXTURES = Path(__file__).parent / "fixtures" / "editorialmanager"
+
+# Comments to the author, so reviews built to test something else have review content.
+TEXT = {"commentsToAuthor": "A summary."}
 
 
 def load_fixture(name: str) -> dict:
@@ -220,14 +225,14 @@ def test_editorialmanager_reviewer_id_fallbacks():
         ({"reviewer_id": 42}, "42"),
         ({"reviewerEmail": "ref@example.org"}, "ref@example.org"),
     ]:
-        canon = map_from("editorialmanager", {"manuscriptId": "MS-1", **extra})
+        canon = map_from("editorialmanager", {**TEXT, "manuscriptId": "MS-1", **extra})
         assert canon["referee"]["referee_id"] == expected
 
 
 def test_editorialmanager_work_id_fallbacks():
     """Test manuscript ID falls back through the alternative ID keys."""
     for key in ("manuscript_id", "ms_id", "documentId"):
-        canon = map_from("editorialmanager", {key: "MS-77"})
+        canon = map_from("editorialmanager", {**TEXT, key: "MS-77"})
         assert canon["target"]["identifiers"]["internal_id"] == {
             "field_name": "manuscriptId",
             "value": "MS-77",
@@ -236,15 +241,20 @@ def test_editorialmanager_work_id_fallbacks():
 
 
 def test_editorialmanager_empty_payload():
-    """Test an empty payload maps to a valid review with defaults."""
-    canon = map_from("editorialmanager", {})
+    """Test an empty payload is refused: a review must say something."""
+    with pytest.raises(ValueError, match="has no review content"):
+        map_from("editorialmanager", {})
+
+
+def test_editorialmanager_text_only_payload():
+    """Test a payload with only comments to the author maps with defaults."""
+    canon = map_from("editorialmanager", TEXT)
     assert canon["target"]["identifiers"] == {}
     assert canon["target"]["work_id"] == "unknown"
     assert "referee_id" not in canon["referee"]
     assert canon["referee"]["human_referee"] == {}
-    assert canon["opinion"]["summary"] == "No summary provided."
+    assert canon["opinion"] == {"summary": "A summary."}
     assert canon["metrics"] == []
-    assert "narrative" not in canon
     assert "decision" not in canon
     assert "review_context" not in canon
     # Random UUID review ID
@@ -255,28 +265,28 @@ def test_editorialmanager_empty_payload():
 def test_editorialmanager_created_at_keys():
     """Test created_at is read from the alternative date keys."""
     for key in ("dateReceived", "date_received", "reviewDate", "created_at"):
-        canon = map_from("editorialmanager", {"manuscriptId": "MS-1", key: "2024-12-20"})
+        canon = map_from("editorialmanager", {**TEXT, "manuscriptId": "MS-1", key: "2024-12-20"})
         assert canon["created_at"] == "2024-12-20T00:00:00Z"
 
 
 def test_editorialmanager_review_id_fallbacks():
     """Test review ID falls back to review_id, then id."""
     for key in ("review_id", "id"):
-        canon = map_from("editorialmanager", {"manuscriptId": "MS-1", key: 501})
+        canon = map_from("editorialmanager", {**TEXT, "manuscriptId": "MS-1", key: 501})
         assert canon["review_id"] == "em_501"
         assert canon["provenance"]["source_review_id"] == "501"
 
 
 def test_editorialmanager_doi_identifier():
     """Test a valid DOI becomes the primary identifier; an invalid one is ignored."""
-    canon = map_from("editorialmanager", {"manuscriptId": "MS-1", "doi": "10.1234/abc.5"})
+    canon = map_from("editorialmanager", {**TEXT, "manuscriptId": "MS-1", "doi": "10.1234/abc.5"})
     assert canon["target"]["identifiers"]["doi"] == {
         "value": "10.1234/abc.5",
         "hyperlink": "https://doi.org/10.1234/abc.5",
     }
     assert canon["target"]["work_id"] == "doi:10.1234/abc.5"
 
-    canon = map_from("editorialmanager", {"manuscriptId": "MS-1", "doi": "not-a-doi"})
+    canon = map_from("editorialmanager", {**TEXT, "manuscriptId": "MS-1", "doi": "not-a-doi"})
     assert "doi" not in canon["target"]["identifiers"]
     assert canon["target"]["work_id"] == "internal_id:manuscriptId:MS-1"
 
@@ -286,6 +296,7 @@ def test_editorialmanager_human_referee_fields():
     canon = map_from(
         "editorialmanager",
         {
+            **TEXT,
             "manuscriptId": "MS-1",
             "reviewerOrcid": "https://orcid.org/0000-0002-1825-0097",
             "reviewerName": "Ada Lovelace",
@@ -302,6 +313,7 @@ def test_editorialmanager_human_referee_fields():
     canon = map_from(
         "editorialmanager",
         {
+            **TEXT,
             "manuscriptId": "MS-1",
             "orcid": "0000-0002-1825-0097",
             "reviewer_name": "Grace Hopper",
@@ -317,7 +329,7 @@ def test_editorialmanager_human_referee_fields():
 
 def test_editorialmanager_invalid_orcid_dropped():
     """Test an ORCID that does not normalize is left out of human_referee."""
-    canon = map_from("editorialmanager", {"manuscriptId": "MS-1", "orcid": "1234"})
+    canon = map_from("editorialmanager", {**TEXT, "manuscriptId": "MS-1", "orcid": "1234"})
     assert canon["referee"]["human_referee"] == {}
 
 

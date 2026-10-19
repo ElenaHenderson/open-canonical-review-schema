@@ -5,10 +5,15 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from ocrs import map_from, map_to, validate_canonical
 from ocrs.mappers.scholarone import from_scholarone, to_scholarone
 
 FIXTURES = Path(__file__).parent / "fixtures" / "scholarone"
+
+# Comments to the author, so reviews built to test something else have review content.
+TEXT = {"commentsToAuthor": "A summary."}
 
 
 def load_fixture(name: str) -> dict:
@@ -255,13 +260,13 @@ def test_scholarone_reviewer_id_fallbacks():
         ({"reviewer_id": 99}, "99"),
         ({"reviewerOrcid": "0000-0002-1825-0097"}, "0000-0002-1825-0097"),
     ]:
-        canon = map_from("scholarone", {"documentId": "DOC-1", **extra})
+        canon = map_from("scholarone", {**TEXT, "documentId": "DOC-1", **extra})
         assert canon["referee"]["referee_id"] == expected
 
 
 def test_scholarone_no_reviewer_id():
     """Test referee_id is omitted when the payload has no reviewer fields."""
-    canon = map_from("scholarone", {"documentId": "DOC-1"})
+    canon = map_from("scholarone", {**TEXT, "documentId": "DOC-1"})
     assert "referee_id" not in canon["referee"]
     assert canon["referee"]["human_referee"] == {}
 
@@ -269,7 +274,7 @@ def test_scholarone_no_reviewer_id():
 def test_scholarone_work_id_fallbacks():
     """Test document ID falls back through the alternative ID keys."""
     for key in ("document_id", "submissionId", "submission_id", "ms_id"):
-        canon = map_from("scholarone", {key: "MS-77"})
+        canon = map_from("scholarone", {**TEXT, key: "MS-77"})
         assert canon["target"]["identifiers"]["internal_id"] == {
             "field_name": "documentId",
             "value": "MS-77",
@@ -278,13 +283,18 @@ def test_scholarone_work_id_fallbacks():
 
 
 def test_scholarone_empty_payload():
-    """Test an empty payload maps to a valid review with defaults."""
-    canon = map_from("scholarone", {})
+    """Test an empty payload is refused: a review must say something."""
+    with pytest.raises(ValueError, match="has no review content"):
+        map_from("scholarone", {})
+
+
+def test_scholarone_text_only_payload():
+    """Test a payload with only comments to the author maps with defaults."""
+    canon = map_from("scholarone", TEXT)
     assert canon["target"]["identifiers"] == {}
     assert canon["target"]["work_id"] == "unknown"
-    assert canon["opinion"]["summary"] == "No summary provided."
+    assert canon["opinion"] == {"summary": "A summary."}
     assert canon["metrics"] == []
-    assert "narrative" not in canon
     assert "decision" not in canon
     assert "competing_interests_declared" not in canon["referee"]
     # Random UUID review ID
@@ -295,20 +305,20 @@ def test_scholarone_empty_payload():
 def test_scholarone_created_at_keys():
     """Test created_at is read from the alternative date keys."""
     for key in ("dateReviewReceived", "date_review_received", "reviewDate", "created_at"):
-        canon = map_from("scholarone", {"documentId": "DOC-1", key: "2024-12-20"})
+        canon = map_from("scholarone", {**TEXT, "documentId": "DOC-1", key: "2024-12-20"})
         assert canon["created_at"] == "2024-12-20T00:00:00Z"
 
 
 def test_scholarone_doi_identifier():
     """Test a valid DOI becomes the primary identifier; an invalid one is ignored."""
-    canon = map_from("scholarone", {"documentId": "DOC-1", "doi": "10.1234/abc.5"})
+    canon = map_from("scholarone", {**TEXT, "documentId": "DOC-1", "doi": "10.1234/abc.5"})
     assert canon["target"]["identifiers"]["doi"] == {
         "value": "10.1234/abc.5",
         "hyperlink": "https://doi.org/10.1234/abc.5",
     }
     assert canon["target"]["work_id"] == "doi:10.1234/abc.5"
 
-    canon = map_from("scholarone", {"documentId": "DOC-1", "doi": "not-a-doi"})
+    canon = map_from("scholarone", {**TEXT, "documentId": "DOC-1", "doi": "not-a-doi"})
     assert "doi" not in canon["target"]["identifiers"]
     assert canon["target"]["work_id"] == "internal_id:documentId:DOC-1"
 
@@ -318,6 +328,7 @@ def test_scholarone_human_referee_fields():
     canon = map_from(
         "scholarone",
         {
+            **TEXT,
             "documentId": "DOC-1",
             "reviewerOrcid": "https://orcid.org/0000-0002-1825-0097",
             "reviewerName": "Ada Lovelace",
@@ -334,6 +345,7 @@ def test_scholarone_human_referee_fields():
     canon = map_from(
         "scholarone",
         {
+            **TEXT,
             "documentId": "DOC-1",
             "orcid": "0000-0002-1825-0097",
             "reviewer_name": "Grace Hopper",
@@ -349,16 +361,16 @@ def test_scholarone_human_referee_fields():
 
 def test_scholarone_invalid_orcid_dropped():
     """Test an ORCID that does not normalize is left out of human_referee."""
-    canon = map_from("scholarone", {"documentId": "DOC-1", "orcid": "1234"})
+    canon = map_from("scholarone", {**TEXT, "documentId": "DOC-1", "orcid": "1234"})
     assert canon["referee"]["human_referee"] == {}
 
 
 def test_scholarone_review_id_variants():
     """Test review ID from submission ID + reviewer number, and document ID alone."""
-    canon = map_from("scholarone", {"submissionId": "SUB-9", "reviewerNumber": 4})
+    canon = map_from("scholarone", {**TEXT, "submissionId": "SUB-9", "reviewerNumber": 4})
     assert canon["review_id"] == "s1_SUB-9_r4"
 
-    canon = map_from("scholarone", {"documentId": "DOC-9"})
+    canon = map_from("scholarone", {**TEXT, "documentId": "DOC-9"})
     assert canon["review_id"] == "s1_DOC-9"
     assert canon["provenance"]["source_review_id"] == "DOC-9"
 
@@ -462,7 +474,7 @@ def test_scholarone_criteria_edge_cases():
 
 def test_scholarone_competing_interests_none():
     """Test a bare "None" competing-interests statement is not a declaration."""
-    canon = map_from("scholarone", {"documentId": "DOC-1", "competingInterests": "None"})
+    canon = map_from("scholarone", {**TEXT, "documentId": "DOC-1", "competingInterests": "None"})
     assert canon["referee"]["competing_interests_declared"] is False
     assert "competing_interests_statement" not in canon["referee"]
 
@@ -553,7 +565,7 @@ def test_scholarone_to_no_comments():
 def test_scholarone_code_outside_1_to_5_is_no_recommendation():
     """The codes are lower-is-better; one outside 1-5 is unknown, not accept or reject."""
     for code in (0, 9):
-        canon = map_from("scholarone", {"documentId": "D", "overallRecommendation": code})
+        canon = map_from("scholarone", {**TEXT, "documentId": "D", "overallRecommendation": code})
         assert "decision" not in canon
         assert canon["metrics"] == []
 
@@ -582,7 +594,7 @@ def test_scholarone_empty_or_short_criterion_names_are_other():
 
 
 def test_scholarone_reviewer_number_zero_is_kept():
-    canon = map_from("scholarone", {"documentId": "D", "reviewerNumber": 0})
+    canon = map_from("scholarone", {**TEXT, "documentId": "D", "reviewerNumber": 0})
     assert canon["referee"]["referee_id"] == "reviewer_0"
     assert canon["review_id"].endswith("D_r0")
     assert map_to("scholarone", canon)["reviewerNumber"] == 0
