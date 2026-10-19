@@ -52,7 +52,11 @@ By submitting a Contribution to this project (via pull request, patch, or any ot
 
 ## How to Sign
 
-You do not need to submit a separate signed document. By making a Contribution (pull request, commit, or other submission) to this repository, you are agreeing to the terms of this CLA.
+You sign once, on your first pull request. A bot comments on the pull request and asks you to sign; reply to the pull request with this exact comment:
+
+> I have read the CLA Document and I hereby sign the CLA
+
+The bot records your GitHub username in the repository's signature list (`signatures/cla.json` on the `cla-signatures` branch), and your later pull requests pass without asking again. By making a Contribution (pull request, commit, or other submission) to this repository, you are agreeing to the terms of this CLA.
 
 If your employer has intellectual property rights to work you create, please ensure you have permission to contribute, or have your employer sign a Corporate CLA by contacting: legal@valency.io
 

@@ -18,6 +18,10 @@ Before your contribution can be accepted, you must consent to our
 [Contributor License Agreement (CLA)](CLA.md). This ensures that Valency Systems Inc. can use
 and distribute your contributions under the project's Apache License 2.0.
 
+You sign on your first pull request: the CLA check comments on it, and you reply with
+`I have read the CLA Document and I hereby sign the CLA`. The check records your signature and
+passes, and it doesn't ask again on later pull requests.
+
 ## The specification
 
 ### What is normative
