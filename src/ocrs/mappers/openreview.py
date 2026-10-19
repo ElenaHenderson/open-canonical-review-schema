@@ -269,7 +269,14 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
     # decision and metrics
     # The first of these the form fills is the recommendation; a null one does not hide the next
     rec_key, rec_raw = first_present_item(content, RECOMMENDATION_KEYS)
-    conf_key, conf_raw = first_present_item(content, CONFIDENCE_KEYS)
+    # The first confidence field that gives a number, so `confidence: "High"` beside
+    # `reviewer_confidence: 4` still sets the decision's confidence
+    numeric = [k for k in CONFIDENCE_KEYS if parse_numeric_prefix(content.get(k))[0] is not None]
+    conf_key, conf_raw = (
+        (numeric[0], content[numeric[0]])
+        if numeric
+        else first_present_item(content, CONFIDENCE_KEYS)
+    )
 
     # Parse recommendation
     decision = {}
@@ -302,7 +309,7 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
         elif isinstance(rec_raw, str):
             decision["recommendation"] = map_recommendation_from_text(rec_raw) or "borderline"
     if conf_raw is not None:
-        num, _ = parse_numeric_prefix(conf_raw)
+        num, conf_label = parse_numeric_prefix(conf_raw)
         if num is not None:
             scale = guess_scale_from_value(num)
             # treat confidence as metric; decision.confidence expects 0..1
@@ -321,6 +328,9 @@ def from_openreview(note: dict[str, Any], *, keep_raw: bool = False) -> dict[str
                     ),
                 }
             )
+            # The label after the number ("4: I have substantial expertise") is kept
+            if conf_label:
+                out["metrics"][-1]["justification"] = conf_label
             if isinstance(n01, (int, float)):
                 decision["confidence"] = float(max(0.0, min(1.0, n01)))
     if decision:

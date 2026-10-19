@@ -57,10 +57,13 @@ __all__ = [
     "Recorder",
     "add_section",
     "check_text",
+    "close_fence",
     "extension",
     "findings_of",
     "finish",
     "indented",
+    "join_blocks",
+    "open_fence",
     "overall_texts",
     "reviewer_model",
 ]
@@ -100,6 +103,15 @@ CLOSING_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})\s*$")
 BLOCK_START = re.compile(
     r"^ {0,3}(?:[-*+]\s|\d{1,9}[.)](?:\s|$)|#{1,6}(?:\s|$)|>|(?:[-*_]\s*){3,}$)"
 )
+# The `>` markers that open a line of a block quote, nested quotes included, and one of them
+QUOTE_MARKERS = re.compile(r"^(?: {0,3}> ?)+")
+QUOTE_MARKER = re.compile(r"^ {0,3}> ?")
+# A Setext heading's underline: up to three spaces, then a run of `=` or of `-`, alone
+SETEXT_UNDERLINE = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
+# An ATX heading: up to three spaces, then one to six `#` and a space or the line's end
+ATX_HEADING = re.compile(r"^ {0,3}#{1,6}(?:[ \t]|$)")
+# Three or more `-`, `*` or `_`, spaced or not, alone on a line: a thematic break
+THEMATIC_BREAK = re.compile(r"^ {0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$")
 # A list item's marker: `- `, `* `, `+ `, `1. ` or `1) `, after any indentation
 LIST_ITEM = re.compile(r"^( *)(?:[-*+]|\d{1,9}[.)])(?: +|$)")
 
@@ -116,10 +128,14 @@ class Fences:
 
     def __init__(self, lists: bool = False) -> None:
         self.open: str | None = None  # the open fence's marker
+        self.indent = 0  # how far the open fence's opening line is indented
         self.lists = lists
         self.items: list[int] = []  # content indentation of each open list item, outermost first
         self.depth = 0  # how many items deep the open fence is (0: outside lists)
         self.paragraph = False  # whether the last line continued an item's paragraph
+        self.quote_fence: str | None = None  # a fence open inside a block quote, by marker
+        self.quote_fence_depth = 0  # how many quotes deep that fence opened
+        self.quote_paragraph = False  # whether the last line was a quote's paragraph text
 
     def closes(self, line: str) -> bool:
         """Whether `line` closes the open fence."""
@@ -134,6 +150,7 @@ class Fences:
     def holds(self, line: str) -> bool:
         """Whether `line` still belongs to the open fence (as code or its closing marker),
         before it is read: a line that ends the fence's list item does not."""
+        line = line.rstrip("\r\n").expandtabs(4)
         if self.open is None:
             return False
         if not self.lists or not line.strip():
@@ -143,10 +160,13 @@ class Fences:
 
     def inside(self, line: str) -> bool:
         """Whether `line` is part of a fence (its opening and closing lines included)."""
+        # A line may come with its ending, CRLF included; tabs indent to four-column stops
+        line = line.rstrip("\r\n").expandtabs(4)
         if not self.lists:
             if self.open is None:
                 fence = FENCE.match(line)
                 self.open = fence.group(1) if fence else None
+                self.indent = len(line) - len(line.lstrip(" "))
                 return fence is not None
             if self.closes(line):
                 self.open = None
@@ -160,17 +180,34 @@ class Fences:
                 self.open = None
             return True
         if blank:
-            self.paragraph = False
+            self.paragraph = self.quote_paragraph = False
             return False
+        # A Setext underline (`===`, `--`) straight after an item's paragraph text, in the
+        # item, makes that text a heading and ends the paragraph; it comes before any list
+        # marker or thematic break reading of the line
+        if self.paragraph and self.items and indent >= self.items[-1]:
+            segment = line[self.items[-1] :]
+            # (inside a quote, the underline is read without the quote's markers)
+            if SETEXT_UNDERLINE.match(segment) or (
+                QUOTE_MARKERS.match(segment)
+                and SETEXT_UNDERLINE.match(QUOTE_MARKERS.sub("", segment))
+            ):
+                self.paragraph = self.quote_paragraph = False
+                return False
+        # A thematic break (`- - -`, `* * *`) looks like a marker but is no list item; inside
+        # an item it is read relative to the item's content, however deep the item is
+        # (the deepest item whose content the line reaches, ancestors included)
+        inner = max((c for c in self.items if c <= indent), default=0)
+        brk = THEMATIC_BREAK.match(line) or THEMATIC_BREAK.match(line[inner:])
         # A soft-wrapped line straight after an item's paragraph text stays in the item
-        # (a lazy continuation), unless it starts a block of its own
-        lazy = self.paragraph and not BLOCK_START.match(line) and not FENCE.match(line)
+        # (a lazy continuation), unless it starts a block of its own (a break included)
+        lazy = self.paragraph and not brk and not BLOCK_START.match(line) and not FENCE.match(line)
         # Otherwise a line indented less than an item's content ends that item and its code
         while self.items and indent < self.items[-1] and not lazy:
             self.items.pop()
         if self.open is not None and len(self.items) < self.depth:
             self.open = None
-        item = LIST_ITEM.match(line)
+        item = None if brk else LIST_ITEM.match(line)
         # A marker starts a list at up to three spaces, or nests anywhere in an item
         if item and (len(item.group(1)) <= 3 or self.items):
             marker = item.group(0)
@@ -180,14 +217,59 @@ class Fences:
             base = self.items[-1] if self.items else 0
             if indent < base:
                 self.paragraph = lazy
+                self.quote_paragraph = self.quote_paragraph and lazy
                 return False
             rest = line[base:]
         fence = FENCE.match(rest)
         if fence:
             self.open, self.depth = fence.group(1), len(self.items)
-            self.paragraph = False
+            self.indent = len(line) - len(line.lstrip(" "))
+            self.paragraph = self.quote_paragraph = False
             return True
-        self.paragraph = bool(self.items) and bool(rest.strip())
+        # Only paragraph text continues lazily: not indented code (four spaces past the item's
+        # content, unless it continues a paragraph), a heading or a thematic break
+        relative = len(rest) - len(rest.lstrip(" "))
+        code = relative >= 4 and not self.paragraph
+        # A quote's own content counts: `> # Heading` or `> ---` ends a paragraph, while a
+        # quoted paragraph (`> text`) continues lazily like any other
+        quoted = QUOTE_MARKERS.sub("", rest)
+        in_quote = quoted != rest
+        depth = QUOTE_MARKERS.match(rest).group(0).count(">") if in_quote else 0
+        # Indented code inside a quote: four spaces past the quote's own marker, unless it
+        # continues a paragraph of the same quote (a quote just opened has none)
+        if in_quote and len(quoted) - len(quoted.lstrip(" ")) >= 4 and not self.quote_paragraph:
+            code = True
+        # A fence inside a quote runs to its closing marker (as long as its opener, at
+        # least) or the quote's end; its lines are code, not paragraph text
+        # (a quote the fence opened in that ends, a nested one inside its parent, ends it)
+        if depth < self.quote_fence_depth:
+            self.quote_fence = None
+        if not in_quote:
+            self.quote_fence = None
+        elif self.quote_fence is not None:
+            # Read at the fence's own depth: deeper markers are part of its code
+            inner = rest
+            for _ in range(self.quote_fence_depth):
+                inner = QUOTE_MARKER.sub("", inner, count=1)
+            closing = CLOSING_FENCE.match(inner)
+            if (
+                closing
+                and closing.group(1)[0] == self.quote_fence[0]
+                and len(closing.group(1)) >= len(self.quote_fence)
+            ):
+                self.quote_fence = None
+            code = True
+        elif fence_in_quote := FENCE.match(quoted):
+            self.quote_fence, self.quote_fence_depth = fence_in_quote.group(1), depth
+        self.paragraph = (
+            bool(self.items)
+            and bool(quoted.strip())
+            and not code
+            and not ATX_HEADING.match(quoted)
+            and not THEMATIC_BREAK.match(quoted)
+            and not FENCE.match(quoted)
+        )
+        self.quote_paragraph = in_quote and self.paragraph
         return False
 
 
@@ -390,10 +472,99 @@ def findings_of(canonical: dict[str, Any], kind: str) -> list[dict[str, Any]]:
     return [p for p in found if isinstance(p, dict) and isinstance(p.get("text"), str)]
 
 
+def open_fence(text: str) -> str | None:
+    """The marker of a code fence `text` leaves open outside any list, or None. (A fence in
+    a list item ends with the item, at the next line that starts at the margin.)"""
+    fences = Fences(lists=True)
+    for line in text.splitlines():
+        fences.inside(line)
+    return fences.open if fences.open is not None and fences.depth == 0 else None
+
+
+def close_fence(text: str) -> str:
+    """`text` with any fence it leaves open closed, so it cannot swallow what follows. The
+    closing marker is indented as the opening one was (at most three spaces, as a closing
+    marker may be), so it also closes the fence where that line sits in a list item."""
+    fences = Fences(lists=True)
+    for line in text.splitlines():
+        fences.inside(line)
+    if fences.open is None or fences.depth:
+        return text
+    return f"{text}\n{' ' * min(fences.indent, 3)}{fences.open}"
+
+
+def join_blocks(
+    blocks: list[str | None],
+    separator: str = "\n\n",
+    *,
+    is_open: Callable[[str], object] | None = None,
+    close: Callable[[str], str] | None = None,
+) -> str:
+    """Blocks of a report whose order the reader does not depend on, joined. One that leaves
+    a code fence open goes last, where it swallows nothing, when it starts at the margin;
+    any other that does is closed where it is, unless it is already last.
+    A reviewer's own report can leave a fence open only in its last block, so it comes
+    back in its own order. `is_open` and `close` find and close a block's open fence, for
+    a block read differently from plain Markdown."""
+    is_open, close = is_open or open_fence, close or close_fence
+    present = [block for block in blocks if block]
+    unclosed = [i for i, block in enumerate(present) if is_open(block)]
+    if not unclosed:
+        return separator.join(present)
+    last = unclosed[-1]
+    # Only a block that starts at the margin may move: one that starts indented would, after
+    # a list, become part of the list's last item. It stays in place, closed, instead
+    if not movable(present[last]):
+        # A block that cannot move whole may still split at a paragraph boundary: a closed
+        # head that stays, and an open tail that can follow a list (prose kept from before
+        # and after a list together). A block already last needs neither
+        head, tail = (
+            (present[last], None) if last == len(present) - 1 else split_open_tail(present[last])
+        )
+        if tail is None:
+            # The final block swallows nothing, so it is left as it is
+            return separator.join([*(close(block) for block in present[:-1]), present[-1]])
+        present[last] = head
+        ordered = [close(block) for block in present if block]
+        return separator.join([*ordered, tail])
+    ordered = [close(block) for i, block in enumerate(present) if i != last]
+    return separator.join([*ordered, present[last]])
+
+
+def movable(block: str) -> bool:
+    """Whether a block may move after a list: it starts at the margin, or with a thematic
+    break indented less than any list item's content (two spaces at least), which ends the
+    list. Tabs count as indentation, to the next multiple of four columns."""
+    first = next((line for line in block.splitlines() if line.strip()), "").expandtabs(4)
+    leading = len(first) - len(first.lstrip(" "))
+    return leading == 0 or (leading == 1 and bool(THEMATIC_BREAK.match(first)))
+
+
+def split_open_tail(block: str) -> tuple[str, str | None]:
+    """`block` split at the last paragraph boundary after which it can move: a head that
+    leaves no fence open, and a movable tail. (block, None) when there is none. The block
+    is read once, noting at each boundary whether the lines before it leave a fence open."""
+    lines = block.split("\n")
+    fences = Fences(lists=True)
+    split, text_before = None, False
+    for k, line in enumerate(lines):
+        closed_before = fences.open is None or fences.depth > 0
+        boundary = k > 0 and not lines[k - 1].strip() and line.strip()
+        if boundary and closed_before and text_before and movable(line):
+            split = k
+        fences.inside(line)
+        text_before = text_before or bool(line.strip())
+    if split is None:
+        return block, None
+    return "\n".join(lines[:split]).rstrip("\n"), "\n".join(lines[split:])
+
+
 def add_section(sections: dict[str, str], heading: str, text: str) -> None:
     """Add `text` under `heading`, after any text already there, so two things with the
     same heading (two checks of one kind, say) are both kept."""
-    sections[heading] = f"{sections[heading]}\n\n{text}" if heading in sections else text
+    if heading in sections:
+        text = f"{close_fence(sections[heading])}\n\n{text}"
+    sections[heading] = text
 
 
 def indented(text: str, prefix: str) -> str:

@@ -21,6 +21,20 @@
 
 ### Mapper fixes
 
+- Writing back to DeepReview and Reviewer3 contains code fences: a block of free text
+  that leaves a fence open goes last in its report or section, and any other is closed,
+  so it no longer swallows the sections, points or comments written after it. A
+  reviewer's own report, which can leave a fence open only at its end, comes back as it
+  was.
+- Thematic breaks (`- - -`, `* * *`) are no longer read as list items when finding code
+  fences, so a fenced heading after one stays code.
+- Recommendation labels that place the work short of acceptance ("Below the acceptance
+  threshold") give no label, so the score decides; before, they read as `accept`.
+- OpenReview takes the first confidence field that gives a number for the decision's
+  confidence, so `confidence: "High"` beside `reviewer_confidence: 4` sets it.
+- Reviewer3 writes a fatal flaw whose ID is not a one-based place (`fatal-flaw-0`) as a
+  plain point instead of failing, and DeepReview writes a skipped point of places alone
+  so they read back as places.
 - Identifiers, links and times are no longer read as scores: a DOI (`10.1234/…` became a
   metric of 10.1234), an ORCID, an arXiv ID, a version, a paper or submission ID, a
   timestamp or a date (`created_at`, `cdate`, `paperId`, `review_date`) in a CMT, OpenReview

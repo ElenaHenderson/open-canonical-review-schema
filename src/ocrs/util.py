@@ -206,6 +206,10 @@ def map_recommendation_from_numeric(num: int | float, scale: dict[str, Any]) -> 
 
 _ACCEPT = re.compile(r"\baccept(?:s|ed|ance)?\b")
 _REJECT = re.compile(r"\breject(?:s|ed|ion)?\b")
+_SHORT_OF_ACCEPT = re.compile(
+    r"\b(?:below|beneath|under|short\s+of|shy\s+of|not\s+(?:yet\s+)?(?:ready|suitable|fit)\s+for)"
+    r"\s+(?:the\s+)?accept\w*(?:\s+(?:threshold|bar|level|standard)s?)?"
+)
 _NEGATED_QUALIFIED_ACCEPT = re.compile(
     r"\b(?:not|never)\s+(?:an?\s+|the\s+)?(?:strong|weak|clear|full)\s+accept\w*"
 )
@@ -224,6 +228,10 @@ def map_recommendation_from_text(s: str) -> str | None:
     # acceptable") is a rejection
     # The rest of the label may still state one: "Weak accept (not a strong accept)"
     x = _NEGATED_QUALIFIED_ACCEPT.sub(" ", x)
+    # Wording that places the work short of acceptance ("below the acceptance threshold")
+    # is no verdict of its own: it is set aside, so a verdict beside it still counts and,
+    # alone, it leaves the score to decide
+    x = _SHORT_OF_ACCEPT.sub(" ", x)
     # A double negative ("not unacceptable") is no clear verdict either way
     if _DOUBLE_NEGATIVE.search(x):
         return None

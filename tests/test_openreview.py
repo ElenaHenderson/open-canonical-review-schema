@@ -601,3 +601,32 @@ def test_openreview_a_stated_label_beside_a_negated_qualifier_is_kept():
 def test_openreview_a_double_negative_leaves_the_score_to_decide():
     canon = map_from("openreview", note({"rating": "6: Not unacceptable"}))
     assert canon["decision"]["recommendation"] == "weak_accept"
+
+
+def test_openreview_below_the_acceptance_threshold_leaves_the_score_to_decide():
+    canon = map_from("openreview", note({"rating": "2: Below the acceptance threshold"}))
+    assert canon["decision"]["recommendation"] == "weak_reject"
+
+
+def test_openreview_numeric_reviewer_confidence_beside_text_confidence_sets_the_decision():
+    canon = map_from("openreview", note({"confidence": "High", "reviewer_confidence": 4}))
+    assert canon["decision"]["confidence"] == 0.75
+    again = map_from("openreview", map_to("openreview", canon))
+    assert again["decision"].get("confidence") == canon["decision"]["confidence"]
+
+
+def test_openreview_a_verdict_beside_below_threshold_wording_is_kept():
+    canon = map_from(
+        "openreview", note({"recommendation": "Strong reject (below the acceptance threshold)"})
+    )
+    assert canon["decision"]["recommendation"] == "strong_reject"
+
+
+def test_openreview_fallback_confidence_keeps_its_label():
+    canon = map_from(
+        "openreview",
+        note({"confidence": "High", "reviewer_confidence": "4: I have substantial expertise"}),
+    )
+    [metric] = [m for m in canon["metrics"] if m["key"] == "confidence"]
+    assert metric["justification"] == "I have substantial expertise"
+    assert canon["decision"]["confidence"] == 0.75

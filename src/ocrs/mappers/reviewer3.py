@@ -64,14 +64,18 @@ from ..anchors import Block
 from ..mapping import MappingResult
 from .ai import (
     FENCE,
+    THEMATIC_BREAK,
     Fences,
     Recorder,
     add_section,
     check_text,
+    close_fence,
     extension,
     findings_of,
     finish,
     indented,
+    join_blocks,
+    open_fence,
     overall_texts,
 )
 
@@ -187,19 +191,55 @@ def slug(label: str) -> str:
 # Parsing the report
 
 
+class CommentReader(Fences):
+    """Reads Reviewer Comments line by line as parse_comments does: a header at the list's
+    own indentation, outside code, starts a comment, and its explanation is read for code
+    afresh (the header is no list item); a deeper numbered line is part of the explanation.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(lists=True)
+        self.list_indent: int | None = None
+        self.code = False  # whether the last line read was code
+
+    def read(self, line: str) -> re.Match[str] | None:
+        """Take in `line`; the header's match when it starts a comment, else None."""
+        self.code = self.inside(line)
+        start = None if self.code else COMMENT_START.match(line)
+        if start and self.list_indent is not None and len(start.group(1)) > self.list_indent:
+            start = None
+        if start:
+            if self.list_indent is None:
+                self.list_indent = len(start.group(1))
+            self.open, self.items, self.depth, self.paragraph = None, [], 0, False
+        return start
+
+    @property
+    def open_at_margin(self) -> bool:
+        """Whether a fence is open outside any list."""
+        return self.open is not None and self.depth == 0
+
+
 def split_sections(markdown: str) -> list[tuple[str | None, str]]:
     """(heading, body) for each `###` section; text before the first has None. A heading
     inside a fenced code block is part of the code."""
     parts: list[tuple[str | None, str]] = []
     heading: str | None = None
     lines: list[str] = []
-    # A fence in a list item cannot hide a heading, which ends the item
-    fences = Fences(lists=True)
+    # A fence in a list item cannot hide a heading, which ends the item. Reviewer Comments
+    # is read as parse_comments reads it, so both find the same code there
+    fences: Fences = Fences(lists=True)
     for line in markdown.splitlines():
-        match = None if fences.inside(line) else SECTION.match(line)
+        if isinstance(fences, CommentReader):
+            fences.read(line)
+            code = fences.code
+        else:
+            code = fences.inside(line)
+        match = None if code else SECTION.match(line)
         if match:
             parts.append((heading, "\n".join(lines)))
             heading, lines = match.group(1).strip(), []
+            fences = CommentReader() if heading == COMMENTS_GROUP else Fences(lists=True)
         else:
             lines.append(line)
     parts.append((heading, "\n".join(lines)))
@@ -210,6 +250,12 @@ def keep(other: dict[str, str], heading: str, text: str) -> None:
     """Keep text the mapper has no field for, adding to any already kept under `heading`."""
     if text:
         other[heading] = f"{other[heading]}\n\n{text}" if heading in other else text
+
+
+def outdented_break(line: str, content_indent: int) -> bool:
+    """Whether `line` is a thematic break indented less than an item's content, which ends
+    the item (one at the content's indentation is inside it)."""
+    return bool(THEMATIC_BREAK.match(line)) and len(line) - len(line.lstrip(" ")) < content_indent
 
 
 def parse_bullets(body: str) -> tuple[list[dict[str, str]], str]:
@@ -229,17 +275,25 @@ def parse_bullets(body: str) -> tuple[list[dict[str, str]], str]:
         # A line that belongs to an open fence is never a point; a bullet that ends an item
         # and its unclosed code is one, even when it opens a fence of its own (`- ```py`)
         held = fences.holds(line)
+        # Whether the line before ended in paragraph text, which alone continues lazily
+        paragraph = fences.paragraph
         code = fences.inside(line)
-        bullet = None if held else TOP_BULLET.match(line)
+        # A thematic break (`- - -`) is no point, as the fence tracker reads it
+        bullet = None if held or THEMATIC_BREAK.match(line) else TOP_BULLET.match(line)
         if bullet and (list_indent is None or len(bullet.group(1)) <= list_indent):
             list_indent = len(bullet.group(1)) if list_indent is None else list_indent
             items.append((len(bullet.group(1)) + len(bullet.group(2)), [bullet.group(3)]))
             in_item = True
-        elif in_item and (not line.strip() or line.startswith((" ", "\t"))):
+        elif (
+            in_item
+            and (held or not outdented_break(line, items[-1][0]))
+            and (not line.strip() or line.startswith((" ", "\t")))
+        ):
             items[-1][1].append(line)
-        elif in_item and not code and items[-1][1][-1].strip() and not NEW_BLOCK.match(line):
-            # A lazy continuation: an unindented line straight after the point's text,
-            # with no blank line between, still belongs to it (a soft-wrapped bullet)
+        elif in_item and not code and paragraph and not NEW_BLOCK.match(line):
+            # A lazy continuation: an unindented line straight after the point's paragraph
+            # text (not a heading, break or code, as the fence tracker reads it) still
+            # belongs to it (a soft-wrapped bullet)
             items[-1][1].append(line)
         elif line.strip():
             rest.append(line)
@@ -331,20 +385,12 @@ def parse_comments(body: str) -> tuple[list[dict[str, str]], str]:
     comments: list[dict[str, Any]] = []
     above: list[str] = []
     lines: list[str] = []
-    fences = Fences(lists=True)
-    list_indent: int | None = None
+    reader = CommentReader()
     for line in body.splitlines():
         # A comment starts at the list's own indentation, outside code: deeper numbered
-        # items and code are part of the explanation
-        # The line goes through the fence tracker first: a header that ends a list item
-        # also ends any code in it
-        start = None if fences.inside(line) else COMMENT_START.match(line)
-        if start and list_indent is not None and len(start.group(1)) > list_indent:
-            start = None
+        # items and code are part of the explanation (see CommentReader)
+        start = reader.read(line)
         if start:
-            # A comment's own header is no list item: its explanation starts afresh
-            fences = Fences(lists=True)
-            list_indent = len(start.group(1)) if list_indent is None else list_indent
             if comments:
                 comments[-1]["lines"] = lines
             _, number, title, page, page_end = start.groups()
@@ -822,7 +868,10 @@ def write_bullets(points: list[dict[str, Any]]) -> str:
 
     def bullet(point: dict[str, Any]) -> str:
         text = indented(point["text"], "  ")
-        if FENCE.match(point["text"].split("\n")[0]):
+        first = point["text"].split("\n")[0].rstrip("\r")
+        # Text that opens a fence, or that would make the marker's line a thematic break
+        # (`- - - -`), starts on a line of its own
+        if FENCE.match(first) or THEMATIC_BREAK.match(f"- {first}"):
             text = f"\n  {text}"
         if point.get("title"):
             title = indented(point["title"], "  ")
@@ -877,14 +926,16 @@ def write_fatal_flaws(check: dict[str, Any], flaws: list[dict[str, Any]]) -> str
     if not summary and not flaws and check.get("outcome") == "no_issues":
         summary = NO_FATAL_FLAWS
     places = {int(m.group(1)): flaw for flaw in flaws if (m := FLAW_ID.match(flaw.get("id", "")))}
+    # Only the mapper's one-based places count; another ID (fatal-flaw-0) has none
+    places = {n: flaw for n, flaw in places.items() if n >= 1}
     paragraphs = summary.split("\n\n") if summary else []
     verdicts = [i for i, p in enumerate(paragraphs) if NO_FATAL.match(p.strip())]
     # Count the empty places before listing them: an ID is any string, and one such as
     # fatal-flaw-1000000000 must not mean listing a billion places
     last = max(places, default=0)
     gaps = last - len(places)
-    if not gaps or len(places) != len(flaws) or len(verdicts) < gaps:
-        return "\n\n".join(part for part in (summary, write_bullets(flaws)) if part)
+    if gaps <= 0 or len(places) != len(flaws) or len(verdicts) < gaps:
+        return join_blocks([summary, write_bullets(flaws)])
     # The bulleted verdicts came after the section's prose, in order, each a block that
     # runs from its verdict to the next (a verdict point may have paragraphs of its own)
     starts = verdicts[-gaps:]
@@ -895,7 +946,7 @@ def write_fatal_flaws(check: dict[str, Any], flaws: list[dict[str, Any]]) -> str
         write_bullets([places[n]]) if n in places else f"- {indented(next(texts), '  ')}"
         for n in range(1, last + 1)
     ]
-    return "\n\n".join(part for part in (prose, "\n".join(points)) if part)
+    return join_blocks([prose, "\n".join(points)])
 
 
 def cell(value: Any) -> str:
@@ -965,7 +1016,8 @@ def reference_rows(check: dict[str, Any], kept: list[Any]) -> list[dict[str, str
 
 
 def write_reference_check(check: dict[str, Any], kept: dict[str, Any]) -> str:
-    parts = [write_reference_summary(check)]
+    summary = write_reference_summary(check)
+    parts: list[str | None] = [summary]
     rows = reference_rows(check, kept.get("entries") or [])
     if rows:
         columns = ["number", "citation", "status"]
@@ -978,7 +1030,23 @@ def write_reference_check(check: dict[str, Any], kept: dict[str, Any]) -> str:
         ]
         parts.append("\n".join(table))
     parts.append(kept.get("text"))
-    return "\n\n".join(part for part in parts if part)
+    present = [part for part in parts if part]
+    first_line = next((line for line in (summary or "").splitlines() if line.strip()), "")
+    if not (summary and CHECKED.search(plain(first_line))):
+        # Prose, not the counts sentence: its place does not matter to the mapper, so one
+        # that leaves a fence open goes after the table, which (unlike a list) cannot take
+        # in its indented lines
+        if summary and open_fence(summary):
+            others = [close_fence(part) for part in present if part is not summary]
+            return "\n\n".join([*others, summary])
+        return join_blocks(present)
+    # The counts sentence comes first among the prose; one that leaves a fence open (a fence
+    # line read as the counts) comes after the table, or the rows would be code. Prose kept
+    # after it followed it in the report, in its code if the fence was open, so it stays
+    # with it
+    if rows and open_fence(summary):
+        present.insert(0, present.pop(1))
+    return "\n\n".join(present)
 
 
 def excerpt_of(link: dict[str, Any]) -> str | None:
@@ -1013,6 +1081,24 @@ def write_comment(number: int | str, comment: dict[str, Any]) -> str:
     if comment.get("text"):
         parts.append(nested(demoted(comment["text"])))
     return "\n\n".join(parts)
+
+
+def comment_fences(text: str) -> CommentReader:
+    """The fence state at the end of `text`, read as parse_comments reads Reviewer
+    Comments."""
+    reader = CommentReader()
+    for line in text.splitlines():
+        reader.read(line)
+    return reader
+
+
+def close_comment_fence(text: str) -> str:
+    """`text`, Reviewer Comments or part of it, with the fence its last explanation leaves
+    open closed, the closing marker indented as the opening one was."""
+    fences = comment_fences(text)
+    if not fences.open_at_margin:
+        return text
+    return f"{text}\n{' ' * min(fences.indent, 3)}{fences.open}"
 
 
 def comment_from(point: dict[str, Any], default_title: str) -> dict[str, Any]:
@@ -1062,10 +1148,12 @@ def write_comments(points: list[tuple[dict[str, Any], str]], kept: list[Any]) ->
     known = [int(number) for _, number in numbered if number is not None]
     free = (str(n) for n in itertools.count(max(known, default=0) + 1))
     numbers = [number if number is not None else next(free) for _, number in numbered]
-    return "\n\n".join(
+    written = [
         write_comment(number, comment)
         for (comment, _), number in zip(numbered, numbers, strict=True)
-    )
+    ]
+    # A fence one comment leaves open is closed, or it would swallow the comments after it
+    return "\n\n".join([*(close_comment_fence(c) for c in written[:-1]), *written[-1:]])
 
 
 def to_reviewer3(canonical: dict[str, Any]) -> str:
@@ -1084,18 +1172,21 @@ def to_reviewer3(canonical: dict[str, Any]) -> str:
     """
     kept = extension(canonical, "reviewer3")
     other: dict[str, str] = dict(kept.get("other") or {})
-    sections = ["# Review Report"]
+    # The wrapper, title and text above the first section stay first; a fence the text
+    # leaves open is closed when sections follow, or it would swallow them
+    head = ["# Review Report"]
     title = (canonical.get("target") or {}).get("title")
     if title:
-        sections.append(title)
-    sections.append("---")
+        head.append(title)
+    head.append("---")
     if other.get("preamble"):
-        sections.append(other.pop("preamble"))
+        head.append(other.pop("preamble"))
+    sections: list[str] = []
     opinion = canonical.get("opinion") or {}
     contributions = [c for c in opinion.get("contributions") or [] if c.get("text")]
     overview_rest = other.pop("Overview", None)
     if contributions or overview_rest:
-        body = "\n\n".join(p for p in (overview_rest, write_bullets(contributions)) if p)
+        body = join_blocks([overview_rest, write_bullets(contributions)])
         sections.append(f"### Overview\n\n{body}")
 
     checks: dict[str, dict[str, Any]] = {}
@@ -1129,7 +1220,7 @@ def to_reviewer3(canonical: dict[str, Any]) -> str:
         if not body:
             return check_text(check)
         rest = check_text(unsaid(check, body))
-        return f"{body}\n\n{rest}" if rest else body
+        return f"{close_fence(body)}\n\n{rest}" if rest else body
 
     def check_body(kind: str) -> str:
         check = checks.get(kind)
@@ -1153,10 +1244,24 @@ def to_reviewer3(canonical: dict[str, Any]) -> str:
         if not (kind == "weaknesses" and point.get("id") in fatal_ids)
     ]
     above = other.pop(COMMENTS_GROUP, None)
+    comments_section, comments_prose, comments_at = None, None, 0
     if points or above or kept.get("comments"):
         comments = write_comments(points, kept.get("comments") or [])
-        body = "\n\n".join(part for part in (above, comments) if part)
-        sections.append(f"### {COMMENTS_GROUP}\n\n{body}")
+        if above and comments and open_fence(above):
+            # Text that leaves a fence open came from a later Reviewer Comments section of its
+            # own (the mapper merges repeats); it goes back as one, after the comments, rather
+            # than closed above them
+            comments_section = f"### {COMMENTS_GROUP}\n\n{comments}"
+            comments_prose = f"### {COMMENTS_GROUP}\n\n{above}"
+        else:
+            # The text above the comments is closed only when comments follow it
+            body = "\n\n".join(
+                part
+                for part in ((close_fence(above) if above and comments else above), comments)
+                if part
+            )
+            comments_section = f"### {COMMENTS_GROUP}\n\n{body}"
+        comments_at = len(sections)
 
     summary, text = overall_texts(canonical)
     if summary:
@@ -1180,4 +1285,33 @@ def to_reviewer3(canonical: dict[str, Any]) -> str:
         if body:
             add_section(other, heading, body)
     sections += [f"### {heading}\n\n{demoted(text)}" for heading, text in other.items()]
-    return "\n\n".join(sections) + "\n"
+    if comments_section:
+        # Kept prose that leaves a fence open follows the comments, as its own section
+        block = [comments_section] + ([comments_prose] if comments_prose else [])
+        sections[comments_at:comments_at] = block
+
+    # Reviewer Comments is read for code as parse_comments reads it; any other section as
+    # plain Markdown
+    def is_comments(block: str) -> bool:
+        return block.startswith(f"### {COMMENTS_GROUP}\n")
+
+    def section_open(block: str) -> bool:
+        if is_comments(block):
+            return comment_fences(block).open_at_margin
+        return open_fence(block) is not None
+
+    def section_close(block: str) -> str:
+        return close_comment_fence(block) if is_comments(block) else close_fence(block)
+
+    # A section followed by one with the same heading stays before it, closed: the mapper
+    # takes the first Fatal Flaws or Reference Check as the check and keeps the rest
+    headings = [section.split("\n", 1)[0] for section in sections]
+    sections = [
+        section_close(section) if headings[i] in headings[i + 1 :] else section
+        for i, section in enumerate(sections)
+    ]
+    # A section that leaves a code fence open goes last, where it swallows no other
+    if sections:
+        head[-1] = close_fence(head[-1])  # the text above the first section, or the wrapper
+        head.append(join_blocks(sections, is_open=section_open, close=section_close))
+    return "\n\n".join(head) + "\n"

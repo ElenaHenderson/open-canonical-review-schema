@@ -52,15 +52,19 @@ from typing import Any
 from ..anchors import Block
 from ..mapping import MappingResult
 from .ai import (
+    BLOCK_START,
     FENCE,
+    THEMATIC_BREAK,
     Fences,
     Recorder,
     add_section,
     check_text,
+    close_fence,
     extension,
     findings_of,
     finish,
     indented,
+    join_blocks,
     overall_texts,
 )
 
@@ -234,20 +238,64 @@ def split_sections(text: str, level: int) -> list[tuple[str | None, str]]:
     return parts
 
 
+def lazy_continuation(line: str, item: Fences) -> bool:
+    """Whether `line`, unindented, lazily continues the paragraph its item ends with: it
+    comes straight after the item's paragraph text (not after a blank line or code) and
+    starts no block. `item` has read the item's lines as written, marker and all."""
+    if not line.strip() or BLOCK_START.match(line) or FENCE.match(line):
+        return False
+    if THEMATIC_BREAK.match(line):
+        return False
+    return item.paragraph and item.open is None
+
+
 def split_items(body: str) -> tuple[list[str], str]:
     """The list items in `body`, each without its marker and dedented, and any other text."""
     items: list[list[str]] = []
     other: list[str] = []
+    in_item = False
+    item_indent = 0  # where the open item's content starts
+    # The open item's lines, read as written (its own marker included) as they come, so
+    # whether a line lazily continues it is known without reading it again
+    item_fences = Fences(lists=True)
     for line in body.splitlines():
         if line.strip() == "---":
+            # Dropped as before, but one indented less than the item's content ends it
+            # (unless it is a line of the item's code), and one inside it ends its
+            # paragraph, so no lazy line follows
+            held = in_item and item_fences.holds(line)
+            if len(line) - len(line.lstrip(" ")) < item_indent and not held:
+                in_item = False
+            elif in_item:
+                item_fences.inside(line)
             continue
-        start = ITEM_START.match(line)
+        # A thematic break (`- - -`, `* * *`) is no item, as the fence tracker reads it
+        brk = THEMATIC_BREAK.match(line)
+        start = None if brk else ITEM_START.match(line)
+        # A break indented less than the item's content ends the item, unless it is a line
+        # of the item's code
+        outdented = (
+            brk
+            and len(line) - len(line.lstrip(" ")) < item_indent
+            and not (in_item and item_fences.holds(line))
+        )
         if start:
             items.append([start.group(1)])
-        elif items and (not line.strip() or line.startswith((" ", "\t"))):
+            in_item, item_indent = True, start.start(1)
+            item_fences = Fences(lists=True)
+            item_fences.inside(line)
+        elif in_item and not outdented and (not line.strip() or line.startswith((" ", "\t"))):
             items[-1].append(line)
+            item_fences.inside(line)
+        elif in_item and lazy_continuation(line, item_fences):
+            # A soft-wrapped line straight after the item's text stays in the item, as the
+            # fence tracker reads it
+            items[-1].append(line)
+            item_fences.inside(line)
         elif line.strip():
+            # Other text ends the item: lines after it are not the item's
             other.append(line)
+            in_item = False
     texts = []
     for lines in items:
         rest = lines[1:]
@@ -637,13 +685,17 @@ def demoted(text: str) -> str:
 def write_item(marker: str, head: str | None, text: str) -> str:
     """A list item: `**head:** text`, or just text. The text starts on the next line when
     starting it on the marker's line would change how the report reads back: when it
-    begins with a list or a code fence, or when all its later lines are indented (the
-    parser takes the indentation they share as the list's)."""
+    begins with a list or a code fence, when the marker's line would be a thematic break,
+    or when all its later lines are indented (the parser takes the indentation they share
+    as the list's)."""
     pad = " " * (len(marker) + 1)
     later = [line for line in text.split("\n")[1:] if line.strip()]
+    first = text.split("\n")[0].rstrip("\r")
     own_line = (
         LIST_MARKER.match(text)
-        or FENCE.match(text.split("\n")[0])
+        or FENCE.match(first)
+        # `* ***` or `* **` would be a thematic break, not an item
+        or THEMATIC_BREAK.match(f"{marker} {first}")
         or (later and all(line[0] in " \t" for line in later))
     )
     # A heading the reviewer wrapped keeps its later lines indented under the marker
@@ -685,12 +737,17 @@ def issue_head(point: dict[str, Any]) -> str | None:
     if title and location:
         return f"{title} ({location})"
     if location:
-        wanted = read_places(location)
-        bare = parse_item(f"**{location}:** x")
-        if "title" not in bare and read_places(bare.get("location", "")) == wanted:
-            return location
-        return f"({location})"
+        return places_head(location)
     return title or None
+
+
+def places_head(location: str) -> str:
+    """A heading of places alone: bare when it reads back as the same places, else in
+    parentheses, which read back as places with no title."""
+    bare = parse_item(f"**{location}:** x")
+    if "title" not in bare and read_places(bare.get("location", "")) == read_places(location):
+        return location
+    return f"({location})"
 
 
 def is_issue(point: dict[str, Any]) -> bool:
@@ -758,9 +815,12 @@ def overlay_kept_issues(parts: dict[int, dict[str, Any]], kept: list[Any]) -> No
                 tier["text"] = kept_tier["text"]
             for i, kept_item in enumerate(kept_tier.get("items") or []):
                 if isinstance(kept_item, dict) and i not in tier["items"]:
-                    head = kept_item.get("title") or kept_item.get("location")
-                    if kept_item.get("title") and kept_item.get("location"):
-                        head = f"{kept_item['title']} ({kept_item['location']})"
+                    title, location = kept_item.get("title"), kept_item.get("location")
+                    # Places alone go in parentheses when written bare they would read
+                    # back as a title (`**(Page 2; Figure 1):**`)
+                    head = title or (places_head(location) if location else None)
+                    if title and location:
+                        head = f"{title} ({location})"
                     tier["items"][i] = {"head": head, "text": kept_item.get("text", "")}
 
 
@@ -810,9 +870,12 @@ def to_deepreview(canonical: dict[str, Any]) -> str:
     kept = extension(canonical, "deepreview")
     other: dict[str, str] = dict(kept.get("other") or {})
     opinion = canonical.get("opinion") or {}
-    sections = [BOILERPLATE]
+    # The wrapper and the text above the first section stay first; a fence the text leaves
+    # open is closed when sections follow, or it would swallow them
+    head = [BOILERPLATE]
     if other.get("preamble"):
-        sections.append(other.pop("preamble"))
+        head.append(other.pop("preamble"))
+    sections: list[str] = []
     summary, text = overall_texts(canonical)
     if summary or text:
         sections.append(f"## Summary\n{demoted(summary or text)}")
@@ -820,6 +883,9 @@ def to_deepreview(canonical: dict[str, Any]) -> str:
         points = [p for p in findings_of(canonical, kind) if kind == "strengths" or not is_issue(p)]
         rest = other.pop(heading, None)
         if points or rest:
+            # The text kept beside the points comes only from a DeepReview report, whose
+            # item splitter reads no fences, so it keeps its place; a fence it leaves open
+            # is contained by the section going last
             body = "\n\n".join(part for part in (rest, write_points(points)) if part)
             sections.append(f"## {heading}\n{body}")
     issues = [p for p in findings_of(canonical, "weaknesses") if is_issue(p)]
@@ -839,4 +905,8 @@ def to_deepreview(canonical: dict[str, Any]) -> str:
         if text := check_text(check):
             add_section(other, check.get("label") or check["kind"], text)
     sections += [f"## {heading}\n{demoted(text)}" for heading, text in other.items()]
-    return "\n\n".join(sections) + "\n"
+    # A section that leaves a code fence open goes last, where it swallows no other
+    if sections:
+        head[-1] = close_fence(head[-1])  # the text above the first section, or the wrapper
+        head.append(join_blocks(sections))
+    return "\n\n".join(head) + "\n"

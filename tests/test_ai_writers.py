@@ -1089,3 +1089,696 @@ def test_reviewer3_a_huge_flaw_id_lists_no_places():
     ]
     report = reviewer3.parse_report(map_to("reviewer3", review))
     assert report["fatal_flaws"] == {"text": "Screened.", "items": [{"text": "Leak."}]}
+
+
+class TestPR47Followups:
+    """Points Copilot left on PR 47 after it was last updated."""
+
+    def test_thematic_breaks_are_no_list_items(self):
+        deep = "## Summary\nText.\n\n- - -\n\n  ```\n## Weaknesses\n```\n\n## Strengths\n* S.\n"
+        assert sorted(deepreview.parse_report(deep)) == ["strengths", "summary"]
+        appendix = "* * *\n\n  ```\n### Fatal Flaws\n- **Fake** — Not a flaw.\n```"
+        r3 = f"# Review Report\n\nA paper\n\n---\n\n### Appendix\n\n{appendix}\n"
+        review = mapped("reviewer3", r3)
+        assert "checks" not in review and "findings" not in review
+
+    def test_deepreview_summary_ending_in_open_code_stays_last(self):
+        report = "## Strengths\n* Useful.\n\n## Summary\nText.\n\n```py\nx"
+        review = mapped("deepreview", report)
+        written = map_to("deepreview", review)
+        assert deepreview.parse_report(written) == deepreview.parse_report(report)
+        assert same_review(mapped("deepreview", written), review)
+
+    def test_deepreview_open_code_from_elsewhere_swallows_no_section(self):
+        review = human_review()
+        review["opinion"] = {"summary": "Text.\n\n```py\nx"}
+        review.pop("narrative")
+        report = deepreview.parse_report(map_to("deepreview", review))
+        assert len(report["strengths"]) == len(findings_of(review, "strengths"))
+        assert report["summary"] == "Text.\n\n```py\nx"
+
+    def test_reviewer3_overview_ending_in_open_code_round_trips(self):
+        body = "- **A** — First.\n- **B** — Second.\n\n```py\nunclosed"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Overview\n\n{body}"
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+        assert same_review(mapped("reviewer3", written), review)
+
+    def test_reviewer3_open_code_from_elsewhere_swallows_nothing_after_it(self):
+        review = human_review()
+        review["opinion"] = {"summary": "Text.\n\n```py\nx"}
+        review.pop("narrative")
+        review["findings"] = {
+            "strengths": [{"text": "Good."}],
+            "comments": [
+                {"title": "A", "text": "Ends in code:\n\n```py\nx"},
+                {"title": "B", "text": "Next."},
+            ],
+        }
+        report = reviewer3.parse_report(map_to("reviewer3", review))
+        assert [c["title"] for c in report["comments"]] == ["A", "B"]
+        assert report["comments"][0]["text"] == "Ends in code:\n\n```py\nx\n```"
+        assert report["other"]["Strengths"] == "- Good."
+        assert report["other"]["Summary"] == "Text.\n\n```py\nx"
+
+    def test_reviewer3_fatal_flaw_0_is_written(self):
+        review = human_review()
+        review["findings"] = {"weaknesses": [{"id": "fatal-flaw-0", "text": "Leak."}]}
+        review["checks"] = [
+            {"kind": "fatal_flaw_screen", "summary": "Screened.", "finding_ids": ["fatal-flaw-0"]}
+        ]
+        report = reviewer3.parse_report(map_to("reviewer3", review))
+        assert report["fatal_flaws"] == {"text": "Screened.", "items": [{"text": "Leak."}]}
+
+    def test_deepreview_skipped_point_of_places_alone_keeps_them_as_places(self):
+        report = (
+            "## Potential Issues And Suggestions\n### [A]\n"
+            "#### Minor Corrections and Typos\n\n* **One:** First.\n* **(Page 2; Figure 1):**\n"
+        )
+        review = mapped("deepreview", report)
+        assert same_review(mapped("deepreview", map_to("deepreview", review)), review)
+
+
+class TestPR48Review:
+    def test_thematic_break_with_crlf_endings_is_no_list_item(self):
+        deep = "## Summary\nText.\n\n- - -\n\n  ```\n## Weaknesses\n```\n\n## Strengths\n* S.\n"
+        crlf = deep.replace("\n", "\r\n")
+        assert [h for h, _ in deepreview.split_sections(crlf, 2)] == [None, "Summary", "Strengths"]
+
+    def test_reviewer3_reference_prose_ending_in_open_code_round_trips(self):
+        body = "No references to check.\n\n```py\nx"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Reference Check\n\n{body}"
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+        assert same_review(mapped("reviewer3", written), review)
+
+    def test_reviewer3_indented_open_fence_in_a_comment_swallows_no_comment(self):
+        review = human_review()
+        review["findings"] = {
+            "comments": [{"title": "A", "text": "   ```py\n   x"}, {"title": "B", "text": "Next."}]
+        }
+        report = reviewer3.parse_report(map_to("reviewer3", review) + "\n### Appendix\n\nX.\n")
+        assert [c["title"] for c in report["comments"]] == ["A", "B"]
+        assert report["comments"][0]["text"] == "   ```py\n   x\n   ```"
+        assert report["other"]["Appendix"] == "X."
+
+    def test_reviewer3_comments_prose_ending_in_open_code_round_trips(self):
+        body = "Pending comments.\n```py\nx"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Reviewer Comments\n\n{body}"
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+        assert same_review(mapped("reviewer3", written), review)
+
+
+@pytest.mark.parametrize(
+    ("source", "report"),
+    [
+        ("reviewer3", "# Review Report\n\nA paper\n\n---\n\nPending review.\n```py\nx"),
+        ("deepreview", "# HIGH LEVEL SUMMARY\n---\nPending review.\n```py\nx"),
+    ],
+)
+def test_preamble_only_report_ending_in_open_code_round_trips(source, report):
+    parse = {"reviewer3": reviewer3.parse_report, "deepreview": deepreview.parse_report}[source]
+    review = mapped(source, report)
+    written = map_to(source, review)
+    assert parse(written) == parse(report)
+    assert same_review(mapped(source, written), review)
+
+
+def test_reviewer3_reference_table_then_open_ended_prose_round_trips():
+    body = "| # | Citation | Status |\n| --- | --- | --- |\n| 1 | A (2020). | Not Found |\n\n"
+    body += "Notes.\n\n```py\nx"
+    report = f"# Review Report\n\nA paper\n\n---\n\n### Reference Check\n\n{body}"
+    review = mapped("reviewer3", report)
+    written = map_to("reviewer3", review)
+    assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+    assert same_review(mapped("reviewer3", written), review)
+
+
+@pytest.mark.parametrize("indent", ["  ", "   "])
+def test_reviewer3_indented_open_summary_stays_out_of_the_flaws(indent):
+    review = human_review()
+    review["findings"] = {"weaknesses": [{"id": "w1", "text": "Leak."}]}
+    summary = f"{indent}```py\n{indent}x"
+    review["checks"] = [{"kind": "fatal_flaw_screen", "summary": summary, "finding_ids": ["w1"]}]
+    report = reviewer3.parse_report(map_to("reviewer3", review))
+    assert report["fatal_flaws"]["items"] == [{"text": "Leak."}]
+    assert report["fatal_flaws"]["text"] == f"{summary}\n{indent}```"
+
+
+@pytest.mark.parametrize("indent", ["  ", "   "])
+def test_reviewer3_overview_of_only_indented_open_code_round_trips(indent):
+    report = f"# Review Report\n\nA paper\n\n---\n\n### Overview\n\n{indent}```py\n{indent}x"
+    review = mapped("reviewer3", report)
+    written = map_to("reviewer3", review)
+    assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+    assert same_review(mapped("reviewer3", written), review)
+
+
+@pytest.mark.parametrize("heading", ["Strengths", "Weaknesses"])
+def test_deepreview_kept_text_opening_code_before_points_round_trips(heading):
+    report = f"## {heading}\nNotes.\n```py\n  x\n* Useful.\n\n## Summary\nShort."
+    review = mapped("deepreview", report)
+    written = map_to("deepreview", review)
+    assert deepreview.parse_report(written) == deepreview.parse_report(report)
+    assert same_review(mapped("deepreview", written), review)
+
+
+@pytest.mark.parametrize("text", ["- - -\n\n  ```py\n  x\n```", "---\n\nMore."])
+def test_reviewer3_point_opening_with_a_thematic_break_keeps_the_next_point(text):
+    review = human_review()
+    review["opinion"]["contributions"] = [{"text": text}, {"text": "Second."}]
+    report = reviewer3.parse_report(map_to("reviewer3", review))
+    assert report["overview"][-1] == {"text": "Second."}
+    assert len(report["overview"]) == 2
+
+
+def test_reviewer3_closer_added_to_a_comment_opens_no_section_fence():
+    review = human_review()
+    review["findings"] = {
+        "comments": [
+            {"title": "A", "text": "   ```py\nx"},
+            {"title": "B", "text": "Before.\n\n```\n### Fake\n```\n\nAfter."},
+        ]
+    }
+    report = reviewer3.parse_report(map_to("reviewer3", review))
+    assert "Fake" not in report.get("other", {})
+    assert [c["title"] for c in report["comments"]] == ["A", "B"]
+    assert report["comments"][1]["text"] == "Before.\n\n```\n### Fake\n```\n\nAfter."
+
+
+@pytest.mark.parametrize(
+    "appendix",
+    [
+        "1. **Step**\n   ```py\n   x",
+        "1. **Step**\n   ```py\n   x\n      ```\n\nAfter the list.",
+    ],
+)
+def test_reviewer3_numbered_list_outside_comments_keeps_its_code_scope(appendix):
+    report = (
+        f"# Review Report\n\nA paper\n\n---\n\n### Appendix\n\n{appendix}\n\n"
+        "### Fatal Flaws\n\n- **Leak** — Test data leaks.\n"
+    )
+    parsed = reviewer3.parse_report(report)
+    assert parsed["fatal_flaws"]["items"] == [{"title": "Leak", "text": "Test data leaks."}]
+
+
+def test_reviewer3_final_comment_left_open_swallows_no_section_after_it():
+    review = human_review()
+    review["opinion"] = {"summary": "Short summary."}
+    review.pop("narrative")
+    review["findings"] = {"comments": [{"title": "A", "text": "   ```py\n   x"}]}
+    report = reviewer3.parse_report(map_to("reviewer3", review))
+    assert report["other"]["Summary"] == "Short summary."
+    # Reviewer Comments, left open, goes last, so its last explanation keeps its open code
+    assert report["comments"][0]["text"] == "   ```py\n   x"
+
+
+class TestCommentReader:
+    NESTED = "- Steps\n  1. **Prepare**\n  ```py\n  x"
+
+    def test_nested_numbered_line_in_an_explanation_keeps_its_list(self):
+        report = (
+            "# Review Report\n\nA paper\n\n---\n\n### Reviewer Comments\n\n"
+            f"1. **A**\n\n{self.NESTED}\n\n### Fatal Flaws\n\n- **Leak** — Test data leaks.\n"
+        )
+        parsed = reviewer3.parse_report(report)
+        assert parsed["fatal_flaws"]["items"] == [{"title": "Leak", "text": "Test data leaks."}]
+        assert parsed["comments"][0]["text"] == self.NESTED
+
+    def test_nested_numbered_line_adds_no_closer_before_the_next_comment(self):
+        body = f"1. **A**\n\n{self.NESTED}\n\n2. **B**\n\nNext."
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Reviewer Comments\n\n{body}\n"
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+        assert same_review(mapped("reviewer3", written), review)
+
+    def test_closed_comment_fence_beside_an_open_summary(self):
+        review = human_review()
+        review["opinion"] = {"summary": "S.\n\n```py\ny"}
+        review.pop("narrative")
+        review["findings"] = {"comments": [{"title": "A", "text": "   ```py\nx\n   ```"}]}
+        report = reviewer3.parse_report(map_to("reviewer3", review))
+        assert report["comments"][0]["text"] == "   ```py\nx\n   ```"
+        assert report["other"]["Summary"] == "S.\n\n```py\ny"
+
+
+class TestThematicBreaksAndRepeats:
+    def test_reviewer3_overview_with_a_break_and_fenced_heading_round_trips(self):
+        body = "- **A** — First.\n- - -\n\n  ```python\n### Fake\n  ```"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Overview\n\n{body}\n"
+        parsed = reviewer3.parse_report(report)
+        assert "Fake" not in parsed.get("other", {})
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == parsed
+        assert same_review(mapped("reviewer3", written), review)
+
+    def test_deepreview_strengths_with_a_break_and_fenced_heading_round_trip(self):
+        report = "## Strengths\n* A.\n- - -\n\n  ```python\n## Fake\n  ```\n## Weaknesses\n* W.\n"
+        parsed = deepreview.parse_report(report)
+        assert "Fake" not in parsed.get("other", {})
+        assert parsed["strengths"] == [{"text": "A."}]
+        review = mapped("deepreview", report)
+        written = map_to("deepreview", review)
+        assert deepreview.parse_report(written) == parsed
+        assert same_review(mapped("deepreview", written), review)
+
+    def test_reviewer3_crlf_thematic_break_text_keeps_the_next_point(self):
+        review = human_review()
+        text = "- - -\r\n\r\n  ```py\r\n  x\r\n```"
+        review["opinion"]["contributions"] = [{"text": text}, {"text": "Second."}]
+        report = reviewer3.parse_report(map_to("reviewer3", review))
+        assert report["overview"][-1] == {"text": "Second."}
+        assert len(report["overview"]) == 2
+
+    def test_reviewer3_repeated_comments_section_with_open_prose_round_trips(self):
+        report = (
+            "# Review Report\n\nA paper\n\n---\n\n### Reviewer Comments\n\n1. **A**\n\nText.\n\n"
+            "### Reviewer Comments\n\nPending.\n```py\nx"
+        )
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+        assert same_review(mapped("reviewer3", written), review)
+
+
+@pytest.mark.parametrize("text", ["***", "**", "***\r"])
+def test_deepreview_point_whose_marker_line_would_be_a_break_round_trips(text):
+    report = f"## Strengths\n- {text}\n- Useful result.\n"
+    review = mapped("deepreview", report)
+    assert len(review["findings"]["strengths"]) == 2
+    written = map_to("deepreview", review)
+    assert deepreview.parse_report(written) == deepreview.parse_report(report)
+    assert same_review(mapped("deepreview", written), review)
+
+
+@pytest.mark.parametrize("indent", ["  ", "   "])
+def test_reviewer3_reference_table_then_indented_open_code_round_trips(indent):
+    table = "| # | Citation | Status |\n| --- | --- | --- |\n| 1 | A (2020). | Not Found |"
+    body = f"{table}\n\n{indent}```py\n{indent}x"
+    report = f"# Review Report\n\nA paper\n\n---\n\n### Reference Check\n\n{body}"
+    review = mapped("reviewer3", report)
+    written = map_to("reviewer3", review)
+    assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+    assert same_review(mapped("reviewer3", written), review)
+
+
+def test_reviewer3_reference_fence_whose_info_string_reads_as_counts_round_trips():
+    body = "```text Checked 2 references\nexample"
+    report = f"# Review Report\n\nA paper\n\n---\n\n### Reference Check\n\n{body}"
+    review = mapped("reviewer3", report)
+    written = map_to("reviewer3", review)
+    assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+    assert same_review(mapped("reviewer3", written), review)
+
+
+class TestOutdentedBreaks:
+    def test_deepreview_outdented_break_ends_the_point(self):
+        report = "## Strengths\n- A.\n - - -\n   ```\n## Fake\n   ```\n## Weaknesses\n* W.\n"
+        parsed = deepreview.parse_report(report)
+        assert parsed["strengths"] == [{"text": "A."}]
+        assert "Fake" not in parsed.get("other", {})
+        review = mapped("deepreview", report)
+        written = map_to("deepreview", review)
+        assert deepreview.parse_report(written) == parsed
+        assert same_review(mapped("deepreview", written), review)
+
+    def test_reviewer3_outdented_break_ends_the_point(self):
+        body = "- A.\n - - -\n   ```\n### Fake\n   ```"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Overview\n\n{body}\n"
+        parsed = reviewer3.parse_report(report)
+        assert parsed["overview"] == [{"text": "A."}]
+        assert "Fake" not in parsed.get("other", {})
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == parsed
+        assert same_review(mapped("reviewer3", written), review)
+
+    def test_reviewer3_table_before_a_fence_read_as_counts_round_trips(self):
+        table = "| # | Citation | Status |\n| --- | --- | --- |\n| 1 | A (2020). | Not Found |"
+        body = f"{table}\n\n```text Checked 2 references\nexample"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Reference Check\n\n{body}"
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+        assert same_review(mapped("reviewer3", written), review)
+
+
+class TestScopeAndOrder:
+    def test_deepreview_lazy_continuation_keeps_its_code_in_the_point(self):
+        report = (
+            "## Strengths\n* Useful.\nContinuation.\n  ```py\n  x\n## Summary\nShort.\n\n```py\ny"
+        )
+        review = mapped("deepreview", report)
+        written = map_to("deepreview", review)
+        assert deepreview.parse_report(written) == deepreview.parse_report(report)
+        assert same_review(mapped("deepreview", written), review)
+
+    @pytest.mark.parametrize(
+        ("heading", "first", "summary"),
+        [
+            ("Fatal Flaws", "- **Leak** — Test data leaks.", "Screened.\n\n```py\nx"),
+            (
+                "Reference Check",
+                "Checked 2 references: 2 verified.",
+                "Checked 2 references: 2 verified.\n\n```py\nx",
+            ),
+        ],
+    )
+    def test_reviewer3_open_primary_check_stays_before_its_repeat(self, heading, first, summary):
+        report = (
+            f"# Review Report\n\nA paper\n\n---\n\n### {heading}\n\n{first}\n\n"
+            f"### {heading}\n\nRepeat.\n"
+        )
+        review = mapped("reviewer3", report)
+        [check] = review["checks"]
+        check["summary"] = summary
+        again = mapped("reviewer3", map_to("reviewer3", review))
+        [again_check] = again["checks"]
+        assert again_check["kind"] == check["kind"]
+        assert again["extensions"]["reviewer3"]["other"][heading] == "Repeat."
+        if heading == "Fatal Flaws":
+            assert [w["text"] for w in again["findings"]["weaknesses"]] == ["Test data leaks."]
+
+
+@pytest.mark.parametrize(
+    "strengths",
+    [
+        "* A.\n  ```py\n  x\n  ```\nOutside the list.",
+        "* Useful.\n---\nOutside the list.",
+    ],
+)
+def test_deepreview_prose_after_a_point_that_ended_stays_out_of_it(strengths):
+    report = f"## Strengths\n{strengths}\n"
+    parsed = deepreview.parse_report(report)
+    assert parsed["other"]["Strengths"] == "Outside the list."
+    review = mapped("deepreview", report)
+    written = map_to("deepreview", review)
+    assert deepreview.parse_report(written) == parsed
+
+
+class TestItemFenceState:
+    def test_numbered_item_keeps_its_list_relative_fence(self):
+        report = "## Strengths\n1. A.\n      ```py\n      x\n      ```\nOutside the list.\n"
+        parsed = deepreview.parse_report(report)
+        assert parsed["other"]["Strengths"] == "Outside the list."
+        assert parsed["strengths"][0]["text"].startswith("A.")
+
+    def test_bold_marker_item_keeps_its_lazy_continuation(self):
+        parsed = deepreview.parse_report("## Strengths\n- **\nContinuation.\n")
+        assert len(parsed["strengths"]) == 1
+        assert "other" not in parsed
+
+    def test_long_soft_wrapped_point_is_read_once_per_line(self, monkeypatch):
+        from ocrs.mappers import ai
+
+        calls = 0
+        inside = ai.Fences.inside
+
+        def counting(self, line):
+            nonlocal calls
+            calls += 1
+            return inside(self, line)
+
+        monkeypatch.setattr(ai.Fences, "inside", counting)
+        lines = 400
+        deepreview.parse_report("## Strengths\n* Start.\n" + "more text\n" * lines)
+        assert calls < 5 * lines
+
+
+@pytest.mark.parametrize(
+    "strengths",
+    [
+        "* A.\n\n      code()\nOutside the list.",
+        "* A.\n\n  ## Heading\nOutside the list.",
+    ],
+)
+def test_deepreview_prose_after_a_points_code_or_heading_is_not_lazy(strengths):
+    parsed = deepreview.parse_report(f"## Strengths\n{strengths}\n")
+    assert parsed["other"]["Strengths"] == "Outside the list."
+
+
+@pytest.mark.parametrize("separator", ["  ---", "  ***", "  - - -", "  # Heading"])
+def test_deepreview_prose_after_an_indented_break_or_heading_is_not_lazy(separator):
+    parsed = deepreview.parse_report(f"## Strengths\n* Useful.\n{separator}\nOutside the list.\n")
+    assert parsed["other"]["Strengths"] == "Outside the list."
+
+
+class TestLastCopilotCorners:
+    def test_reviewer3_prose_after_an_indented_heading_is_not_lazy(self):
+        body = "- A.\n  # Heading\nOutside.\n  ```py\n  x\n### Fake\nunclosed"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Overview\n\n{body}"
+        parsed = reviewer3.parse_report(report)
+        assert parsed["overview"][0]["text"] == "A.\n# Heading"
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == parsed
+        assert same_review(mapped("reviewer3", written), review)
+
+    def test_cr_only_open_fence_is_found_and_contained(self):
+        from ocrs.mappers.ai import close_fence, open_fence
+
+        text = "Text.\r\r```py\rx"
+        assert open_fence(text) == "```"
+        assert close_fence(text).endswith("\n```")
+        review = human_review()
+        review["findings"] = {
+            "comments": [{"title": "A", "text": text}, {"title": "B", "text": "Next."}]
+        }
+        comments = reviewer3.parse_report(map_to("reviewer3", review))["comments"]
+        assert [c["title"] for c in comments] == ["A", "B"]
+
+    def test_reviewer3_open_tail_after_an_outdented_break_round_trips(self):
+        body = "- A.\n - - -\n   ```py\n   x"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Overview\n\n{body}"
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+        assert same_review(mapped("reviewer3", written), review)
+
+
+@pytest.mark.parametrize("underline", ["  ===", "  --", "  -"])
+def test_deepreview_prose_after_a_setext_heading_in_a_point_is_not_lazy(underline):
+    parsed = deepreview.parse_report(f"## Strengths\n* Heading\n{underline}\nOutside the list.\n")
+    assert parsed["other"]["Strengths"] == "Outside the list."
+    assert len(parsed["strengths"]) == 1
+
+
+@pytest.mark.parametrize("indent", ["  ", "   "])
+def test_reviewer3_summary_led_by_an_item_indented_break_stays_out_of_the_flaws(indent):
+    review = human_review()
+    review["findings"] = {"weaknesses": [{"id": "w1", "text": "Leak."}]}
+    summary = f"{indent}- - -\n{indent}```py\n{indent}x"
+    review["checks"] = [{"kind": "fatal_flaw_screen", "summary": summary, "finding_ids": ["w1"]}]
+    report = reviewer3.parse_report(map_to("reviewer3", review))
+    assert report["fatal_flaws"]["items"] == [{"text": "Leak."}]
+    assert report["fatal_flaws"]["text"].startswith(summary)
+
+
+@pytest.mark.parametrize("brk", ["    - - -", "    * * *"])
+def test_deepreview_break_inside_a_nested_point_ends_its_paragraph(brk):
+    report = f"## Strengths\n* A.\n  - Nested point.\n{brk}\nOutside the list.\n"
+    assert deepreview.parse_report(report)["other"]["Strengths"] == "Outside the list."
+
+
+class TestQuotesAndHeldCode:
+    @pytest.mark.parametrize("parse", ["deepreview", "reviewer3"])
+    def test_nested_break_creates_no_list_level(self, parse):
+        if parse == "deepreview":
+            report = "## Strengths\n* Parent\n  - Child\n    - - -\nOutside the list.\n"
+            assert deepreview.parse_report(report)["other"]["Strengths"] == "Outside the list."
+        else:
+            body = "- Parent\n  - Child\n    - - -\nOutside the list."
+            report = f"# Review Report\n\nA paper\n\n---\n\n### Overview\n\n{body}\n"
+            assert reviewer3.parse_report(report)["other"]["Overview"] == "Outside the list."
+
+    def test_deepreview_break_like_line_inside_code_keeps_the_block_whole(self):
+        report = "## Strengths\n* A.\n ```\n - - -\n ```\n"
+        review = mapped("deepreview", report)
+        written = map_to("deepreview", review)
+        assert deepreview.parse_report(written) == deepreview.parse_report(report)
+        assert same_review(mapped("deepreview", written), review)
+
+    def test_reviewer3_break_like_line_inside_code_keeps_the_block_whole(self):
+        report = "# Review Report\n\nA paper\n\n---\n\n### Overview\n\n- A.\n ```\n - - -\n ```\n"
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+        assert same_review(mapped("reviewer3", written), review)
+
+    @pytest.mark.parametrize("quote", ["  > # Heading", "  > ---"])
+    def test_prose_after_a_quoted_heading_or_break_is_not_lazy(self, quote):
+        report = f"## Strengths\n* A.\n{quote}\nOutside the list.\n"
+        assert deepreview.parse_report(report)["other"]["Strengths"] == "Outside the list."
+
+    def test_a_quoted_paragraph_still_continues_lazily(self):
+        report = "## Strengths\n* A.\n  > quoted\nlazy line\n"
+        parsed = deepreview.parse_report(report)
+        assert "other" not in parsed
+
+
+class TestAncestorsTabsQuotedFences:
+    def test_break_under_a_nested_numbered_item_is_read_against_its_ancestor(self):
+        report = "## Strengths\n* A.\n  1. Nested.\n    - - -\nOutside the list.\n"
+        assert deepreview.parse_report(report)["other"]["Strengths"] == "Outside the list."
+
+    def test_tab_indented_summary_stays_out_of_the_flaws(self):
+        review = human_review()
+        review["findings"] = {"weaknesses": [{"id": "w1", "text": "Leak."}]}
+        summary = "\tNotes.\n\n```py\nx"
+        review["checks"] = [
+            {"kind": "fatal_flaw_screen", "summary": summary, "finding_ids": ["w1"]}
+        ]
+        report = reviewer3.parse_report(map_to("reviewer3", review))
+        assert report["fatal_flaws"]["items"] == [{"text": "Leak."}]
+
+    def test_prose_after_a_quoted_fence_is_not_lazy(self):
+        report = "## Strengths\n* Useful.\n  > ```py\nOutside the list.\n"
+        assert deepreview.parse_report(report)["other"]["Strengths"] == "Outside the list."
+
+
+class TestPreludeAndTail:
+    def test_reviewer3_overview_prelude_and_open_tail_round_trip(self):
+        body = "  Notes.\n\n- A.\n - - -\n   ```py\n   x"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Overview\n\n{body}"
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+        assert same_review(mapped("reviewer3", written), review)
+
+    def test_reviewer3_fatal_flaws_prelude_and_open_tail_round_trip(self):
+        body = "  Notes.\n\n- **Leak** — Test data leaks.\n - - -\n   ```py\n   x"
+        report = f"# Review Report\n\nA paper\n\n---\n\n### Fatal Flaws\n\n{body}"
+        review = mapped("reviewer3", report)
+        written = map_to("reviewer3", review)
+        assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
+        assert same_review(mapped("reviewer3", written), review)
+
+    def test_deepreview_rule_inside_a_points_code_keeps_the_block_whole(self):
+        report = "## Strengths\n* A.\n ```py\n ---\n ```\n"
+        review = mapped("deepreview", report)
+        written = map_to("deepreview", review)
+        assert deepreview.parse_report(written) == deepreview.parse_report(report)
+        assert same_review(mapped("deepreview", written), review)
+
+    def test_tab_led_summary_stays_out_of_the_flaw(self):
+        review = human_review()
+        review["findings"] = {"weaknesses": [{"id": "w1", "text": "Leak."}]}
+        review["checks"] = [
+            {"kind": "fatal_flaw_screen", "summary": "\tNotes.\n\n```py\nx", "finding_ids": ["w1"]}
+        ]
+        report = reviewer3.parse_report(map_to("reviewer3", review))
+        assert report["fatal_flaws"]["items"] == [{"text": "Leak."}]
+
+
+def test_deepreview_prose_after_a_tab_indented_heading_in_a_point_is_not_lazy():
+    parsed = deepreview.parse_report("## Strengths\n* A.\n\t# Heading\nOutside.\n")
+    assert parsed["other"]["Strengths"] == "Outside."
+
+
+def test_deepreview_rule_and_code_inside_a_points_fence_keep_the_block_whole():
+    report = "## Strengths\n* A.\n ```text\n ---\n example()\n ```\n"
+    review = mapped("deepreview", report)
+    written = map_to("deepreview", review)
+    assert deepreview.parse_report(written) == deepreview.parse_report(report)
+    assert same_review(mapped("deepreview", written), review)
+
+
+class TestLinearSplitAndQuotedCode:
+    @staticmethod
+    def count_fence_reads(monkeypatch):
+        from ocrs.mappers import ai
+
+        calls = {"n": 0}
+        inside = ai.Fences.inside
+
+        def counting(self, line):
+            calls["n"] += 1
+            return inside(self, line)
+
+        monkeypatch.setattr(ai.Fences, "inside", counting)
+        return calls
+
+    def test_open_tail_split_reads_each_line_a_bounded_number_of_times(self, monkeypatch):
+        from ocrs.mappers.ai import join_blocks
+
+        # An indented fence opened first leaves every boundary's head open, so no split
+        # qualifies and every boundary is tried
+        paragraphs = 400
+        block = "  ```py\n\n" + "\n\n".join(["  code()"] * paragraphs)
+        calls = self.count_fence_reads(monkeypatch)
+        join_blocks([block, "- Leak."])
+        assert calls["n"] < 20 * paragraphs
+
+    def test_a_final_open_block_is_left_without_splitting(self, monkeypatch):
+        from ocrs.mappers.ai import join_blocks
+
+        block = "  " + "\n\n  ".join(["Notes."] * 400) + "\n\n```py\nx"
+        assert join_blocks(["- Leak.", block]).endswith(block)
+
+    @pytest.mark.parametrize("reader", ["deepreview", "reviewer3"])
+    def test_prose_after_quoted_indented_code_is_not_lazy(self, reader):
+        if reader == "deepreview":
+            parsed = deepreview.parse_report(
+                "## Strengths\n* A.\n\n  >     code()\nOutside the list.\n"
+            )
+            assert parsed["other"]["Strengths"] == "Outside the list."
+        else:
+            body = "- A.\n\n  >     code()\nOutside the list."
+            report = f"# Review Report\n\nA paper\n\n---\n\n### Overview\n\n{body}\n"
+            assert reviewer3.parse_report(report)["other"]["Overview"] == "Outside the list."
+
+    def test_a_quoted_paragraph_still_continues_lazily_after_quoted_code_rules(self):
+        parsed = deepreview.parse_report("## Strengths\n* A.\n  > quoted\nlazy line\n")
+        assert "other" not in parsed
+
+
+@pytest.mark.parametrize(
+    "quote",
+    [
+        "  > Heading\n  > ===",
+        "  > ```py\n  > x = 1",
+        "  > ```py\n  > x = 1\n  > ```",
+        "  > ~~~py\n  > example()",
+    ],
+)
+def test_deepreview_prose_after_a_quoted_heading_or_code_is_not_lazy(quote):
+    parsed = deepreview.parse_report(f"## Strengths\n* A.\n{quote}\nOutside the list.\n")
+    assert parsed["other"]["Strengths"] == "Outside the list."
+
+
+@pytest.mark.parametrize(
+    "quote",
+    [
+        "  > ````py\n  > ```\n  > example()",
+        "  >     code()",
+    ],
+)
+def test_deepreview_quoted_code_ends_the_paragraph(quote):
+    parsed = deepreview.parse_report(f"## Strengths\n* A.\n{quote}\nOutside the list.\n")
+    assert parsed["other"]["Strengths"] == "Outside the list."
+
+
+def test_deepreview_quoted_paragraph_continues_into_indented_quoted_text():
+    parsed = deepreview.parse_report("## Strengths\n* A.\n  > quoted\n  >     more\nlazy line\n")
+    assert "other" not in parsed
+
+
+class TestGateQuoteState:
+    def test_a_nested_quotes_fence_ends_with_the_nested_quote(self):
+        report = "## Strengths\n* A.\n  > > ```py\n  > > x\n  > parent text\nlazy line\n"
+        # The parent quote's text is a paragraph again, so the lazy line continues it
+        assert "other" not in deepreview.parse_report(report)
+
+    @pytest.mark.parametrize(
+        "quote",
+        ["  > quoted\n\n  >     code()", "  > Heading\n  > ===\n  >     code()"],
+    )
+    def test_quoted_code_after_a_quote_paragraph_ended_is_code(self, quote):
+        parsed = deepreview.parse_report(f"## Strengths\n* A.\n{quote}\nOutside the list.\n")
+        assert parsed["other"]["Strengths"] == "Outside the list."
