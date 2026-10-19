@@ -254,21 +254,142 @@ validate_canonical(canonical)
 
 ## Schema Overview
 
-The canonical review schema captures:
+A canonical review is one JSON object. Its top-level fields are grouped below by what
+they describe. Fields marked **required** must be present, and every review also needs
+`referee` or `referees`. Everything else is optional.
 
-| Section | Description |
-|---------|-------------|
-| `provenance` | Source system, original IDs, import timestamps, raw payload |
-| `referee` | Human, AI, or hybrid reviewer with identity mode and expertise |
-| `target` | The version of the work being reviewed: `work_id` as `<type>:<value>` (e.g. `doi:10.1234/abc`), its identifiers, and `relations` to its other versions and forms |
-| `opinion` | Summary text and overall stance |
+**The record**
+
+| Field | Description |
+|-------|-------------|
+| `$schema` | URL of the OCRS version the review follows |
+| `review_id` **required** | ID of the review, unique within the system that produced it |
+| `version` **required** | Version of this review record (e.g. `1.0.0`) |
+| `created_at` **required**, `updated_at` | When the review was written and last changed; for AI reviews, `created_at` is when the run ended |
+| `provenance` **required** | Source system (required), original IDs, the review's own DOI, import time, raw payload, and how the record was mapped |
+
+**Who reviewed what**
+
+| Field | Description |
+|-------|-------------|
+| `referee` or `referees` **one required** | Human, AI, or hybrid reviewer with identity mode, expertise, competing interests, and reproducibility settings; `referees` lists a panel or collaborative review |
+| `target` **required** | The version of the work being reviewed: `work_id` as `<type>:<value>` (e.g. `doi:10.1234/abc`), its identifiers, and `relations` to its other versions and forms |
+| `review_context` | Kind of review, stage (pre- or post-publication), round, who requested it, time spent, and expertise |
+
+**Overall judgment**
+
+| Field | Description |
+|-------|-------------|
+| `opinion` **required** | Summary text, overall stance, high-level reasons, and the work's contributions |
 | `decision` | Acceptance recommendation, independent revision requirement, and confidence |
-| `metrics` | Structured assessments (soundness, clarity, novelty, etc.) |
-| `findings` | Strengths, weaknesses, questions, and requested changes with priority (critical, major, minor, trivial) |
-| `ethics_and_risk` | Ethical concerns and required mitigations |
-| `written_report` | Optional uploaded report document (PDF, Word, Markdown, TXT) |
+| `metrics`, `metric_catalog_ref` | Scores, each on its own scale (soundness, clarity, novelty, etc.), and the catalog that defines their keys |
+| `calibration` | Information for comparing this reviewer's scores with other reviewers', such as leniency and historical accept rate |
 
-For AI referees, the schema supports detailed provenance including model specifications, execution traces, token usage, costs, and safety metadata.
+**Specific assessments**
+
+| Field | Description |
+|-------|-------------|
+| `findings` | Strengths, weaknesses, questions, comments, and requested changes with priority (critical, major, minor, trivial) |
+| `claim_assessments` | The work's claims one by one, each with whether the evidence supports it |
+| `artifact_assessments` | Availability and adequacy of the work's code, data, models, and other materials |
+| `checks` | Systematic checks run on the work, such as reference verification or AI-text detection, including those that found nothing |
+| `ethics_and_risk` | Ethical concerns and required mitigations |
+
+**Text and documents**
+
+| Field | Description |
+|-------|-------------|
+| `narrative` | Free text as named fields, for systems that collect it that way: summary, detailed review, questions for the authors, confidential comments to editors |
+| `text_format` | How to read the review's free text: its markup and math notation |
+| `written_report` | Uploaded report document (PDF, Word, Markdown, TXT) |
+
+**Integrity and extension**
+
+| Field | Description |
+|-------|-------------|
+| `signatures` | Cryptographic signatures, so readers can check who wrote the review and that it was not changed |
+| `extensions` | Data with no OCRS field, kept under one key per source format (e.g. `extensions.openaireview`) |
+
+For AI referees, the schema supports detailed provenance including model specifications, execution traces, token usage, costs, and safety metadata. Review-run seeds, for AI and human reviewers alike, go in `referee.reproducibility.seed` and `referee.reproducibility.seeds`. They describe the review process, not experiments in the reviewed work, and an explicit stage seed overrides the whole-review seed for that stage.
+
+### Acceptance and revision requirements
+
+`decision.recommendation` describes acceptance, while `decision.revision_requirement`
+independently describes required revision (`none`, `minor`, `major`, or `unspecified`
+when a revision is requested without stating its extent). Omission means the source
+provided no revision requirement; it does not mean `none`.
+
+```json
+{
+  "decision": {
+    "recommendation": "weak_accept",
+    "revision_requirement": "minor"
+  }
+}
+```
+
+### Confidence in a metric score
+
+Use `metrics[].uncertainty.credence` for overall confidence in a score, from 0 to 1,
+alongside an optional `interval` and `rationale`. Metrics within claim assessments
+work the same way.
+
+```json
+{
+  "metrics": [
+    {
+      "key": "overall",
+      "label": "Overall",
+      "scale": {"type": "ordinal", "min": 1, "max": 5},
+      "value": 4,
+      "uncertainty": {
+        "credence": 0.8,
+        "interval": {"low": 3, "high": 5},
+        "rationale": "The evaluation leaves some open questions."
+      }
+    }
+  ]
+}
+```
+
+### Linking assessments to passages
+
+Claims, findings, metrics, and artifact assessments share `evidence_links`.
+Each link retains the required `type` and free-text `ref`; its optional `location`
+adds `section`, a one-based `page`, the referenced document's `version`, and a
+`text_anchor`. An anchor requires `exact` text and can include the immediately
+surrounding `prefix` and `suffix` to distinguish repeated sentences. Consumers
+resolve the anchor against that document version; schema validation checks the
+structure, not whether the passage exists.
+
+```json
+{
+  "artifact_assessments": [
+    {
+      "artifact_type": "code",
+      "availability": "public",
+      "assessment": "adequate",
+      "ref": "https://example.com/code",
+      "evidence_links": [
+        {
+          "type": "paper_section",
+          "ref": "Section 3.2, page 5, implementation details",
+          "location": {
+            "section": "3.2 Methods",
+            "page": 5,
+            "version": "v2",
+            "text_anchor": {
+              "exact": "We release the training code.",
+              "prefix": "Implementation details. ",
+              "suffix": " See Appendix A."
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+```
 
 ### Written Report Upload
 
@@ -523,100 +644,3 @@ Apache License 2.0 - see [LICENSE](LICENSE) for details.
 ## Acknowledgments
 
 The initial version of OCRS was created by [Valency Systems Inc.](https://valency.io)
-
-### Acceptance and revision requirements
-
-`decision.recommendation` describes acceptance, while `decision.revision_requirement`
-independently describes required revision (`none`, `minor`, `major`, or `unspecified`
-when a revision is requested without stating its extent). Omission means the source
-provided no revision requirement; it does not mean `none`.
-
-```json
-{
-  "decision": {
-    "recommendation": "weak_accept",
-    "revision_requirement": "minor"
-  }
-}
-```
-
-Migrating from v0.4.0: move `minor_revision` and `major_revision` from
-`decision.recommendation` to `decision.revision_requirement` as `minor` and `major`.
-Move `revise` to `revision_requirement: "unspecified"`. Leave `recommendation` absent
-unless the source separately states an acceptance judgment. The mappers perform
-this split on import. Export to a source with one decision field prioritizes a
-requested revision over acceptance and is lossy when both are present.
-
-### Linking assessments to passages
-
-Claims, findings, metrics, and artifact assessments share `evidence_links`.
-Each link retains the required `type` and free-text `ref`; its optional `location`
-adds `section`, a one-based `page`, the referenced document's `version`, and a
-`text_anchor`. An anchor requires `exact` text and can include the immediately
-surrounding `prefix` and `suffix` to distinguish repeated sentences. Consumers
-resolve the anchor against that document version; schema validation checks the
-structure, not whether the passage exists. Existing links remain valid.
-
-```json
-{
-  "artifact_assessments": [
-    {
-      "artifact_type": "code",
-      "availability": "public",
-      "assessment": "adequate",
-      "ref": "https://example.com/code",
-      "evidence_links": [
-        {
-          "type": "paper_section",
-          "ref": "Section 3.2, page 5, implementation details",
-          "location": {
-            "section": "3.2 Methods",
-            "page": 5,
-            "version": "v2",
-            "text_anchor": {
-              "exact": "We release the training code.",
-              "prefix": "Implementation details. ",
-              "suffix": " See Appendix A."
-            }
-          }
-        }
-      ]
-    }
-  ]
-}
-```
-
-### Confidence in a metric score
-
-Use `metrics[].uncertainty.credence` for overall confidence in a score, from 0 to 1.
-Migrating from v0.4.0 requires renaming `uncertainty.confidence` to
-`uncertainty.credence`; the surrounding `uncertainty` object, `interval`, and
-`rationale` are unchanged. This also applies to metrics within claim assessments.
-`decision.confidence` and finding/claim `probability` and `credence` are unchanged.
-
-```json
-{
-  "metrics": [
-    {
-      "key": "overall",
-      "label": "Overall",
-      "scale": {"type": "ordinal", "min": 1, "max": 5},
-      "value": 4,
-      "uncertainty": {
-        "credence": 0.8,
-        "interval": {"low": 3, "high": 5},
-        "rationale": "The evaluation leaves some open questions."
-      }
-    }
-  ]
-}
-```
-
-### Review-run seeds
-
-Review-run seeds belong in `referee.reproducibility.seed` and
-`referee.reproducibility.seeds`, including for AI reviewers. These describe the
-review process, not experiments in the reviewed work. An explicit stage seed
-overrides the whole-review seed for that stage. When migrating from v0.4.0, move
-`referee.ai_referee.execution.seed` and `seeds` to `referee.reproducibility`;
-if both locations were populated, resolve conflicts using the actual run configuration.

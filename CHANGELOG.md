@@ -172,19 +172,30 @@ All additions are optional, so every 0.5.0 review is valid under 0.6.0.
   conference proceedings.
 
 - Renamed metric `uncertainty.confidence` to `uncertainty.credence`, retaining the
-  0–1 bounds, interval, and rationale. Existing records must rename this nested key.
+  0–1 bounds, interval, and rationale. Existing records must rename this nested key,
+  including in metrics within claim assessments. `decision.confidence` and finding and
+  claim `probability` and `credence` are unchanged.
 
 - Added shared structured evidence locations with section, one-based page, document
   version, and exact text anchors with surrounding context. Artifact assessments now
-  support the same `evidence_links` as claims, findings, and metrics.
+  support the same `evidence_links` as claims, findings, and metrics. Existing links
+  remain valid.
 
 - Split acceptance recommendations from `decision.revision_requirement`, with `none`,
   `minor`, `major`, and `unspecified` options. Revision-only source decisions no longer
   imply an acceptance judgment. This replaces the revision values in the old enum.
+  Existing records must move `minor_revision` and `major_revision` from
+  `decision.recommendation` to `decision.revision_requirement` as `minor` and `major`,
+  and `revise` to `unspecified`, leaving `recommendation` absent unless the source
+  separately states an acceptance judgment. The mappers make this split on import.
+  Export to a source with one decision field puts a requested revision ahead of
+  acceptance, so it loses the acceptance judgment when both are present.
 - Updated decision mappers, examples, and migration guidance. Published v0.4.0 is unchanged.
 - Removed duplicate `seed` and `seeds` fields from `ai_referee.execution`.
   Review-run seeds live in `referee.reproducibility`; explicit stage seeds override
-  the whole-review seed. Existing records must move execution seeds to that location.
+  the whole-review seed. Existing records must move `ai_referee.execution.seed` and
+  `seeds` to that location; where both locations were populated, resolve conflicts using
+  the actual run configuration.
 - `target.identifiers` takes every identifier type Crossref uses for related items:
   `handle`, `ark`, `isbn`, `issn`, `ecli`, `accession` (with an optional `database`),
   `purl` and `uuid`. All are optional, so existing records stay valid. `issn` names the
