@@ -34,7 +34,7 @@ OCRS provides bidirectional mappers for converting between the canonical schema 
 
 | System | Source (`from`) | Target (`to`) | Notes |
 |--------|:---------------:|:-------------:|-------|
-| **OpenReview** | Full | Full | Conference reviews with structured findings and metrics |
+| **OpenReview** | Full | Full | Conference reviews with structured findings and metrics; also [a saved forum page](#reviews-from-a-saved-openreview-page) |
 | **CMT** | Full | Full | Microsoft Conference Management Toolkit exports |
 | **HotCRP** | Full | Basic | Conference reviews; `to_hotcrp` is a minimal stub |
 | **Editorial Manager** | Full | Basic | Journal manuscript system; `to_editorialmanager` is a minimal stub |
@@ -81,6 +81,29 @@ validate_canonical(canonical)
 
 note_like = map_to("openreview", canonical)
 ```
+
+## Reviews from a saved OpenReview page
+
+An OpenReview forum page lists the submission's reviews, the authors' rebuttals and the reviewers' replies. Save the page from your browser once the replies have loaded, and `scripts/openreview_page_to_ocrs.py` writes one OCRS review per Official Review:
+
+```bash
+uv run scripts/openreview_page_to_ocrs.py "Paper title | OpenReview.html" -o reviews/ --timezone America/Los_Angeles
+```
+
+The page shows dates without a time zone, so give the one you viewed it in (an IANA name, an offset written `--timezone=-07:00`, or `local`); the default is UTC. The same conversion is available in Python:
+
+```python
+from ocrs import validate_canonical
+from ocrs.mappers.openreview_page import reviews_from_forum_page
+
+reviews = reviews_from_forum_page(openreview_forum_page)  # the page's HTML
+for review in reviews:
+    validate_canonical(review)
+```
+
+Each review links back to the page. `provenance.source_url` opens the forum at that review, and `extensions.openreview` keeps the forum (title, authors, decision), the note as shown (heading, signature, date line) and a SHA-256 of the saved page. `extensions.openreview.source_fields` lists, for each OCRS value, the page field it came from (`findings.weaknesses[2]` from "Strengths And Weaknesses", under the heading "Minor"). Fields with no OCRS field are kept in `unmapped_fields`, and the rebuttals and replies below the review, in `replies`, each with its URL.
+
+The review's text is copied as Markdown. Its Summary becomes `opinion.summary`; the points under its Strengths, Weaknesses and Minor headings become `findings`, with the heading in `group` and `severity: minor` for Minor; Questions become `findings.questions`; Rating, Confidence and the other numeric scores become `metrics`; Final Justification becomes `decision.summary_rationale`. A page names a score's label (`5: Accept: ...`) but not its scale, so a metric keeps the value and the label as an anchor, with no `normalized` value, and the Rating's first words (`Accept`, `Borderline reject`) set `decision.recommendation`. The saved page holds rendered mathematics, not the reviewer's TeX, so formulas are rebuilt from its MathML and may differ from what the reviewer typed.
 
 ## AI reviewers
 

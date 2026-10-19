@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<title>Sparse Attention That Learns Where To Look | OpenReview</title>
+<meta name="citation_title" content="Sparse Attention That Learns Where To Look">
+<meta name="citation_author" content="Ada Example">
+<meta name="citation_author" content="Ben Sample">
+<meta name="citation_pdf_url" content="https://openreview.net/pdf?id=Fx0rumP4ge">
+<meta name="citation_conference_title" content="The Example Conference on Machine Learning">
+<script>self.__next_f.push([1,"<div class=\"note\" data-id=\"NOTAREALNOTE\">"])</script>
+<style>.note { color: red; }</style>
+</head>
+<body>
+<div id="__next">
+<div id="bibtex-modal" class="modal fade"><div class="modal-body"><pre class="bibtex-content"></pre></div></div>
+<div id="or-banner" class="banner"><div class="container"><a href="https://openreview.net/group?id=Example.cc/2025/Conference"><img class="icon"> Go to <strong>Example 2025 Conference</strong> homepage</a></div></div>
+<main id="content">
+<div class="forum-note">
+  <div class="forum-title"><h2 class="citation_title">Sparse Attention That Learns Where To Look</h2>
+    <div class="forum-content-link"><a class="citation_pdf_url" href="https://openreview.net/pdf?id=Fx0rumP4ge"><img></a></div></div>
+  <div class="forum-authors"><h3><span>
+    <a href="https://openreview.net/profile?id=~Ada_Example1">Ada Example</a>,
+    <a href="https://openreview.net/profile?id=~Ben_Sample2">Ben Sample</a></span></h3></div>
+  <div class="forum-meta">
+    <span class="date item">Published: 18 Sept 2025, Last Modified: 09 Jul 2026</span>
+    <span class="item"><span class="glyphicon glyphicon-folder-open"></span> Example 2025 poster</span>
+    <span class="item"><a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></span>
+  </div>
+  <div class="note-content">
+    <div><strong class="note-content-field disable-tex-rendering">Keywords:</strong><span class="note-content-value">attention, efficiency</span></div>
+    <div><strong class="note-content-field disable-tex-rendering">Abstract:</strong><div class="note-content-value markdown-rendered"><p>We predict attention sparsity.</p></div></div>
+    <div><strong class="note-content-field disable-tex-rendering">Supplementary Material:</strong><span class="note-content-value"><a href="https://openreview.net/attachment?id=Fx0rumP4ge&amp;name=supplementary_material" class="attachment-download-link"><span class="glyphicon"></span> zip</a></span></div>
+  </div>
+</div>
+<div id="forum-replies">
+
+<div class="note  depth-odd" data-id="DEC00000001">
+  <div class="heading"><h4><strong>Paper Decision</strong></h4></div>
+  <div class="subheading"><span class="invitation highlight">Decision</span><span class="signatures">by <span>Program Chairs</span></span>
+    <span class="created-date"><span class="glyphicon"></span> 17 Sept 2025, 05:55 (modified: 28 Oct 2025, 23:20)</span><span class="readers">Everyone</span></div>
+  <div class="note-content-container"><div class="note-content">
+    <div><strong class="note-content-field">Decision:</strong><span class="note-content-value">Accept (poster)</span></div>
+    <div><strong class="note-content-field">Comment:</strong><div class="note-content-value markdown-rendered"><p>The reviewers agree.</p></div></div>
+  </div></div>
+</div>
+
+<div class="note  depth-odd" data-id="REV00000001">
+  <div class="heading"><h4><span>Official Review of Submission12 by Reviewer abcd</span></h4></div>
+  <div class="subheading"><span class="invitation highlight">Official Review</span><span class="signatures">by <span>Reviewer abcd</span></span>
+    <span class="created-date"><span class="glyphicon"></span> 03 Jul 2025, 02:28 (modified: 28 Oct 2025, 20:28)</span><span class="readers">Everyone</span></div>
+  <div class="note-content-container"><div class="note-content">
+    <div><strong class="note-content-field">Summary:</strong><div class="note-content-value markdown-rendered">
+      <p>The paper predicts attention sparsity with a small network; the cost is
+        <mjx-container class="MathJax" display="false"><mjx-math class="MJX-TEX"><mjx-mi><mjx-c class="mjx-c1D442"></mjx-c></mjx-mi></mjx-math><mjx-assistive-mml><math><mi>O</mi><mo stretchy="false">(</mo><mi>n</mi><mo stretchy="false">)</mo></math></mjx-assistive-mml></mjx-container>
+        in the length <em>n</em>. Code is at <a href="https://example.org/code">https://example.org/code</a>.</p>
+    </div></div>
+    <div><strong class="note-content-field">Strengths And Weaknesses:</strong><div class="note-content-value markdown-rendered">
+      <h4><strong>Strengths</strong></h4>
+      <ol><li><strong>Novelty</strong>: the predictor adapts to the input.</li><li>Strong results on all tasks.</li></ol>
+      <h4><strong>Weaknesses</strong></h4>
+      <ol><li>Training overhead of about 15%, which is
+        <mjx-container class="MathJax" display="false"><mjx-math></mjx-math><mjx-assistive-mml><math><msub><mrow><mi>T</mi></mrow><mrow><mi>tr</mi></mrow></msub></math></mjx-assistive-mml></mjx-container>
+        in the paper's notation.<ul><li>Detail one.</li></ul></li>
+        <li>No comparison with Flash Attention.</li></ol>
+      <h4>Minor</h4>
+      <ol><li>Eq. 7 is missing a summation index.</li></ol>
+      <p>[1] A. Reference. A paper. 2024.</p>
+    </div></div>
+    <div><strong class="note-content-field">Quality:</strong><span class="note-content-value">3: good</span></div>
+    <div><strong class="note-content-field">Clarity:</strong><span class="note-content-value">4: excellent</span></div>
+    <div><strong class="note-content-field">Originality:</strong><span class="note-content-value">3: good</span></div>
+    <div><strong class="note-content-field">Questions:</strong><div class="note-content-value markdown-rendered">
+      <p>Please answer:</p><ol><li>How sensitive is it to the predictor?</li><li>What are the wall-clock times?</li></ol></div></div>
+    <div><strong class="note-content-field">Limitations:</strong><div class="note-content-value markdown-rendered"><p>Yes.</p></div></div>
+    <div><strong class="note-content-field">Rating:</strong><span class="note-content-value">5: Accept: Technically solid paper, with high impact.</span></div>
+    <div><strong class="note-content-field">Confidence:</strong><span class="note-content-value">4: You are confident in your assessment.</span></div>
+    <div><strong class="note-content-field">Ethical Concerns:</strong><span class="note-content-value">NO or VERY MINOR ethics concerns only</span></div>
+    <div><strong class="note-content-field">Code Of Conduct Acknowledgement:</strong><span class="note-content-value">Yes</span></div>
+    <div><strong class="note-content-field">Final Justification:</strong><div class="note-content-value markdown-rendered"><p>The rebuttal answered my questions.</p></div></div>
+  </div></div>
+  <div class="ForumReplyForm_container"><button><span>Public Comment</span></button></div>
+
+  <div class="note  depth-even" data-id="REB00000001">
+    <div class="heading"><h4><span>Rebuttal by Authors</span></h4></div>
+    <div class="subheading"><span class="invitation highlight">Rebuttal</span><span class="signatures">by <span>Authors</span></span>
+      <span class="created-date"><span class="glyphicon"></span> 31 Jul 2025, 00:53 (modified: 28 Oct 2025, 22:35)</span><span class="readers">Everyone</span></div>
+    <div class="note-content-container"><div class="note-content">
+      <div><strong class="note-content-field">Rebuttal:</strong><div class="note-content-value markdown-rendered">
+        <blockquote><p>How sensitive is it to the predictor?</p></blockquote>
+        <p>Not very:</p>
+        <table><thead><tr><th>Predictor</th><th>Score</th></tr></thead><tbody><tr><td>Small</td><td>0.91</td></tr></tbody></table>
+        <p>Display math:
+        <mjx-container class="MathJax" display="true"><mjx-math></mjx-math><mjx-assistive-mml><math display="block"><mfrac><mi>a</mi><msqrt><mi>b</mi></msqrt></mfrac></math></mjx-assistive-mml></mjx-container></p>
+      </div></div>
+    </div></div>
+    <div class="note  depth-odd" data-id="ACK00000001">
+      <div class="heading"><h4><span>Mandatory Acknowledgement by Reviewer abcd</span></h4></div>
+      <div class="subheading"><span class="invitation highlight">Mandatory Acknowledgement</span><span class="signatures">by <span>Reviewer abcd</span></span>
+        <span class="created-date"><span class="glyphicon"></span> 04 Aug 2025, 23:04 (modified: 12 Nov 2025, 08:24)</span><span class="readers">Everyone</span></div>
+      <div class="note-content-container"><div class="note-content">
+        <div><strong class="note-content-field">Mandatory Acknowledgement:</strong><span class="note-content-value">I have read the rebuttal.</span></div>
+      </div></div>
+    </div>
+  </div>
+</div>
+
+<div class="note  depth-odd" data-id="REV00000002">
+  <div class="heading"><h4><span>Official Review of Submission12 by Reviewer wxyz</span></h4></div>
+  <div class="subheading"><span class="invitation highlight">Official Review</span><span class="signatures">by <span>Reviewer wxyz</span></span>
+    <span class="created-date"><span class="glyphicon"></span> 01 Jul 2025, 08:16</span><span class="readers">Everyone</span></div>
+  <div class="note-content-container"><div class="note-content">
+    <div><strong class="note-content-field">Summary:</strong><div class="note-content-value markdown-rendered"><p>A learned sparsity predictor.</p></div></div>
+    <div><strong class="note-content-field">Strengths And Weaknesses:</strong><div class="note-content-value markdown-rendered">
+      <p>Strengths:</p>
+      <ol><li>Clear writing.</li></ol>
+      <p>Weaknesses:</p>
+      <ol><li>Only one dataset.</li><li>No ablation of the predictor.</li></ol>
+    </div></div>
+    <div><strong class="note-content-field">Rating:</strong><span class="note-content-value">2: Reject: For instance, a paper with technical flaws.</span></div>
+  </div></div>
+</div>
+
+</div>
+</main>
+</div>
+</body></html>

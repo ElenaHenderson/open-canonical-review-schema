@@ -1100,7 +1100,8 @@ class TestPR47Followups:
         deep = "## Summary\nText.\n\n- - -\n\n  ```\n## Weaknesses\n```\n\n## Strengths\n* S.\n"
         assert sorted(deepreview.parse_report(deep)) == ["strengths", "summary"]
         appendix = "* * *\n\n  ```\n### Fatal Flaws\n- **Fake** — Not a flaw.\n```"
-        r3 = f"# Review Report\n\nA paper\n\n---\n\n### Appendix\n\n{appendix}\n"
+        overview = "### Overview\n\n- **A contribution** — Text.\n\n"
+        r3 = f"# Review Report\n\nA paper\n\n---\n\n{overview}### Appendix\n\n{appendix}\n"
         review = mapped("reviewer3", r3)
         assert "checks" not in review and "findings" not in review
 
@@ -1188,7 +1189,8 @@ class TestPR48Review:
 
     def test_reviewer3_comments_prose_ending_in_open_code_round_trips(self):
         body = "Pending comments.\n```py\nx"
-        report = f"# Review Report\n\nA paper\n\n---\n\n### Reviewer Comments\n\n{body}"
+        overview = "### Overview\n\n- **A contribution** — Text.\n\n"
+        report = f"# Review Report\n\nA paper\n\n---\n\n{overview}### Reviewer Comments\n\n{body}"
         review = mapped("reviewer3", report)
         written = map_to("reviewer3", review)
         assert reviewer3.parse_report(written) == reviewer3.parse_report(report)
@@ -1202,12 +1204,13 @@ class TestPR48Review:
         ("deepreview", "# HIGH LEVEL SUMMARY\n---\nPending review.\n```py\nx"),
     ],
 )
-def test_preamble_only_report_ending_in_open_code_round_trips(source, report):
+def test_preamble_only_report_ending_in_open_code_has_no_content(source, report):
+    # Text above the first section is kept, not mapped, so a report of only that says
+    # nothing about the work: content can't follow an open fence without being swallowed
     parse = {"reviewer3": reviewer3.parse_report, "deepreview": deepreview.parse_report}[source]
-    review = mapped(source, report)
-    written = map_to(source, review)
-    assert parse(written) == parse(report)
-    assert same_review(mapped(source, written), review)
+    assert parse(report)["other"] == {"preamble": "Pending review.\n```py\nx"}
+    with pytest.raises(ValueError, match="no review content"):
+        mapped(source, report)
 
 
 def test_reviewer3_reference_table_then_open_ended_prose_round_trips():
@@ -1233,7 +1236,10 @@ def test_reviewer3_indented_open_summary_stays_out_of_the_flaws(indent):
 
 @pytest.mark.parametrize("indent", ["  ", "   "])
 def test_reviewer3_overview_of_only_indented_open_code_round_trips(indent):
-    report = f"# Review Report\n\nA paper\n\n---\n\n### Overview\n\n{indent}```py\n{indent}x"
+    # The flaw gives the review content; the Overview, written first by default, goes last
+    flaws = "### Fatal Flaws\n\n- **Leak** — Text.\n\n"
+    overview = f"### Overview\n\n{indent}```py\n{indent}x"
+    report = f"# Review Report\n\nA paper\n\n---\n\n{flaws}{overview}"
     review = mapped("reviewer3", report)
     written = map_to("reviewer3", review)
     assert reviewer3.parse_report(written) == reviewer3.parse_report(report)

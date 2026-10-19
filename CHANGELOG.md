@@ -50,6 +50,13 @@ mistake, is invalid. Every other 0.6.3 review is valid under 0.7.0.
   columns are kept keeps its number with them. DeepReview headings inside fenced code are
   code, not sections. Mapper versions: OpenAIReview, DeepReview and Reviewer3 1.1.0.
 - Python 3.12 or later is required (was 3.10), and CI tests on Python 3.12, 3.13 and 3.14.
+- `ocrs.mappers.openreview_page` reads a saved OpenReview forum page and maps each Official
+  Review on it to an OCRS review (`reviews_from_forum_page`), and `scripts/openreview_page_to_ocrs.py`
+  writes them as JSON files. Each review's `provenance.source_url` opens the forum at that
+  review, and `extensions.openreview` records the page field behind each OCRS value
+  (`source_fields`), the fields with no OCRS field, the replies below the review and a hash of
+  the page. Strengths, Weaknesses, Minor and Questions become findings; scores become metrics
+  with their labels as anchors, since a page does not state a scale.
 
 ### Mapper fixes
 
