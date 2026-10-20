@@ -46,6 +46,35 @@ KNOWN_TEXT_KEYS = {
     "detailed_comments",
 }
 
+# HotCRP's API gives a review object (`"object": "review"`) with the review's ID as `rid`, its
+# last change as `modified_at` (`updated_at`: it says no time of submission), the reviewer as
+# `reviewer` (a name) and `reviewer_email`, and each review-form field under its UID: `OveMer`,
+# `RevExp`, `PapSum`, `ComAut` and `ComPC` in HotCRP's default form. These are the fields of
+# the same names the reader takes elsewhere.
+API_FIELDS = {
+    "rid": "id",
+    "reviewer_email": "reviewerEmail",
+    "OveMer": "overall_merit",
+    "RevExp": "reviewer_expertise",
+    "PapSum": "paper_summary",
+    "ComAut": "comments",
+    "ComPC": "confidential_comments",
+}
+
+
+def _with_known_names(payload: dict[str, Any]) -> dict[str, Any]:
+    """The review with HotCRP's API field names as the names the reader takes, and, in an API
+    review object, the reviewer's name, which it gives as a string, as `reviewer.name`."""
+    out = {k: v for k, v in payload.items() if k not in API_FIELDS}
+    for api_name, name in API_FIELDS.items():
+        if api_name in payload and name not in out:
+            out[name] = payload[api_name]
+    reviewer = out.get("reviewer")
+    if payload.get("object") == "review" and isinstance(reviewer, str) and reviewer.strip():
+        out["reviewer"] = {"name": reviewer.strip()}
+    return out
+
+
 # HotCRP expertise level mapping (common scales)
 EXPERTISE_LEVEL_MAP = {
     1: "not_familiar",
@@ -221,6 +250,7 @@ def from_hotcrp(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str,
     amap = alias_map(catalog)
     idx = {m["key"].casefold(): m for m in catalog.get("metrics", [])}
 
+    raw, payload = payload, _with_known_names(payload)
     created = _extract_time(payload)
     identifiers = _build_target_identifiers(payload)
     reviewer_id = _get_reviewer_id(payload)
@@ -257,6 +287,12 @@ def from_hotcrp(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str,
         "review_id": f"hotcrp_{review_id}",
         "version": "1.0.0",
         "created_at": created,
+        **(
+            {"updated_at": updated}
+            if isinstance(payload.get("modified_at"), (int, float, str))
+            and (updated := parse_date_flexible(payload["modified_at"])) != created
+            else {}
+        ),
         "provenance": provenance,
         "referee": referee,
         "target": {
@@ -270,7 +306,7 @@ def from_hotcrp(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str,
     }
 
     if keep_raw:
-        out["provenance"]["raw_payload"] = payload
+        out["provenance"]["raw_payload"] = raw
 
     # Narrative mapping
     narrative: dict[str, Any] = {}
@@ -523,6 +559,9 @@ def to_hotcrp(canonical: dict[str, Any]) -> dict[str, Any]:
     submitted_at = iso_to_epoch(canonical.get("created_at"))
     if submitted_at is not None:
         out["submitted_at"] = submitted_at
+    modified_at = iso_to_epoch(canonical.get("updated_at"))
+    if modified_at is not None:
+        out["modified_at"] = modified_at
 
     # The reviewer, as the reader takes it
     referee = canonical.get("referee", {}) or {}
