@@ -14,16 +14,21 @@ from ..scales import normalized_to_recommendation
 from ..schema import schema_id
 from ..util import (
     epoch_ms_to_iso,
+    field_name,
     first_paragraph,
     first_present_item,
+    from_source,
     guess_scale_from_value,
+    is_number,
     is_score_field,
+    iso_to_epoch,
     map_recommendation_from_numeric,
     map_recommendation_from_text,
     match_alias,
     normalize_linear,
     now_iso,
     parse_numeric_prefix,
+    score_with_label,
     source_decision,
     source_work_id,
     split_decision,
@@ -419,7 +424,7 @@ def from_openreview(
             out["metrics"].append(
                 {
                     "key": "overall",
-                    "label": "Overall Assessment",
+                    "label": rec_key.replace("_", " ").strip(),
                     "aspect": "overall",
                     "scale": scale,
                     "value": num,
@@ -430,6 +435,8 @@ def from_openreview(
                     ),
                 }
             )
+            if label:
+                out["metrics"][-1]["justification"] = label
         elif isinstance(rec_raw, str):
             decision["recommendation"] = map_recommendation_from_text(rec_raw) or "borderline"
     if conf_raw is not None:
@@ -442,7 +449,7 @@ def from_openreview(
             out["metrics"].append(
                 {
                     "key": "confidence",
-                    "label": "Reviewer Confidence",
+                    "label": conf_key.replace("_", " ").strip(),
                     "aspect": "confidence",
                     "scale": scale,
                     "value": num,
@@ -515,18 +522,32 @@ def from_openreview(
     return out
 
 
+# The kind of note a review type is, and the fields that note writes its text and its
+# recommendation in
+_NOTE_KINDS = {v: k for k, v in _REVIEW_TYPES.items()}
+_TEXT_FIELD = {"Meta_Review": "metareview", "Decision": "comment"}
+_RECOMMENDATION_FIELD = {"Decision": "decision"}
+
+
 def to_openreview(canonical: dict[str, Any]) -> dict[str, Any]:
-    # Lossy: produce a Note-like dict with a 'content' review form
+    """A note-like dict with a review form in `content`.
+
+    A review read from OpenReview is given back as its note held it: its scores under their
+    own field names with their labels ("7: Accept, but not among top submissions"), its
+    time, and, for a meta-review or a decision, its kind and the fields that kind writes, so
+    that reading the note gives the same review. A review from elsewhere gives its scores
+    under their catalog keys, and its recommendation as text.
+    """
+    same_source = from_source(canonical, "openreview")
+    kind = _NOTE_KINDS.get((canonical.get("review_context") or {}).get("review_type"))
     content: dict[str, Any] = {}
+
     # Map narrative/opinion
     op = canonical.get("opinion", {}) or {}
-    if isinstance(op.get("summary"), str):
-        content["summary"] = op["summary"]
-    if isinstance(op.get("text"), str):
-        content["review"] = op["text"]
     nar = canonical.get("narrative", {}) or {}
-    if "detailed_review" in nar and isinstance(nar["detailed_review"], str):
-        content.setdefault("review", nar["detailed_review"])
+    text = op.get("text") if isinstance(op.get("text"), str) else nar.get("detailed_review")
+    if isinstance(text, str):
+        content[_TEXT_FIELD.get(kind, "review")] = text
     if "confidential_to_editors" in nar and isinstance(nar["confidential_to_editors"], str):
         content["confidential_comments"] = nar["confidential_to_editors"]
 
@@ -538,36 +559,99 @@ def to_openreview(canonical: dict[str, Any]) -> dict[str, Any]:
                 f.get("text") for f in findings[k] if isinstance(f, dict) and f.get("text")
             ]
 
-    # Decision recommendation
-    dec = source_decision(canonical.get("decision", {}) or {})
-    if isinstance(dec.get("recommendation"), str):
-        content["recommendation"] = dec["recommendation"].replace("_", " ").title()
+    # The summary, unless the reader would take the same one from the text or the findings
+    summary = nar.get("summary") if isinstance(nar.get("summary"), str) else op.get("summary")
+    if isinstance(summary, str) and (
+        "summary" in nar or summary != _summary_the_reader_infers(content)
+    ):
+        content = {"summary": summary, **content}
 
-    # Metrics back to fields (use key as field name)
+    # Scores, each under its own field. A review read from OpenReview keeps its fields and
+    # labels; one from elsewhere is written under the catalog's keys
+    dec = source_decision(canonical.get("decision", {}) or {})
+    rec = dec.get("recommendation") if isinstance(dec.get("recommendation"), str) else None
+    rec_label = rec.replace("_", " ").title() if rec else None
+    overall_written = False
+    # Whether the overall score was written to a field the reader takes the recommendation from
+    overall_says_recommendation = False
     for m in canonical.get("metrics", []) or []:
         if not isinstance(m, dict):
             continue
         key = m.get("key")
         val = m.get("value")
-        if key and val is not None:
-            # avoid overwriting recommendation
-            if key in {"overall", "confidence"}:
-                # mirror common OpenReview fields
-                if key == "overall":
-                    content.setdefault("rating", val)
-                else:
-                    content.setdefault("confidence", val)
-            else:
-                content.setdefault(key, val)
+        if not key or val is None:
+            continue
+        name = field_name(m["label"]) if same_source and isinstance(m.get("label"), str) else ""
+        if key == "overall":
+            # The reader takes a recommendation from the overall score's field and reads only a
+            # number there: any other value would hide the review's recommendation, or make one
+            # up, so it is left out
+            if overall_written or not is_number(val):
+                continue
+            overall_written = True
+            # A score read from OpenReview goes back to its own field: on a field the reader
+            # takes no recommendation from (`overall_score`), it says none
+            field = name or "rating"
+            if field not in RECOMMENDATION_KEYS:
+                content[field] = score_with_label(m, form_gives_labels=True)
+                continue
+            overall_says_recommendation = True
+            # The score's label says the recommendation, read first; a label that would
+            # read back as another gives way to the decision's
+            label = m.get("justification") if same_source else None
+            scale = m.get("scale") if same_source else None
+            if rec and _recommendation_read_back(val, label, scale) != rec:
+                label = rec_label
+            labelled = {**m, "justification": label}
+            content[field] = score_with_label(labelled, form_gives_labels=same_source)
+        elif key == "confidence":
+            field = name if name in CONFIDENCE_KEYS else "confidence"
+            written = score_with_label(m, form_gives_labels=True) if same_source else val
+            content.setdefault(field, written)
+        else:
+            written = score_with_label(m, form_gives_labels=True) if same_source else val
+            field = name or key
+            # The fields the reader takes the recommendation and the confidence from are theirs
+            if field not in RECOMMENDATION_KEYS and field not in CONFIDENCE_KEYS:
+                content.setdefault(field, written)
 
-    note = {
+    # Without a score to carry it, the recommendation has its own field
+    if rec and not overall_says_recommendation:
+        content[_RECOMMENDATION_FIELD.get(kind, "recommendation")] = rec_label
+
+    note: dict[str, Any] = {
         "id": canonical.get("review_id"),
         "forum": source_work_id(canonical.get("target", {})),
         "content": content,
-        "signatures": (
-            [canonical.get("referee", {}).get("referee_id")]
-            if canonical.get("referee", {}).get("referee_id")
-            else []
-        ),
     }
+    referee_id = canonical.get("referee", {}).get("referee_id")
+    if referee_id:
+        note["signatures"] = [referee_id]
+    cdate = iso_to_epoch(canonical.get("created_at"), ms=True)
+    if cdate is not None:
+        note["cdate"] = cdate
+    if kind:
+        # An invitation names the venue and the kind of note; the reader needs only the kind
+        venueid = ((canonical.get("extensions") or {}).get("openreview") or {}).get("venueid")
+        note["invitation"] = f"{venueid or ''}/-/{kind}"
     return note
+
+
+def _recommendation_read_back(
+    value: int | float, label: str | None, scale: dict[str, Any] | None
+) -> str | None:
+    """The recommendation from_openreview takes from an overall score with this label, on the
+    score's own scale; None when it would fall back to a guess."""
+    return map_recommendation_from_text(label or "") or (
+        map_recommendation_from_numeric(value, scale) if scale else None
+    )
+
+
+def _summary_the_reader_infers(content: dict[str, Any]) -> str:
+    """The summary from_openreview takes from a note's text, or from its findings."""
+    inferred = _best_text_opinion(content)
+    if not inferred:
+        findings = _collect_findings(content)
+        if findings:
+            inferred = first_paragraph(next(iter(findings.values()))[0]["text"], 200)
+    return inferred

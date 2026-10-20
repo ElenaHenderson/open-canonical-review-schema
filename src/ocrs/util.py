@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import re
+from decimal import Decimal
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -19,7 +20,8 @@ from .scales import (
 # Pattern to match numeric prefix with optional separator (: . -)
 # For "4. Accept", "3: Weak Accept", "6 - Borderline"
 # Note: The (?:\.\s+) ensures we don't match decimal numbers like "3.5"
-_num_prefix = re.compile(r"^\s*([+-]?\d+(?:\.\d+)?)\s*(?:(?:\.\s+)|[:\-]\s*)?\s*(.*)$")
+# The label may run over several lines
+_num_prefix = re.compile(r"^\s*([+-]?\d+(?:\.\d+)?)\s*(?:(?:\.\s+)|[:\-]\s*)?\s*(.*)$", re.DOTALL)
 _bullet_pattern = re.compile(r"^\s*(?:[-*•]|\d+[.)\]])\s*", re.MULTILINE)
 
 
@@ -607,3 +609,79 @@ def source_decision(decision: dict[str, Any]) -> dict[str, Any]:
     if recommendation:
         result["recommendation"] = recommendation
     return result
+
+
+# Writing back to a source. A writer gives a source back what its reader took from it, in
+# the source's own form, so that reading what it writes gives the same review.
+
+
+def from_source(canonical: dict[str, Any], system: str) -> bool:
+    """Whether a review was read from `system`, so that its metric labels are that
+    system's field names."""
+    return (canonical.get("provenance") or {}).get("source_system") == system
+
+
+def score_with_label(
+    metric: dict[str, Any], separator: str = ": ", *, form_gives_labels: bool = False
+) -> Any:
+    """A score as a review form writes it: the value, with the label the reviewer gave it
+    ("6: Weak Accept"). Written back to the form whose scale anchors the score
+    (`form_gives_labels`), a label that is its anchor for the value is left out: that form
+    says it for the value alone. Any other system needs the label written."""
+    value, label = metric.get("value"), metric.get("justification")
+    # The readers take a label only after a number: any other value is written as it is
+    if not is_number(value):
+        return value
+    anchors = (metric.get("scale") or {}).get("anchors") or []
+    form_labels = {a.get("value"): a.get("label") for a in anchors if isinstance(a, dict)}
+    if not isinstance(label, str) or not label.strip():
+        return value
+    if form_gives_labels and form_labels.get(value) == label:
+        return value
+    return f"{plain_number(value)}{separator}{label}"
+
+
+def plain_number(value: int | float) -> str:
+    """A number as the readers parse it: digits, with no exponent (1e-06 is 0.000001)."""
+    text = str(value)
+    return format(Decimal(text), "f") if "e" in text.lower() else text
+
+
+def is_number(value: Any) -> bool:
+    """Whether a value is a number, not a boolean."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def field_name(label: str) -> str:
+    """A source's field name from the metric label its reader made of it, which spells
+    underscores as spaces."""
+    return label.strip().replace(" ", "_")
+
+
+def id_as_number(value: Any) -> Any:
+    """An identifier as a system that numbers its records writes it: a number when it is
+    one, written without leading zeros."""
+    if isinstance(value, str) and value.isdigit() and str(int(value)) == value:
+        return int(value)
+    return value
+
+
+def iso_to_epoch(iso: Any, *, ms: bool = False) -> int | None:
+    """An ISO 8601 time as Unix time, in seconds or milliseconds; None when it is not one."""
+    if not isinstance(iso, str):
+        return None
+    try:
+        dt = _dt.datetime.fromisoformat(iso.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_dt.UTC)
+    return round(dt.timestamp() * (1000 if ms else 1))
+
+
+def iso_date_or_time(iso: Any) -> Any:
+    """A time as a system that records dates writes it: the date alone when the time is
+    midnight UTC, which is how its reader takes a date."""
+    if isinstance(iso, str) and iso.endswith("T00:00:00Z"):
+        return iso[:10]
+    return iso

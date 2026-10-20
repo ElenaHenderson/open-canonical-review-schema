@@ -338,7 +338,9 @@ def test_openreview_numeric_recommendation_falls_back_to_text():
     """Test that text after an out-of-rubric number decides the recommendation."""
     canon = map_from("openreview", note({"overall_rating": "15: strong accept"}))
     assert canon["decision"]["recommendation"] == "strong_accept"
-    overall = next(m for m in canon["metrics"] if m["label"] == "Overall Assessment")
+    overall = next(m for m in canon["metrics"] if m["key"] == "overall")
+    # Labelled with the form's field, as the other scores are
+    assert overall["label"] == "overall rating"
     assert overall["value"] == 15
     assert overall["scale"] == {"type": "interval"}
     assert "normalized" not in overall
@@ -348,7 +350,7 @@ def test_openreview_numeric_recommendation_without_mapping_is_borderline():
     """Test that an unmappable bare number defaults to borderline."""
     canon = map_from("openreview", note({"overall": 0.8}))
     assert canon["decision"]["recommendation"] == "borderline"
-    overall = next(m for m in canon["metrics"] if m["label"] == "Overall Assessment")
+    overall = next(m for m in canon["metrics"] if m["key"] == "overall")
     assert overall["normalized"] == {"value_0_1": 0.8, "method": "linear_to_unit_interval"}
 
 
@@ -492,8 +494,9 @@ def test_to_openreview_full():
         "review": "Opinion text.",
         "confidential_comments": "For the chairs.",
         "strengths": ["Clear"],
-        "recommendation": "Weak Accept",
-        "rating": 6,
+        # A score read from OpenReview goes back to its field (here `overall`). No
+        # recommendation field: 6 of 10 reads back as weak_accept
+        "overall": 6,
         "confidence": 4,
         # the first metric with a key wins
         "novelty": 3,
@@ -506,7 +509,7 @@ def test_to_openreview_detailed_review_without_opinion_text():
     out = to_openreview(canon)
     assert out["content"]["review"] == "Detailed review."
     assert "recommendation" not in out["content"]
-    assert out["signatures"] == []
+    assert "signatures" not in out
 
 
 def test_to_openreview_opinion_text_without_summary():
@@ -542,8 +545,9 @@ def test_openreview_realistic_round_trip():
     canon = map_from("openreview", load_fixture("realistic_review.json"))
     note2 = map_to("openreview", canon)
     assert note2["forum"] == "xY9kL2mN3pQ"
-    assert note2["content"]["recommendation"] == "Accept"
-    assert note2["content"]["rating"] == 7
+    # The rating keeps its label, which says the recommendation, so no field repeats it
+    assert note2["content"]["rating"] == "7: Accept, but not among top submissions"
+    assert "recommendation" not in note2["content"]
 
     canon2 = map_from("openreview", note2)
     assert canon2["decision"] == canon["decision"]
@@ -723,8 +727,8 @@ def test_a_v2_note_maps_like_its_v1_equivalent():
         "How sensitive is it to the predictor?"
     ]
     assert {m["label"]: m["value"] for m in canon["metrics"]} == {
-        "Overall Assessment": 5,
-        "Reviewer Confidence": 4,
+        "rating": 5,
+        "confidence": 4,
         "quality": 3,
         "clarity": 4,
     }

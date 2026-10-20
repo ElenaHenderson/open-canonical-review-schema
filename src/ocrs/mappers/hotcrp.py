@@ -11,15 +11,21 @@ from ..catalog import alias_map, load_catalog
 from ..identifiers import generate_canonical_work_id
 from ..schema import schema_id
 from ..util import (
+    field_name,
     first_paragraph,
     first_present,
+    from_source,
+    id_as_number,
+    is_number,
     is_score_field,
+    iso_to_epoch,
     map_recommendation_from_text,
     match_alias,
     now_iso,
     parse_date_flexible,
     parse_labeled_score,
     score_to_recommendation,
+    score_with_label,
     source_decision,
     source_work_id,
     split_bullet_list,
@@ -148,19 +154,19 @@ def _best_opinion_text(payload: dict[str, Any]) -> str | None:
 
 
 def _collect_findings(payload: dict[str, Any]) -> dict[str, Any]:
-    """Extract strengths, weaknesses, questions from HotCRP fields."""
+    """Extract strengths, weaknesses, questions from HotCRP fields. A form with both
+    `questions` and `questions_for_authors` gives both, in that order."""
     findings: dict[str, Any] = {}
     for k in ("strengths", "weaknesses", "questions", "questions_for_authors"):
         v = payload.get(k)
         canon_key = "questions" if k == "questions_for_authors" else k
+        items: list[dict[str, Any]] = []
         if isinstance(v, list):
             items = [{"text": str(x)} for x in v if x is not None and str(x).strip()]
-            if items:
-                findings[canon_key] = items
         elif isinstance(v, str) and v.strip():
-            bullets = split_bullet_list(v)
-            if bullets:
-                findings[canon_key] = [{"text": b} for b in bullets]
+            items = [{"text": b} for b in split_bullet_list(v)]
+        if items:
+            findings.setdefault(canon_key, []).extend(items)
     return findings
 
 
@@ -468,11 +474,35 @@ def from_hotcrp(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str,
     return out
 
 
-def to_hotcrp(canonical: dict[str, Any]) -> dict[str, Any]:
-    """Convert a canonical review to HotCRP format (basic stub).
+# The fields from_hotcrp takes the recommendation, the expertise and the confidence from
+_DECISION_FIELDS = {
+    "overall_merit",
+    "overall",
+    "recommendation",
+    "rating",
+    "score",
+    "reviewer_expertise",
+    "expertise",
+    "confidence",
+}
 
-    This is a lossy conversion that produces a minimal HotCRP-like structure.
-    Full fidelity roundtrip is not guaranteed.
+
+def _recommendation_read_back(value: int | float, label: str | None) -> str:
+    """The recommendation from_hotcrp takes from overall_merit with this label."""
+    return (
+        (map_recommendation_from_text(label) if label else None)
+        or score_to_recommendation(value, scale_min=1, scale_max=5)
+        or "borderline"
+    )
+
+
+def to_hotcrp(canonical: dict[str, Any]) -> dict[str, Any]:
+    """Convert a canonical review to a HotCRP review.
+
+    A review read from HotCRP is given back as HotCRP holds it: its scores under their own
+    field names with their labels ("4. Accept"), its reviewer, its submission time and its
+    questions for the authors, so that reading the result gives the same review. A review
+    from elsewhere gives its scores under their catalog keys.
 
     Args:
         canonical: A canonical review dictionary.
@@ -485,10 +515,24 @@ def to_hotcrp(canonical: dict[str, Any]) -> dict[str, Any]:
     if rid.startswith("hotcrp_"):
         rid = rid[7:]
 
+    same_source = from_source(canonical, "hotcrp")
     out: dict[str, Any] = {
-        "id": rid,
-        "pid": source_work_id(canonical.get("target", {})),
+        "id": id_as_number(rid),
+        "pid": id_as_number(source_work_id(canonical.get("target", {}))),
     }
+    submitted_at = iso_to_epoch(canonical.get("created_at"))
+    if submitted_at is not None:
+        out["submitted_at"] = submitted_at
+
+    # The reviewer, as the reader takes it
+    referee = canonical.get("referee", {}) or {}
+    human = referee.get("human_referee", {}) or {}
+    reviewer = {"user": referee.get("referee_id")} | {
+        k: human.get(k) for k in ("name", "affiliation", "orcid")
+    }
+    reviewer = {k: v for k, v in reviewer.items() if v}
+    if reviewer:
+        out["reviewer"] = reviewer
 
     # Map opinion/narrative to comments
     op = canonical.get("opinion", {}) or {}
@@ -505,32 +549,57 @@ def to_hotcrp(canonical: dict[str, Any]) -> dict[str, Any]:
 
     if nar.get("confidential_to_editors"):
         out["confidential_comments"] = nar["confidential_to_editors"]
+    if nar.get("author_questions"):
+        out["questions_for_authors"] = nar["author_questions"]
 
     # Map findings
     findings = canonical.get("findings", {}) or {}
     for k in ("strengths", "weaknesses", "questions"):
-        if isinstance(findings.get(k), list) and findings[k]:
-            out[k] = "\n".join(
-                f"- {f.get('text')}" for f in findings[k] if isinstance(f, dict) and f.get("text")
-            )
+        texts = [
+            f.get("text") for f in findings.get(k) or [] if isinstance(f, dict) and f.get("text")
+        ]
+        if k == "questions" and "questions_for_authors" in out:
+            # The reader adds the questions for the authors to the questions, after those from
+            # `questions`: only those before them are written there
+            asked = split_bullet_list(out["questions_for_authors"])
+            if asked and texts[-len(asked) :] == asked:
+                texts = texts[: -len(asked)]
+        if texts:
+            out[k] = "\n".join(f"- {text}" for text in texts)
 
-    # Map recommendation
+    # Scores, each with its label. The overall score carries the recommendation in its label
     dec = source_decision(canonical.get("decision", {}) or {})
-    if isinstance(dec.get("recommendation"), str):
-        # Find overall metric to get numeric value
-        for m in canonical.get("metrics", []) or []:
-            if m.get("key") == "overall" and m.get("value") is not None:
-                label = dec["recommendation"].replace("_", " ").title()
-                out["overall_merit"] = f"{m['value']}: {label}"
-                break
-        else:
-            out["overall_merit"] = dec["recommendation"].replace("_", " ").title()
-
-    # Map expertise/confidence
+    rec = dec.get("recommendation") if isinstance(dec.get("recommendation"), str) else None
+    rec_label = rec.replace("_", " ").title() if rec else None
     for m in canonical.get("metrics", []) or []:
-        if m.get("key") == "confidence" and m.get("value") is not None:
-            out["reviewer_expertise"] = m["value"]
-            break
+        if not isinstance(m, dict) or m.get("value") is None:
+            continue
+        key, label = m.get("key"), m.get("label")
+        if key == "overall":
+            # The reader takes a recommendation from this field and reads only a number
+            # there: any other value would hide the review's recommendation, or make one up
+            if not is_number(m["value"]):
+                continue
+            # The reader takes the recommendation from the score's label, then its value: a
+            # label that would read back as another recommendation gives way to the decision's
+            label = m.get("justification")
+            if rec and _recommendation_read_back(m["value"], label) != rec:
+                label = rec_label
+            out.setdefault("overall_merit", score_with_label({**m, "justification": label}, ". "))
+        elif key == "confidence":
+            # HotCRP asks for expertise; a review read from it may also give a confidence
+            confidence = same_source and label == "Reviewer Confidence"
+            out.setdefault(
+                "confidence" if confidence else "reviewer_expertise", score_with_label(m, ". ")
+            )
+        elif key:
+            named = (same_source or key == "other") and isinstance(label, str) and label.strip()
+            field = field_name(label) if named else key
+            # The fields the reader takes the recommendation and the expertise from are theirs
+            if field not in _DECISION_FIELDS:
+                out.setdefault(field, score_with_label(m, ". "))
+    if rec_label and "overall_merit" not in out:
+        out["overall_merit"] = rec_label
 
     # Add round if present
     ctx = canonical.get("review_context", {}) or {}
