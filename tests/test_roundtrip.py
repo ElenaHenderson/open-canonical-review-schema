@@ -76,7 +76,7 @@ def test_journal_narrative_minimal():
 
 def test_openreview_note_without_id_or_signature():
     canon = map_from("openreview", {"forum": "or_forum_123", "content": {"summary": "Fine."}})
-    assert "referee_id" not in canon["referee"]
+    assert "referee_id" not in canon["referees"][0]
     assert "source_review_id" not in canon["provenance"]
 
 
@@ -365,7 +365,7 @@ def written_review(source_system: str, **fields) -> dict:
         "version": "1.0.0",
         "created_at": "2025-01-01T00:00:00Z",
         "provenance": {"source_system": source_system},
-        "referee": {"referee_type": "human", "identity_mode": "confidential"},
+        "referees": [{"referee_type": "human", "identity_mode": "confidential"}],
         "target": {"work_id": "internal_id:paperId:7", "work_type": "article"},
         "opinion": {"summary": "A sound paper."},
         **fields,
@@ -561,3 +561,102 @@ def test_a_labelled_score_reads_back_the_same(writer, value, label):
     review = written_review(writer, metrics=[{**metric, "justification": label}])
     [again] = map_from(writer, map_to(writer, review))["metrics"]
     assert (again["value"], again["justification"]) == (value, label)
+
+
+@pytest.mark.parametrize(
+    "source, payload",
+    [
+        (
+            "openreview",
+            {"id": "r1", "forum": "f1", "content": {"summary": "S.", "recommendation": "Not sure"}},
+        ),
+        (
+            "cmt",
+            {
+                "reviewId": "r1",
+                "paperId": 1,
+                "recommendation": "Not sure",
+                "commentsToAuthors": "T.",
+            },
+        ),
+        ("hotcrp", {"pid": 1, "rid": 2, "overall_merit": "Not sure", "comments": "T."}),
+    ],
+)
+def test_a_recommendation_in_words_that_name_none_keeps_them(source, payload):
+    """The readers take words that name no recommendation as borderline, and the writers give
+    the words back rather than "Borderline"."""
+    review = map_from(source, payload)
+    assert review["decision"] == {"recommendation": "borderline", "source_label": "Not sure"}
+    assert map_from(source, map_to(source, review))["decision"] == review["decision"]
+
+
+def test_words_beside_a_score_that_would_read_as_another_recommendation_keep_their_field():
+    """'Not sure' beside an 8 would read back as the 8's accept, so it stays in its own field,
+    which the reader takes the recommendation from first."""
+    note = {"id": "r1", "forum": "f1", "content": {"summary": "S.", "recommendation": "Not sure"}}
+    note["content"]["rating"] = 8
+    review = map_from("openreview", note)
+    written = map_to("openreview", review)
+    assert written["content"] == note["content"]
+    assert map_from("openreview", written)["decision"] == review["decision"]
+
+
+@pytest.mark.parametrize("source", ["cmt", "hotcrp"])
+def test_a_score_carries_a_recommendation_its_number_would_not_read_as(source):
+    review = {
+        "review_id": "r1",
+        "version": "1.0.0",
+        "created_at": "2026-10-06T12:00:00Z",
+        "provenance": {"source_system": "example-journal"},
+        "referees": [{"referee_type": "human", "identity_mode": "double_blind"}],
+        "target": {"work_id": "internal_id:manuscript_id:p1", "work_type": "article"},
+        "opinion": {"summary": "S."},
+        "decision": {"recommendation": "borderline", "source_label": "Not sure"},
+        "metrics": [
+            {
+                "key": "overall",
+                "label": "Overall",
+                "value": 4,
+                "scale": {"type": "ordinal", "min": 1, "max": 5},
+            }
+        ],
+    }
+    again = map_from(source, map_to(source, review))
+    assert again["decision"]["recommendation"] == "borderline"
+
+
+@pytest.mark.parametrize(
+    "target", ["openreview", "cmt", "hotcrp", "editorialmanager", "scholarone"]
+)
+def test_a_recommendation_ocrs_cannot_name_keeps_its_words_in_every_form(target):
+    """A JATS term OCRS cannot name is written in its words. Readers that take such words as
+    borderline add that, and keep the words."""
+    review = map_from(
+        "jats",
+        {
+            "sub_article": (
+                '<sub-article id="r1"><front-stub><custom-meta-group><custom-meta><meta-name>'
+                "recommendation</meta-name><meta-value>approve-in-part</meta-value></custom-meta>"
+                "</custom-meta-group></front-stub><body><p>Fine.</p></body></sub-article>"
+            )
+        },
+    )
+    assert review["decision"] == {"source_label": "approve-in-part"}
+    again = map_from(target, map_to(target, review))
+    assert again["decision"]["source_label"] == "approve-in-part"
+    assert again["decision"].get("recommendation") in (None, "borderline")
+
+
+def test_scholarone_writes_the_words_beside_the_code_it_makes():
+    note = {"id": "r1", "forum": "f1", "content": {"summary": "S.", "decision": "Accept (Oral)"}}
+    review = map_from("openreview", note)
+    written = map_to("scholarone", review)
+    assert (written["overallRecommendation"], written["overallRecommendationLabel"]) == (
+        1,
+        "Accept (Oral)",
+    )
+    again = map_from("scholarone", written)
+    assert again["decision"] == {"recommendation": "accept"}
+    assert [m.get("justification") for m in again["metrics"] if m["key"] == "overall"] == [
+        "Accept (Oral)"
+    ]

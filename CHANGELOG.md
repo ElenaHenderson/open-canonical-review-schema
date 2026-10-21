@@ -1,5 +1,137 @@
 # Changelog
 
+## 0.8.0
+
+A breaking release that makes the schema simpler. One shape of point replaces three, the
+review's text is a list of parts instead of fixed fields, every review has a list of
+referees, and the recommendation's certainty is `credence`, as everywhere else.
+`ocrs.migrate.migrate(review)` turns a 0.7 review into a 0.8 one with the same meaning. It
+does not change the review it is given, and migrating a migrated review changes nothing.
+Every 0.7.2 review that the tests build (the examples, the README blocks, and about 600
+reviews one edit away from them) migrates to a valid 0.8 review.
+
+### Schema: breaking changes
+
+- `referee` is gone, and `referees` is required: a list of one referee or more.
+  Migration: `"referee": {...}` becomes `"referees": [{...}]`.
+- Expertise belongs to the referee, as `referees[].expertise`, and is no longer in
+  `review_context.expertise` or `human_referee.expertise`. Migration: move either one onto
+  each referee. Drop a `review_context` that is left empty.
+- `decision.confidence` is `decision.credence`, with the same meaning: how firmly the
+  reviewer holds the recommendation. Findings, claims and metrics already call this
+  `credence`. Migration: rename the key.
+- Findings, requested changes and contributions are all `$defs/point`. It replaces
+  `finding`, `actionItem` and `contribution`, which overlapped. A point has `text`
+  (required), `id`, `title`, `severity`, `scope`, `tags`, `group`, `evidence_links`,
+  `suggested_edits`, `probability`, `credence`, `summarizes`, `addresses` and `claim_ids`.
+  So a weakness can have a scope, and a change can have a probability. Migration for a
+  change in `findings.changes`:
+  - `priority` becomes `severity`, which now also takes `trivial`, so every priority
+    keeps its value.
+  - `applies_to.section`, `.figure` and `.table` become `evidence_links` of type
+    `paper_section`, `figure` and `table`, with the value as `ref`.
+  - `applies_to.finding_id` becomes `addresses: [id]`, and `applies_to.claim_id`
+    becomes `claim_ids: [id]`.
+  - For a contribution, `claim_id` becomes `claim_ids: [id]`.
+- `ethics_and_risk.required_mitigations` is gone. A change that ethics calls for is a
+  requested change like any other. Migration: move each mitigation to `findings.changes`
+  with `scope: "ethics"`, or, when it has another scope, keep that scope and tag it
+  `ethics`. Drop an `ethics_and_risk` that is left empty.
+- `narrative` is a list of parts in the order the source gives them, each a `$defs/section`:
+  `content` (required), `title`, `role` and `audience`. It replaces the fixed `summary`,
+  `detailed_review`, `author_questions` and `confidential_to_editors` fields and the
+  `sections` list. A part's `role` says what it is (`summary`, `review`, `questions`,
+  `other`), and its `audience` says who the source shows it to (`public`, `authors`,
+  `reviewers`, `editors`). A review form's text fields, a report's headed sections and one
+  undivided text all fit the same list, and a writer can put each part back under the
+  field it came from. Migration:
+  - `summary` becomes a part with role `summary`, and `detailed_review` one with role
+    `review`.
+  - `author_questions` becomes a part with role `questions`, and
+    `confidential_to_editors` one with role `review` and audience `editors`.
+  - Each of `sections` becomes a part as it is, without a title when the title was empty.
+- HotCRP's reviewer expertise, which 0.7 scored as a `confidence` metric labelled "Reviewer
+  Expertise", is an `expertise` metric. Migration: change that metric's `key` and `aspect`
+  to `expertise`, and a `metric_catalog_ref` of `metric-catalog.core.v1` to
+  `metric-catalog.core.v1.1`.
+- A narrative part's `title`, when given, may not be empty.
+- A review read from JATS has its license in `provenance.license`, where 0.7 kept it only in
+  `extensions.jats.permissions`. Migration: set `provenance.license` to the first license's
+  `url`, else its text as `name`.
+- `validate_canonical` checks the new references as it checked the old ones. A point's
+  `summarizes` and `addresses` must name findings in the review, and its `claim_ids` must
+  name claim assessments. Ids must be unique across the findings, the contributions (which
+  can now have ids) and the checks.
+
+### Schema: additions
+
+- `provenance.license` is the license the review itself is published under, as the source
+  states it: `name` (e.g. `CC BY 4.0`), `url`, or both.
+- `decision.source_label` is the recommendation in the source's own words, verbatim
+  (`Accept (Oral)`, F1000Research's `approve-with-reservations`). A term that OCRS cannot
+  read as a recommendation can be kept in `source_label` alone.
+- `related_reviews` lists the other reviews this one `responds_to`, `supersedes` or
+  `summarizes`, each by `review_id`, `doi` or `url`.
+- `scale.values` lists the values a scale allows when they are not every step from `min`
+  to `max`, as for ICLR's overall rating (1, 3, 5, 6, 8, 10).
+- `identity_mode` adds `triple_blind`: the reviewer, the authors and the editors do not
+  know each other's identities.
+- A metric's `aspect` adds `expertise`.
+
+### Specification files
+
+- `metric-catalog.core.v1.1.json` adds an `expertise` key (Reviewer Expertise). A form that
+  asks for expertise, such as HotCRP's, now keeps it apart from confidence.
+- `mapping-spec.v1.2.0.json` uses that catalog, and every mapper says it follows 1.2.0.
+- The package ships only the current files. `metric-catalog.core.v1.json` and
+  `mapping-spec.v1.1.0.json` are still published with 0.7.2 and earlier versions.
+
+### Python package
+
+- `ocrs.migrate.migrate` turns a 0.7 review into a 0.8 one.
+- The review-flow diagram, on the documentation site and in the README, shows JATS and
+  OCRS 0.8.0, with a column for each source.
+- A writer puts in a field the authors see only the narrative parts the authors may read:
+  those with no `audience`, or `public` or `authors`. The review's text for the editors goes
+  in the system's confidential field, when it has one. A part for the other reviewers goes
+  nowhere.
+  `ocrs.util.for_authors` tells which parts the authors may read.
+- New helpers in `ocrs.util`: `referee_of`, `section`, and `narrative_part`,
+  `narrative_text`, `narrative_field` and `narrative_parts`, which find narrative parts by
+  role and audience. `recommendation_label` gives the label to write for a decision.
+- Every mapper reads into and writes from the 0.8 shape:
+  - **Narrative:** each reader keeps its source's text fields as narrative parts, titled
+    with the field's name, and each writer puts them back under those names. So the
+    TMLR and Datasets and Benchmarks reviews that lost their field names on a round trip
+    now keep them.
+  - **Recommendation wording:** a recommendation given in words keeps its wording in
+    `decision.source_label`, and writers give it back verbatim, so `Accept (Poster)` no
+    longer comes back as `Accept`. This holds for OpenReview, CMT, HotCRP, Editorial
+    Manager, ScholarOne and JATS. Words that name no recommendation (`Not sure`), which
+    the OpenReview, CMT and HotCRP readers take as `borderline`, go back as written too.
+    Beside a score, whose number a reader takes for words that name none, they go in
+    OpenReview's `recommendation` field, which is read first. CMT and HotCRP give the
+    score OCRS's words.
+  - **OpenReview:** the reader takes the note's `license` as `provenance.license`.
+    `replyto`, when it is not the forum, becomes a `responds_to` related review. A form
+    bound's `values` becomes `scale.values`. The writer gives the license and the reply
+    back to a note read from OpenReview. A review from elsewhere that has no text of its
+    own is written with its other parts as the review, so that it can be read again.
+  - **JATS:** the reader takes the report's license as `provenance.license`. The writer
+    writes the license `provenance.license` holds, even when the review was read from JATS
+    and its license was later changed. The report's body is every part that is the review,
+    then the questions for the authors and the other parts they may read. Without a part
+    that is the review, it is the other parts, with or without a title.
+  - **A recommendation OCRS cannot name** ("Needs discussion", JATS's `approve-in-part`)
+    is kept as `decision.source_label` alone, and every writer writes it in its words.
+    Editorial Manager and ScholarOne read it back as it was; OpenReview, CMT and HotCRP
+    read it as `borderline`, as they read any such words, and keep them.
+  - **ScholarOne:** beside a recommendation code it writes for a review from elsewhere, it
+    writes the source's words for the recommendation (`Accept (Oral)`) as the label.
+  - **HotCRP:** reviewer expertise, which was a `confidence` metric, is an `expertise`
+    metric and the referee's expertise. A form's separate confidence is still a
+    `confidence` metric, and it sets `decision.credence`.
+
 ## 0.7.2
 
 The schema says the same thing in fewer words. Every review valid under 0.7.1 is valid under

@@ -13,10 +13,12 @@ of them, with what the enclosing article says that the sub-article may not:
 DOI, referee (name, ORCID, affiliation, or `<anonymous/>`), competing interests, date, the
 version it reviews (`related-article`, else the article's DOI), its recommendation
 (`custom-meta`) and its text: paragraphs, lists one item to a line, bold and italic as
-Markdown, and the parts under headings such as "Summary:" as narrative sections. What OCRS has
-no field for is kept in `extensions.jats` so that `to_jats` gives it back: the report's title,
-its license, an eLife Assessment's terms (`kwd-group`), the recommendation as the source wrote
-it, the referee's role and name parts, and the author responses nested in the report.
+Markdown, and the parts under headings such as "Summary:" as further parts of the narrative.
+Its license goes in `provenance.license`, and its recommendation term in
+`decision.source_label`. What OCRS has no field for is kept in `extensions.jats` so that
+`to_jats` gives it back: the report's title, its license as the XML gives it, an eLife
+Assessment's terms (`kwd-group`), the referee's role and name parts, and the author responses
+nested in the report.
 """
 
 from __future__ import annotations
@@ -33,7 +35,16 @@ from ..identifiers import (
     parse_canonical_work_id,
 )
 from ..schema import schema_id
-from ..util import first_paragraph, now_iso, source_decision, split_decision
+from ..util import (
+    first_paragraph,
+    for_authors,
+    narrative_parts,
+    narrative_text,
+    now_iso,
+    section,
+    source_decision,
+    split_decision,
+)
 
 XLINK = "http://www.w3.org/1999/xlink"
 HREF = f"{{{XLINK}}}href"
@@ -414,7 +425,7 @@ def from_jats(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, A
             "imported_at": now_iso(),
             "mapping": {
                 "mapping_spec_id": "canonical-review.mapping.v1",
-                "mapping_spec_version": "1.1.0",
+                "mapping_spec_version": "1.2.0",
                 "mapper_version": "0.1.0",
             },
         },
@@ -425,20 +436,28 @@ def from_jats(payload: dict[str, Any], *, keep_raw: bool = False) -> dict[str, A
         review["provenance"]["review_doi"] = doi
     if source_id:
         review["provenance"]["source_review_id"] = source_id
-    referees = [_referee(p, interests) for p in people] or [_referee({}, interests)]
-    if len(referees) == 1:
-        review["referee"] = referees[0]
-    else:
-        review["referees"] = referees
+    review["referees"] = [_referee(p, interests) for p in people] or [_referee({}, interests)]
+    # The license the report is published under: its URL, else its statement
+    licenses = (kept.get("permissions") or {}).get("licenses") or [{}]
+    if licenses[0].get("url"):
+        review["provenance"]["license"] = {"url": licenses[0]["url"]}
+    elif licenses[0].get("text"):
+        review["provenance"]["license"] = {"name": licenses[0]["text"]}
     review_type = ARTICLE_TYPES.get(article_type or "")
     if review_type:
         review["review_context"] = {"review_type": review_type}
     if text:
-        review["narrative"] = {"detailed_review": text}
-        if sections := _sections(text):
-            review["narrative"]["sections"] = sections
-    if recommendation:
-        review["decision"] = split_decision({"recommendation": recommendation})
+        # The report, then its parts under their headings
+        review["narrative"] = [
+            section(text, role="review"),
+            *(section(s["content"], title=s["title"]) for s in _sections(text)),
+        ]
+    # The recommendation, and the term the report gives it ("approve-with-reservations")
+    decision = {"recommendation": recommendation}
+    if (kept.get("recommendation") or {}).get("value"):
+        decision["source_label"] = kept["recommendation"]["value"]
+    if decision := split_decision(decision):
+        review["decision"] = decision
     if kept:
         review["extensions"] = {"jats": kept}
     if keep_raw:
@@ -631,7 +650,7 @@ def to_jats(canonical: dict[str, Any]) -> dict[str, Any]:
     if kept.get("title"):
         _add(_add(stub, "title-group"), "article-title", kept["title"])
 
-    referees = canonical.get("referees") or [canonical.get("referee") or {}]
+    referees = canonical.get("referees") or [{}]
     people = kept.get("contributors") or []
     named = [r for r in referees if (r.get("human_referee") or {}) or r.get("identity_mode")]
     if any(r.get("human_referee") or r.get("identity_mode") == "single_blind" for r in named):
@@ -667,8 +686,18 @@ def to_jats(canonical: dict[str, Any]) -> dict[str, Any]:
         _add(date, "day", str(int(day)))
         _add(date, "month", str(int(month)))
         _add(date, "year", year)
-    kept_permissions = kept.get("permissions")
-    if kept_permissions:
+    kept_permissions = kept.get("permissions") or {}
+    license_ = (canonical.get("provenance") or {}).get("license") or {}
+    # The license as the reader takes it from the kept permissions: the first one's URL, else
+    # its statement
+    first = (kept_permissions.get("licenses") or [{}])[0]
+    read = {"url": first["url"]} if first.get("url") else {}
+    read = read or ({"name": first["text"]} if first.get("text") else {})
+    if license_ != read:
+        # A license changed in OCRS, or a review from elsewhere: the license as OCRS holds it
+        licenses = [{"url": license_.get("url"), "text": license_.get("name")}] if license_ else []
+        kept_permissions = {**kept_permissions, "licenses": licenses}
+    if any(kept_permissions.values()):
         permissions = _add(stub, "permissions")
         if kept_permissions.get("copyright_statement"):
             _add(permissions, "copyright-statement", kept_permissions["copyright_statement"])
@@ -712,7 +741,7 @@ def to_jats(canonical: dict[str, Any]) -> dict[str, Any]:
     decision = source_decision(canonical.get("decision") or {})
     recommendation = decision.get("recommendation")
     source_term = kept.get("recommendation") or {}
-    term = source_term.get("value")
+    term = decision.get("source_label") or source_term.get("value")
     says = RECOMMENDATIONS.get((term or "").casefold())
     if recommendation and says != recommendation:
         term = TERMS.get(recommendation)
@@ -724,29 +753,55 @@ def to_jats(canonical: dict[str, Any]) -> dict[str, Any]:
         _add(meta, "meta-name", source_term.get("name") or "peer-review-recommendation")
         _add(meta, "meta-value", term)
 
-    narrative = canonical.get("narrative") or {}
     opinion = canonical.get("opinion") or {}
-    text = narrative.get("detailed_review") or opinion.get("text")
-    if not (isinstance(text, str) and text.strip()):
-        # A review without a full text: its summary, then its named parts under their headings
-        # or else its findings; the summary is left out when it is the start of one of them
-        # (a reader may take it from the first finding)
-        sections = [s for s in narrative.get("sections") or [] if isinstance(s, dict)]
-        written = [s for s in sections if s.get("title") and s.get("content")]
+    # The report: the parts of the review's text that are the review, as the authors may read
+    # them, in order
+    reports = [
+        p["content"]
+        for p in narrative_parts(canonical)
+        if p.get("role") == "review" and for_authors(p) and p["content"].strip()
+    ]
+    text = "\n\n".join(reports) or opinion.get("text")
+
+    def headed(part: dict[str, Any]) -> str:
+        return f"{part['title']}:\n\n{part['content']}" if part.get("title") else part["content"]
+
+    if isinstance(text, str) and text.strip():
+        # Then the questions for the authors and the other parts they may read, but for the
+        # sections the reader cuts from the text itself (those of a report read from JATS)
+        cut = [(c["title"], c["content"]) for c in _sections(text)]
+        others = [
+            s
+            for s in narrative_parts(canonical)
+            if s.get("role") in (None, "questions", "other")
+            and for_authors(s)
+            and s["content"].strip()
+            and (s.get("title"), s["content"]) not in cut
+        ]
+        text = "\n\n".join([text, *map(headed, others)])
+    else:
+        # A review without a full text: its summary, then its other parts, each under its
+        # heading when it has one, or else its findings; the summary is left out when it is
+        # the start of one of them (a reader may take it from the first finding)
+        written = [
+            s
+            for s in narrative_parts(canonical)
+            if s.get("role") in (None, "questions", "other") and for_authors(s) and s["content"]
+        ]
         # Findings whose text no section holds come after the sections
         held = {
             kind: {
                 item
                 for s in written
-                if str(s["title"]).casefold().replace("_", " ").strip() in titles
-                for item in _items(str(s["content"]))
+                if str(s.get("title") or "").casefold().replace("_", " ").strip() in titles
+                for item in _items(s["content"])
             }
             for kind, titles in FINDING_SECTIONS.items()
         }
-        parts_ = [f"{s['title']}:\n\n{s['content']}" for s in written]
+        parts_ = [headed(s) for s in written]
         parts_.append(_findings_text(canonical.get("findings") or {}, held))
         rest = "\n\n".join(part for part in parts_ if part)
-        summary = opinion.get("summary") or narrative.get("summary")
+        summary = opinion.get("summary") or narrative_text(canonical, "summary")
         # The summary is repeated when it is one of the items that follow, or the start of one
         # cut where a reader cuts a summary it takes from a finding (200 characters)
         said = _squash(summary) if isinstance(summary, str) else ""
