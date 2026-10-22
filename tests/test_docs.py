@@ -19,6 +19,7 @@ import pytest
 
 from ocrs import schema_id, validate_canonical
 from ocrs.catalog import load_catalog
+from ocrs.hierarchy import resolve_definition
 
 ROOT = Path(__file__).parent.parent
 DOCS = ["README.md", "CONTRIBUTING.md"]
@@ -85,8 +86,10 @@ def test_example_review_validates(path):
 )
 def test_example_metrics_use_catalog_keys(path):
     keys = {metric["key"] for metric in load_catalog()["metrics"]}
-    for metric in json.loads(path.read_text()).get("metrics", []):
-        assert metric["key"] in keys
+    review = json.loads(path.read_text())
+    for metric in review.get("metrics", []):
+        definition = resolve_definition(review, metric)
+        assert definition["catalog_key"] in keys
 
 
 @pytest.mark.parametrize(
@@ -99,13 +102,22 @@ def test_example_names_the_current_schema(path):
     assert _sync_examples().sync(text, schema_id()) == text
 
 
-def _sync_examples():
-    spec = importlib.util.spec_from_file_location(
-        "sync_examples", ROOT / "scripts" / "sync_examples.py"
-    )
+def _script(name):
+    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / f"{name}.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _sync_examples():
+    return _script("sync_examples")
+
+
+def test_schema_files_are_in_the_house_layout():
+    """As `scripts/format_schema.py` writes them, so re-serializing makes no diff."""
+    format_schema = _script("format_schema")
+    for path in format_schema.schema_files():
+        assert path.read_text(encoding="utf-8") == format_schema.formatted(path), path
 
 
 @pytest.mark.parametrize(
