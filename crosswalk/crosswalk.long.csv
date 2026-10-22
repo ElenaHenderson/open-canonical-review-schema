@@ -71,6 +71,8 @@ findings.strengths[].text,hotcrp,from,,observed,1,
 findings.strengths[].text,openreview,from,,observed,23,
 findings.weaknesses[],openreview_page,from,Strengths And Weaknesses,copied,2,headings: Weaknesses
 findings.weaknesses[],openreview_page,from,Strengths And Weaknesses,lookup,1,headings: Minor
+findings.weaknesses[].evidence_links[],openaireview,from,methods.progressive__*.comments[].quote,anchored_exact,1,
+findings.weaknesses[].evidence_links[],openaireview,from,methods.progressive__*.comments[].quote,anchored_fuzzy,1,
 findings.weaknesses[].evidence_links[].location.equation,deepreview,from,,observed,1,
 findings.weaknesses[].evidence_links[].location.figure,deepreview,from,,observed,1,
 findings.weaknesses[].evidence_links[].location.label,deepreview,from,,observed,1,

@@ -49,7 +49,7 @@ OUT = ROOT / "crosswalk"
 sys.path[:0] = [str(ROOT / "src"), str(TESTS)]
 
 from test_real_reviews import REAL, SOURCES, form  # noqa: E402
-from test_roundtrip import AI_REVIEWS, AI_RUN, LOSSES, SOURCE_REVIEWS  # noqa: E402
+from test_roundtrip import AI_REVIEWS, AI_RUN, AI_SOURCES, LOSSES, SOURCE_REVIEWS  # noqa: E402
 
 from ocrs import map_from, map_with_record  # noqa: E402
 from ocrs.gaps import generic_path, iter_leaves  # noqa: E402
@@ -66,6 +66,7 @@ SKIPPED = (
     "referees[].ai_referee.system.tools[].config",
 )
 PAGE = "openreview_page"
+AI_BLOCKS = TESTS / "fixtures" / "ai" / "paper_blocks.json"
 PAGE_FIXTURES = sorted((TESTS / "fixtures" / "openreview").glob("*.html"))
 # Fixture folders named otherwise than their system, in test_roundtrip.LOSSES
 FOLDER_SYSTEM = {"journal": "journal_narrative", "openreview_v2": "openreview"}
@@ -144,7 +145,20 @@ def load(path: Path) -> Any:
     return json.loads(path.read_text()) if path.suffix == ".json" else path.read_text()
 
 
-def runs() -> list[tuple[str, str, dict[str, Any], Any]]:
+def ai_runs(system: str, path: Path, blocks: list | None = None) -> list[tuple]:
+    """An AI reviewer's output mapped with its record: a paper.json once for each model."""
+    output = load(path)
+    models = [None]
+    if system == "openaireview":
+        models = [m["model"] for k, m in output["methods"].items() if k.startswith("progressive__")]
+    results = [
+        map_with_record(system, output, **{**AI_RUN, "model_id": model}, blocks=blocks)
+        for model in models
+    ]
+    return [(system, path, result.review, result) for result in results]
+
+
+def runs() -> list[tuple[str, Path, dict[str, Any], Any]]:
     """(system, fixture, review, record or None) for every review in the fixtures."""
     out = []
     for param in SOURCE_REVIEWS:
@@ -152,18 +166,15 @@ def runs() -> list[tuple[str, str, dict[str, Any], Any]]:
         out.append((system, path, map_from(system, load(path), **how), None))
     for param in AI_REVIEWS:
         system, path, _ = param.values
-        result = map_with_record(system, load(path), **AI_RUN)
-        out.append((system, path, result.review, result))
+        # The paper's text is that of the OpenAIReview review; the other reports are invented
+        blocks = load(AI_BLOCKS) if system == "openaireview" else None
+        out.extend(ai_runs(system, path, blocks))
     for source in SOURCES:
         system, path = source["system"], REAL / source["file"]
-        payload = load(path)
-        if system == "openaireview":
-            for key, method in payload["methods"].items():
-                if key.startswith("progressive__"):
-                    run = {**AI_RUN, "model_id": method["model"]}
-                    result = map_with_record(system, payload, **run)
-                    out.append((system, path, result.review, result))
+        if system in AI_SOURCES:
+            out.extend(ai_runs(system, path))
         else:
+            payload = load(path)
             out.append((system, path, map_from(system, payload, **form(source, payload)), None))
     for path in PAGE_FIXTURES:
         out.extend((PAGE, path, review, None) for review in reviews_from_forum_page(load(path)))

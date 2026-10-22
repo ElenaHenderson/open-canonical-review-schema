@@ -103,6 +103,7 @@ No fixture fills 2 of the 8 fields in this section.
 | `findings.strengths[].id` |  |  | observed |  | observed |  |  |  | observed |  |  |  |
 | `findings.strengths[].text` |  |  | copied:strengths[].text |  | observed |  |  |  | observed |  |  |  |
 | `findings.weaknesses[]` |  |  |  |  |  |  |  |  |  | copied:Strengths And Weaknesses \| lookup:Strengths And Weaknesses |  |  |
+| `findings.weaknesses[].evidence_links[]` |  |  |  |  |  |  |  | anchored_exact:methods.progressive__*.comments[].quote \| anchored_fuzzy:methods.progressive__*.comments[].quote |  |  |  |  |
 | `findings.weaknesses[].evidence_links[].location.equation` |  |  | observed |  |  |  |  |  |  |  |  |  |
 | `findings.weaknesses[].evidence_links[].location.figure` |  |  | observed |  |  |  |  |  |  |  |  |  |
 | `findings.weaknesses[].evidence_links[].location.label` |  |  | observed \| parsed:issues[].tiers[].items[].location |  |  |  |  |  |  |  |  |  |
@@ -121,7 +122,7 @@ No fixture fills 2 of the 8 fields in this section.
 | `findings.weaknesses[].text` |  |  | copied:issues[].tiers[].items[].text \| copied:weaknesses[].text |  | observed |  |  | copied:methods.progressive__*.comments[].explanation | observed |  |  |  |
 | `findings.weaknesses[].title` |  |  | copied:issues[].tiers[].items[].title |  |  |  |  | copied:methods.progressive__*.comments[].title |  |  |  |  |
 
-No fixture fills 335 of the 372 fields in this section.
+No fixture fills 335 of the 373 fields in this section.
 
 ### `metrics`
 
