@@ -39,3 +39,6 @@ jobs:
 
       - name: Run tests
         run: uv run pytest -q
+
+      - name: Check the crosswalk is up to date
+        run: uv run scripts/build_crosswalk.py --check
