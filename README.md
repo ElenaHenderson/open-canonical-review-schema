@@ -50,6 +50,10 @@ OCRS provides bidirectional mappers for converting between the canonical schema 
 
 Round trips are tested both ways for every system, with each system's fixtures: written back to its own format, a review OCRS read comes back unchanged, and `tests/test_roundtrip.py` lists the system's own fields that OCRS has no place for, which a review loses on the way. `tests/test_real_reviews.py` runs the same tests on published reviews from OpenReview (ICLR, NeurIPS, COLM, TMLR), eLife, F1000Research and OpenAIReview, listed with their sources and licenses in [tests/fixtures/real/](tests/fixtures/real/README.md).
 
+### Crosswalk
+
+[crosswalk/CROSSWALK.md](crosswalk/CROSSWALK.md) shows, for every OCRS field, which field of each system fills it and how: copied, looked up in a table, or parsed by a pattern. It also shows each system's coverage of OCRS and the source fields OCRS has no place for. `scripts/build_crosswalk.py` generates it by running every mapper over the test fixtures, and CI fails when it is out of date. So a blank cell means no fixture filled that field, which is not always the same as impossible. The current crosswalk is published beside the schema, as `https://valency-oss.github.io/open-canonical-review-schema/v0.9.0/crosswalk.csv` (also `crosswalk.long.csv` and `CROSSWALK.md`).
+
 ## Use the schema
 
 The schema is at a permanent URL, one per version:
