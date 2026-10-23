@@ -510,6 +510,12 @@ def main() -> int:
                         f"{path.as_posix()} (regenerated)",
                     )
                 )
+    # A file the generator no longer writes would stay committed, and be checked by nothing
+    expected = {ROOT / path for path in files}
+    for extra in sorted(OUT.iterdir() if OUT.exists() else []):
+        if extra not in expected and not extra.name.startswith("."):
+            failed = True
+            print(f"{extra.relative_to(ROOT).as_posix()} is not generated; remove it")
     if failed:
         print(
             "\nThe crosswalk is out of date. Run: uv run scripts/build_crosswalk.py",

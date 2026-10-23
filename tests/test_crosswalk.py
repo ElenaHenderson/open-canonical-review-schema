@@ -152,3 +152,16 @@ def test_only_a_record_says_a_field_is_unmapped(files):
 def test_the_source_archive_ships_the_crosswalk():
     # scripts/generate_docs.py publishes it, and the archive carries that script
     assert "graft crosswalk" in (ROOT / "MANIFEST.in").read_text().splitlines()
+
+
+def test_the_check_fails_on_a_file_it_does_not_write(script, files, tmp_path, monkeypatch):
+    for path, text in files.items():
+        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / path).write_text(text)
+    monkeypatch.setattr(script, "ROOT", tmp_path)
+    monkeypatch.setattr(script, "OUT", tmp_path / "crosswalk")
+    monkeypatch.setattr(script, "outputs", lambda: {Path(p): t for p, t in files.items()})
+    monkeypatch.setattr("sys.argv", ["build_crosswalk.py", "--check"])
+    assert script.main() == 0
+    (tmp_path / "crosswalk" / "old.csv").write_text("")
+    assert script.main() == 1
