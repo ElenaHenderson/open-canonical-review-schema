@@ -279,7 +279,7 @@ No fixture fills 8 of the 8 fields in this section.
 
 ## Gaps
 
-- **unmapped**: a source field with no OCRS field. Its value is kept in `extensions.<system>`. The count is how many times it was seen.
+- **unmapped**: a source field with no OCRS field. Its value is kept in `extensions.<system>`. The count is how many times it was seen. An OpenAIReview paper.json is mapped once per model, and each run counts the other models' entries as unmapped, so its counts add up over all the models.
 - **lost_on_roundtrip**: a source field that does not come back when an OCRS review is written in the source's format again. Taken from `tests/test_roundtrip.py`. The count is how many fixtures lose it.
 - **coerced**: a source value OCRS does not allow, replaced by the nearest allowed one.
 

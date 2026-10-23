@@ -24,7 +24,8 @@ longest path it does list. Paths under these hold opaque source data and are lef
 - `referees[].ai_referee.system.tools[].config`
 
 `fixtures` counts reviews, not files: an OpenAIReview paper.json holds one review per model, and
-a saved OpenReview page one per Official Review.
+a saved OpenReview page one per Official Review. For the same reason, OpenAIReview's `unmapped`
+counts add up over every model run: each run counts the other models' entries as unmapped.
 
 Usage: `uv run scripts/build_crosswalk.py` writes crosswalk/; `--check` compares instead and
 exits 1 on any difference. scripts/generate_docs.py publishes it beside the current schema.
@@ -432,7 +433,9 @@ def markdown(systems, wide_rows, gap_rows, coverage_rows, leaf_count) -> str:
         "## Gaps",
         "",
         "- **unmapped**: a source field with no OCRS field. Its value is kept in "
-        "`extensions.<system>`. The count is how many times it was seen.",
+        "`extensions.<system>`. The count is how many times it was seen. An OpenAIReview "
+        "paper.json is mapped once per model, and each run counts the other models' entries as "
+        "unmapped, so its counts add up over all the models.",
         "- **lost_on_roundtrip**: a source field that does not come back when an OCRS review is "
         "written in the source's format again. Taken from `tests/test_roundtrip.py`. The count "
         "is how many fixtures lose it.",
