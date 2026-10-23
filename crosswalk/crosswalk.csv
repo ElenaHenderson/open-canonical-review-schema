@@ -295,9 +295,9 @@ findings.questions[].evidence_links[].resource.work.title,,string,,,,,,,,,,,
 findings.questions[].evidence_links[].resource.work.year,,integer,,,,,,,,,,,
 findings.questions[].evidence_links[].version,,string,,,,,,,,,,,
 findings.questions[].group,,array,,,,,,,,,,,
-findings.questions[].id,,string,,,,observed,,,,observed,,,
+findings.questions[].id,,string,,,,observed,,,,observed,observed,,
 findings.questions[].tags,,array,,,,,,,,,,,
-findings.questions[].text,,string,,,,observed,,,,observed,,,
+findings.questions[].text,,string,,,,observed,,,,observed,observed,,
 findings.questions[].title,,string,,,,,,,,,,,
 findings.questions[].uncertainty.credence,,number,,,,,,,,,,,
 findings.questions[].uncertainty.interval.high,,number,,,,,,,,,,,
@@ -369,11 +369,11 @@ findings.strengths[].evidence_links[].resource.work.identifiers.valency_id.value
 findings.strengths[].evidence_links[].resource.work.title,,string,,,,,,,,,,,
 findings.strengths[].evidence_links[].resource.work.year,,integer,,,,,,,,,,,
 findings.strengths[].evidence_links[].version,,string,,,,,,,,,,,
-findings.strengths[].group,,array,,,,,,,,observed,,,
-findings.strengths[].id,,string,,observed,,observed,,,,observed,,,
+findings.strengths[].group,,array,,,,,,,,observed,observed,,
+findings.strengths[].id,,string,,observed,,observed,,,,observed,observed,,
 findings.strengths[].tags,,array,,,,,,,,,,,
-findings.strengths[].text,,string,,copied:strengths[].text,,observed,,,,observed,,,
-findings.strengths[].title,,string,,,,,,,,,,,
+findings.strengths[].text,,string,,copied:strengths[].text,,observed,,,,observed,observed,,
+findings.strengths[].title,,string,,,,,,,,,observed,,
 findings.strengths[].uncertainty.credence,,number,,,,,,,,,,,
 findings.strengths[].uncertainty.interval.high,,number,,,,,,,,,,,
 findings.strengths[].uncertainty.interval.low,,number,,,,,,,,,,,
@@ -405,7 +405,7 @@ findings.weaknesses[].evidence_links[].resource.id,,string,,,,,,,,,,,
 findings.weaknesses[].evidence_links[].resource.ref,,string,,observed,,,,,,,,,
 findings.weaknesses[].evidence_links[].resource.type,,enum string,,observed | parsed:issues[].tiers[].items[].location,,,,,observed,,,,
 findings.weaknesses[].evidence_links[].resource.work,,object,,parsed:weaknesses[].text,,,,,,,,,
-findings.weaknesses[].evidence_links[].resource.work.authors,,array,,,,,,,,,,,
+findings.weaknesses[].evidence_links[].resource.work.authors,,array,,observed,,,,,,,,,
 findings.weaknesses[].evidence_links[].resource.work.citation,,string,,,,,,,,,,,
 findings.weaknesses[].evidence_links[].resource.work.identifiers.accession.database,,string,,,,,,,,,,,
 findings.weaknesses[].evidence_links[].resource.work.identifiers.accession.hyperlink,,string,,,,,,,,,,,
@@ -443,14 +443,14 @@ findings.weaknesses[].evidence_links[].resource.work.identifiers.uuid.hyperlink,
 findings.weaknesses[].evidence_links[].resource.work.identifiers.uuid.value,,string,,,,,,,,,,,
 findings.weaknesses[].evidence_links[].resource.work.identifiers.valency_id.hyperlink,,string,,,,,,,,,,,
 findings.weaknesses[].evidence_links[].resource.work.identifiers.valency_id.value,,string,,,,,,,,,,,
-findings.weaknesses[].evidence_links[].resource.work.title,,string,,,,,,,,,,,
-findings.weaknesses[].evidence_links[].resource.work.year,,integer,,,,,,,,,,,
+findings.weaknesses[].evidence_links[].resource.work.title,,string,,observed,,,,,,,,,
+findings.weaknesses[].evidence_links[].resource.work.year,,integer,,observed,,,,,,,,,
 findings.weaknesses[].evidence_links[].version,,string,,,,,,,,,,,
-findings.weaknesses[].group,,array,,copied:issues[].heading | copied:issues[].tiers[].heading,,,,,,observed,,,
-findings.weaknesses[].id,,string,,observed,,observed,,,observed,observed,,,
-findings.weaknesses[].severity,,enum string,,lookup:issues[].tiers[].heading,,,,,,,,,
+findings.weaknesses[].group,,array,,copied:issues[].heading | copied:issues[].tiers[].heading,,,,,,observed,observed,,
+findings.weaknesses[].id,,string,,observed,,observed,,,observed,observed,observed,,
+findings.weaknesses[].severity,,enum string,,lookup:issues[].tiers[].heading,,,,,,,observed,,
 findings.weaknesses[].tags,,array,,,,,,,copied:methods.progressive__*.comments[].comment_type,observed,,,
-findings.weaknesses[].text,,string,,copied:issues[].tiers[].items[].text | copied:weaknesses[].text,,observed,,,copied:methods.progressive__*.comments[].explanation,observed,,,
+findings.weaknesses[].text,,string,,copied:issues[].tiers[].items[].text | copied:weaknesses[].text,,observed,,,copied:methods.progressive__*.comments[].explanation,observed,observed,,
 findings.weaknesses[].title,,string,,copied:issues[].tiers[].items[].title,,,,,copied:methods.progressive__*.comments[].title,,,,
 findings.weaknesses[].uncertainty.credence,,number,,,,,,,,,,,
 findings.weaknesses[].uncertainty.interval.high,,number,,,,,,,,,,,
@@ -458,9 +458,9 @@ findings.weaknesses[].uncertainty.interval.low,,number,,,,,,,,,,,
 findings.weaknesses[].uncertainty.probability,,number,,,,,,,,,,,
 findings.weaknesses[].uncertainty.rationale,,string,,,,,,,,,,,
 metrics[],,,,,,,,,,,parsed:Clarity | parsed:Confidence | parsed:Originality | lookup:Quality | lookup:Rating,,
-metrics[].definition_ref.key,,string,observed,,observed,observed,,,,observed,,,observed
-metrics[].definition_ref.schema_id,,string,observed,,observed,observed,,,,observed,,,observed
-metrics[].id,,string,observed,,observed,observed,,,,observed,,,observed
+metrics[].definition_ref.key,,string,observed,,observed,observed,,,,observed,observed,,observed
+metrics[].definition_ref.schema_id,,string,observed,,observed,observed,,,,observed,observed,,observed
+metrics[].id,,string,observed,,observed,observed,,,,observed,observed,,observed
 metrics[].justification,,string,observed,,observed,observed,,,,observed,,,observed
 metrics[].normalized.method,,string,observed,,observed,observed,,,,observed,,,observed
 metrics[].normalized.method_version,,string,,,,,,,,,,,
@@ -472,13 +472,13 @@ metrics[].uncertainty.interval.high,,number,,,,,,,,,,,
 metrics[].uncertainty.interval.low,,number,,,,,,,,,,,
 metrics[].uncertainty.probability,,number,,,,,,,,,,,
 metrics[].uncertainty.rationale,,string,,,,,,,,,,,
-metrics[].value,,array boolean integer number string,observed,,observed,observed,,,,observed,,,observed
+metrics[].value,,array boolean integer number string,observed,,observed,observed,,,,observed,observed,,observed
 narrative[],,,,,,,,,,,copied:Limitations | copied:Questions | copied:Strengths And Weaknesses | copied:Summary,,
 narrative[].audience,,enum string,observed,,observed,observed,,,,,,,observed
-narrative[].content,,string,observed,,observed,observed,observed,observed,,observed,,,observed
-narrative[].role,,enum string,observed,,observed,observed,observed,observed,,observed,,,observed
+narrative[].content,,string,observed,,observed,observed,observed,observed,,observed,observed,,observed
+narrative[].role,,enum string,observed,,observed,observed,observed,observed,,observed,observed,,observed
 narrative[].tags,,array,,,,,,,,,,,
-narrative[].title,,string,observed,,observed,observed,observed,observed,,observed,,,observed
+narrative[].title,,string,observed,,observed,observed,observed,observed,,observed,observed,,observed
 opinion.decision.rationale,,string,,,,,,,,,copied:Final Justification,,
 opinion.decision.recommendation,,enum string,observed,,observed,observed,observed,,,observed,lookup:Rating,,
 opinion.decision.revision_requirement,,enum string,,,observed,,,,,,,,observed

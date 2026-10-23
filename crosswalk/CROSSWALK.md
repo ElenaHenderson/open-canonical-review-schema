@@ -40,17 +40,17 @@ Out of 835 OCRS leaf fields.
 
 | System | Leaf fields filled | % | Required filled | Unmapped source fields | Fixtures | Column |
 |---|---|---|---|---|---|---|
-| `cmt` | 35 | 4.2 | 8 of 8 | 0 | 2 | fields observed, sources not recorded |
+| `cmt` | 35 | 4.2 | 8 of 8 |  | 2 | fields observed, sources not recorded |
 | `deepreview` | 44 | 5.3 | 8 of 8 | 0 | 1 | fields and sources recorded |
-| `editorialmanager` | 40 | 4.8 | 8 of 8 | 0 | 4 | fields observed, sources not recorded |
-| `hotcrp` | 42 | 5.0 | 8 of 8 | 0 | 3 | fields observed, sources not recorded |
-| `jats` | 31 | 3.7 | 8 of 8 | 26 | 7 | fields observed, sources not recorded |
-| `journal_narrative` | 21 | 2.5 | 8 of 8 | 0 | 8 | fields observed, sources not recorded |
+| `editorialmanager` | 40 | 4.8 | 8 of 8 |  | 4 | fields observed, sources not recorded |
+| `hotcrp` | 42 | 5.0 | 8 of 8 |  | 3 | fields observed, sources not recorded |
+| `jats` | 31 | 3.7 | 8 of 8 |  | 7 | fields observed, sources not recorded |
+| `journal_narrative` | 21 | 2.5 | 8 of 8 |  | 8 | fields observed, sources not recorded |
 | `openaireview` | 32 | 3.8 | 8 of 8 | 14 | 5 | fields and sources recorded |
-| `openreview` | 56 | 6.7 | 8 of 8 | 6 | 37 | fields observed, sources not recorded |
+| `openreview` | 56 | 6.7 | 8 of 8 |  | 37 | fields observed, sources not recorded |
 | `openreview_page` | 52 | 6.2 | 8 of 8 | 1 | 2 | fields and sources recorded |
 | `reviewer3` | 50 | 6.0 | 8 of 8 | 0 | 1 | fields and sources recorded |
-| `scholarone` | 41 | 4.9 | 8 of 8 | 0 | 3 | fields observed, sources not recorded |
+| `scholarone` | 41 | 4.9 | 8 of 8 |  | 3 | fields observed, sources not recorded |
 
 ## Fields by section
 
@@ -96,12 +96,13 @@ No fixture fills 2 of the 8 fields in this section.
 | `findings.comments[].text` |  |  |  |  |  |  |  |  | observed | observed | copied:comments[].text |  |
 | `findings.comments[].title` |  |  |  |  |  |  |  |  |  |  | copied:comments[].title |  |
 | `findings.questions[]` |  |  |  |  |  |  |  |  |  | copied:Questions |  |  |
-| `findings.questions[].id` |  |  |  |  | observed |  |  |  | observed |  |  |  |
-| `findings.questions[].text` |  |  |  |  | observed |  |  |  | observed |  |  |  |
+| `findings.questions[].id` |  |  |  |  | observed |  |  |  | observed | observed |  |  |
+| `findings.questions[].text` |  |  |  |  | observed |  |  |  | observed | observed |  |  |
 | `findings.strengths[]` |  |  |  |  |  |  |  |  |  | copied:Strengths And Weaknesses |  |  |
-| `findings.strengths[].group` |  |  |  |  |  |  |  |  | observed |  |  |  |
-| `findings.strengths[].id` |  |  | observed |  | observed |  |  |  | observed |  |  |  |
-| `findings.strengths[].text` |  |  | copied:strengths[].text |  | observed |  |  |  | observed |  |  |  |
+| `findings.strengths[].group` |  |  |  |  |  |  |  |  | observed | observed |  |  |
+| `findings.strengths[].id` |  |  | observed |  | observed |  |  |  | observed | observed |  |  |
+| `findings.strengths[].text` |  |  | copied:strengths[].text |  | observed |  |  |  | observed | observed |  |  |
+| `findings.strengths[].title` |  |  |  |  |  |  |  |  |  | observed |  |  |
 | `findings.weaknesses[]` |  |  |  |  |  |  |  |  |  | copied:Strengths And Weaknesses \| lookup:Strengths And Weaknesses |  |  |
 | `findings.weaknesses[].evidence_links[]` |  |  |  |  |  |  |  | anchored_exact:methods.progressive__*.comments[].quote \| anchored_fuzzy:methods.progressive__*.comments[].quote |  |  |  |  |
 | `findings.weaknesses[].evidence_links[].location.equation` |  |  | observed |  |  |  |  |  |  |  |  |  |
@@ -115,27 +116,30 @@ No fixture fills 2 of the 8 fields in this section.
 | `findings.weaknesses[].evidence_links[].resource.ref` |  |  | observed |  |  |  |  |  |  |  |  |  |
 | `findings.weaknesses[].evidence_links[].resource.type` |  |  | observed \| parsed:issues[].tiers[].items[].location |  |  |  |  | observed |  |  |  |  |
 | `findings.weaknesses[].evidence_links[].resource.work` |  |  | parsed:weaknesses[].text |  |  |  |  |  |  |  |  |  |
-| `findings.weaknesses[].group` |  |  | copied:issues[].heading \| copied:issues[].tiers[].heading |  |  |  |  |  | observed |  |  |  |
-| `findings.weaknesses[].id` |  |  | observed |  | observed |  |  | observed | observed |  |  |  |
-| `findings.weaknesses[].severity` |  |  | lookup:issues[].tiers[].heading |  |  |  |  |  |  |  |  |  |
+| `findings.weaknesses[].evidence_links[].resource.work.authors` |  |  | observed |  |  |  |  |  |  |  |  |  |
+| `findings.weaknesses[].evidence_links[].resource.work.title` |  |  | observed |  |  |  |  |  |  |  |  |  |
+| `findings.weaknesses[].evidence_links[].resource.work.year` |  |  | observed |  |  |  |  |  |  |  |  |  |
+| `findings.weaknesses[].group` |  |  | copied:issues[].heading \| copied:issues[].tiers[].heading |  |  |  |  |  | observed | observed |  |  |
+| `findings.weaknesses[].id` |  |  | observed |  | observed |  |  | observed | observed | observed |  |  |
+| `findings.weaknesses[].severity` |  |  | lookup:issues[].tiers[].heading |  |  |  |  |  |  | observed |  |  |
 | `findings.weaknesses[].tags` |  |  |  |  |  |  |  | copied:methods.progressive__*.comments[].comment_type | observed |  |  |  |
-| `findings.weaknesses[].text` |  |  | copied:issues[].tiers[].items[].text \| copied:weaknesses[].text |  | observed |  |  | copied:methods.progressive__*.comments[].explanation | observed |  |  |  |
+| `findings.weaknesses[].text` |  |  | copied:issues[].tiers[].items[].text \| copied:weaknesses[].text |  | observed |  |  | copied:methods.progressive__*.comments[].explanation | observed | observed |  |  |
 | `findings.weaknesses[].title` |  |  | copied:issues[].tiers[].items[].title |  |  |  |  | copied:methods.progressive__*.comments[].title |  |  |  |  |
 
-No fixture fills 335 of the 373 fields in this section.
+No fixture fills 331 of the 373 fields in this section.
 
 ### `metrics`
 
 | OCRS field | Required | `cmt` | `deepreview` | `editorialmanager` | `hotcrp` | `jats` | `journal_narrative` | `openaireview` | `openreview` | `openreview_page` | `reviewer3` | `scholarone` |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `metrics[]` |  |  |  |  |  |  |  |  |  | parsed:Clarity \| parsed:Confidence \| parsed:Originality \| lookup:Quality \| lookup:Rating |  |  |
-| `metrics[].definition_ref.key` |  | observed |  | observed | observed |  |  |  | observed |  |  | observed |
-| `metrics[].definition_ref.schema_id` |  | observed |  | observed | observed |  |  |  | observed |  |  | observed |
-| `metrics[].id` |  | observed |  | observed | observed |  |  |  | observed |  |  | observed |
+| `metrics[].definition_ref.key` |  | observed |  | observed | observed |  |  |  | observed | observed |  | observed |
+| `metrics[].definition_ref.schema_id` |  | observed |  | observed | observed |  |  |  | observed | observed |  | observed |
+| `metrics[].id` |  | observed |  | observed | observed |  |  |  | observed | observed |  | observed |
 | `metrics[].justification` |  | observed |  | observed | observed |  |  |  | observed |  |  | observed |
 | `metrics[].normalized.method` |  | observed |  | observed | observed |  |  |  | observed |  |  | observed |
 | `metrics[].normalized.value_0_1` |  | observed |  | observed | observed |  |  |  | observed |  |  | observed |
-| `metrics[].value` |  | observed |  | observed | observed |  |  |  | observed |  |  | observed |
+| `metrics[].value` |  | observed |  | observed | observed |  |  |  | observed | observed |  | observed |
 
 No fixture fills 8 of the 16 fields in this section.
 
@@ -215,9 +219,9 @@ No fixture fills 68 of the 80 fields in this section.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `narrative[]` |  |  |  |  |  |  |  |  |  | copied:Limitations \| copied:Questions \| copied:Strengths And Weaknesses \| copied:Summary |  |  |
 | `narrative[].audience` |  | observed |  | observed | observed |  |  |  |  |  |  | observed |
-| `narrative[].content` |  | observed |  | observed | observed | observed | observed |  | observed |  |  | observed |
-| `narrative[].role` |  | observed |  | observed | observed | observed | observed |  | observed |  |  | observed |
-| `narrative[].title` |  | observed |  | observed | observed | observed | observed |  | observed |  |  | observed |
+| `narrative[].content` |  | observed |  | observed | observed | observed | observed |  | observed | observed |  | observed |
+| `narrative[].role` |  | observed |  | observed | observed | observed | observed |  | observed | observed |  | observed |
+| `narrative[].title` |  | observed |  | observed | observed | observed | observed |  | observed | observed |  | observed |
 
 No fixture fills 1 of the 6 fields in this section.
 
@@ -279,8 +283,9 @@ No fixture fills 8 of the 8 fields in this section.
 
 ## Gaps
 
-- **unmapped**: a source field with no OCRS field. Its value is kept in `extensions.<system>`. The count is how many times it was seen. An OpenAIReview paper.json is mapped once per model, and each run counts the other models' entries as unmapped, so its counts add up over all the models.
-- **lost_on_roundtrip**: a source field that does not come back when an OCRS review is written in the source's format again. Taken from `tests/test_roundtrip.py`. The count is how many fixtures lose it.
+- **unmapped**: a source field with no OCRS field. Its value is kept in `extensions.<system>`. The count is how many times it was seen. An OpenAIReview paper.json is mapped once per model, and each run counts the other models' entries as unmapped, so its counts add up over all the models. Only systems whose mappers record their mapping report it.
+- **kept_in_extensions**: a source field a mapper that records nothing kept in `extensions.<system>`, to write it back. It may have no OCRS field, or be a copy of one it also maps (JATS keeps the article's title, which it maps to `target.title`). The count is how many times it was seen.
+- **lost_on_roundtrip**: a source field that does not come back when an OCRS review is written in the source's format again. Taken from `tests/test_roundtrip.py` and `tests/test_real_reviews.py`. The count is how many fixtures lose it.
 - **coerced**: a source value OCRS does not allow, replaced by the nearest allowed one.
 
 ### `cmt`
@@ -304,52 +309,99 @@ No gaps seen.
 | lost_on_roundtrip | `articleType` |  | 2 |
 | lost_on_roundtrip | `dateDue` |  | 1 |
 | lost_on_roundtrip | `dateRequested` |  | 1 |
+| lost_on_roundtrip | `departments` |  | 1 |
+| lost_on_roundtrip | `documentId` |  | 1 |
+| lost_on_roundtrip | `inputIndex` |  | 1 |
 | lost_on_roundtrip | `journalId` |  | 1 |
 | lost_on_roundtrip | `keywords` |  | 1 |
 | lost_on_roundtrip | `previousReviewId` |  | 1 |
 | lost_on_roundtrip | `ratings[].questionId` |  | 2 |
+| lost_on_roundtrip | `reviewerAssignmentStatus` |  | 1 |
+| lost_on_roundtrip | `reviewerAverageMScore` |  | 1 |
+| lost_on_roundtrip | `reviewerDateAssigned` |  | 1 |
+| lost_on_roundtrip | `reviewerDateInvited` |  | 1 |
+| lost_on_roundtrip | `reviewerFirstName` |  | 1 |
+| lost_on_roundtrip | `reviewerFullName` |  | 1 |
+| lost_on_roundtrip | `reviewerLastName` |  | 1 |
+| lost_on_roundtrip | `reviewerORCIDId` |  | 1 |
+| lost_on_roundtrip | `reviewerORCIDIdValidation` |  | 1 |
+| lost_on_roundtrip | `reviewerPersonId` |  | 1 |
+| lost_on_roundtrip | `reviewerPrimaryEmailAddress` |  | 1 |
+| lost_on_roundtrip | `reviewerRank` |  | 1 |
+| lost_on_roundtrip | `reviewerRecommendation` |  | 1 |
+| lost_on_roundtrip | `reviewerRecommendationNumericValue` |  | 1 |
+| lost_on_roundtrip | `reviewerSalutation` |  | 1 |
+| lost_on_roundtrip | `revision` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCompletedDate` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[]` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].answerType` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].customQuestionId` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].questionName` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].questionStatus` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].scoreSheetCustomAnswer.answerId` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].scoreSheetCustomAnswer.answerName` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].scoreSheetCustomAnswer.answerStatus` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].scoreSheetCustomAnswer.numericValue` |  | 1 |
+| lost_on_roundtrip | `scoreSheetDueDate` |  | 1 |
+| lost_on_roundtrip | `scoreSheetName` |  | 1 |
 
 ### `hotcrp`
 
 | Kind | Source field | OCRS field | Count |
 |---|---|---|---|
-| lost_on_roundtrip | `ordinal` |  | 1 |
+| lost_on_roundtrip | `ComAut` |  | 1 |
+| lost_on_roundtrip | `ComPC` |  | 1 |
+| lost_on_roundtrip | `OveMer` |  | 1 |
+| lost_on_roundtrip | `PapSum` |  | 1 |
+| lost_on_roundtrip | `RevExp` |  | 1 |
+| lost_on_roundtrip | `blind` |  | 1 |
+| lost_on_roundtrip | `object` |  | 1 |
+| lost_on_roundtrip | `ordinal` |  | 2 |
 | lost_on_roundtrip | `reviewer.first` |  | 1 |
 | lost_on_roundtrip | `reviewer.last` |  | 1 |
-| lost_on_roundtrip | `rtype` |  | 1 |
+| lost_on_roundtrip | `reviewer_email` |  | 1 |
+| lost_on_roundtrip | `rid` |  | 1 |
+| lost_on_roundtrip | `rtype` |  | 2 |
 | lost_on_roundtrip | `rtype_name` |  | 1 |
+| lost_on_roundtrip | `status` |  | 1 |
 | lost_on_roundtrip | `submitted` |  | 1 |
+| lost_on_roundtrip | `version` |  | 1 |
 
 ### `jats`
 
 | Kind | Source field | OCRS field | Count |
 |---|---|---|---|
-| unmapped | `article.doi` |  | 7 |
-| unmapped | `article.journal` |  | 7 |
-| unmapped | `article.title` |  | 7 |
-| unmapped | `article_type` |  | 7 |
-| unmapped | `contributors[].affiliation_ref.id` |  | 3 |
-| unmapped | `contributors[].affiliation_ref.label` |  | 3 |
-| unmapped | `contributors[].given_names` |  | 17 |
-| unmapped | `contributors[].orcid_element` |  | 19 |
-| unmapped | `contributors[].role.specific_use` |  | 16 |
-| unmapped | `contributors[].role.text` |  | 19 |
-| unmapped | `contributors[].surname` |  | 17 |
-| unmapped | `keywords[].terms[]` |  | 2 |
-| unmapped | `keywords[].type` |  | 2 |
-| unmapped | `lists_in_paragraphs` |  | 1 |
-| unmapped | `permissions.copyright_statement` |  | 3 |
-| unmapped | `permissions.copyright_year` |  | 3 |
-| unmapped | `permissions.licenses[].text` |  | 4 |
-| unmapped | `permissions.licenses[].url` |  | 3 |
-| unmapped | `pub_date.pub_type` |  | 3 |
-| unmapped | `recommendation.name` |  | 3 |
-| unmapped | `recommendation.value` |  | 3 |
-| unmapped | `related_article.ext-link-type` |  | 3 |
-| unmapped | `related_article.id` |  | 3 |
-| unmapped | `related_article.related-article-type` |  | 3 |
-| unmapped | `responses[]` |  | 1 |
-| unmapped | `title` |  | 7 |
+| kept_in_extensions | `article.doi` |  | 7 |
+| kept_in_extensions | `article.journal` |  | 7 |
+| kept_in_extensions | `article.title` |  | 7 |
+| kept_in_extensions | `article_type` |  | 7 |
+| kept_in_extensions | `contributors[].affiliation_ref.id` |  | 3 |
+| kept_in_extensions | `contributors[].affiliation_ref.label` |  | 3 |
+| kept_in_extensions | `contributors[].given_names` |  | 17 |
+| kept_in_extensions | `contributors[].orcid_element` |  | 19 |
+| kept_in_extensions | `contributors[].role.specific_use` |  | 16 |
+| kept_in_extensions | `contributors[].role.text` |  | 19 |
+| kept_in_extensions | `contributors[].surname` |  | 17 |
+| kept_in_extensions | `keywords[].terms[]` |  | 2 |
+| kept_in_extensions | `keywords[].type` |  | 2 |
+| kept_in_extensions | `lists_in_paragraphs` |  | 1 |
+| kept_in_extensions | `permissions.copyright_statement` |  | 3 |
+| kept_in_extensions | `permissions.copyright_year` |  | 3 |
+| kept_in_extensions | `permissions.licenses[].text` |  | 4 |
+| kept_in_extensions | `permissions.licenses[].url` |  | 3 |
+| kept_in_extensions | `pub_date.pub_type` |  | 3 |
+| kept_in_extensions | `recommendation.name` |  | 3 |
+| kept_in_extensions | `recommendation.value` |  | 3 |
+| kept_in_extensions | `related_article.ext-link-type` |  | 3 |
+| kept_in_extensions | `related_article.id` |  | 3 |
+| kept_in_extensions | `related_article.related-article-type` |  | 3 |
+| kept_in_extensions | `responses[]` |  | 1 |
+| kept_in_extensions | `title` |  | 7 |
+| lost_on_roundtrip | `sub_article.body[].disp-quote[].@content-type` |  | 1 |
+| lost_on_roundtrip | `sub_article.body[].p[]` |  | 1 |
+| lost_on_roundtrip | `sub_article.front-stub[].contrib-group[].contrib[].aff[].addr-line` |  | 1 |
+| lost_on_roundtrip | `sub_article.front-stub[].contrib-group[].contrib[].aff[].country` |  | 2 |
+| lost_on_roundtrip | `sub_article.front-stub[].contrib-group[].contrib[].aff[].institution` |  | 2 |
 
 ### `journal_narrative`
 
@@ -378,22 +430,28 @@ No gaps seen.
 
 | Kind | Source field | OCRS field | Count |
 |---|---|---|---|
-| lost_on_roundtrip | `content.code_of_conduct` |  | 2 |
-| lost_on_roundtrip | `content.title` |  | 1 |
+| kept_in_extensions | `ethics_flags.fields.ethics_flag` |  | 5 |
+| kept_in_extensions | `ethics_flags.fields.flag_for_ethics_review` |  | 3 |
+| kept_in_extensions | `ethics_flags.fields.flag_for_ethics_review[]` |  | 14 |
+| kept_in_extensions | `ethics_flags.say.concern_categories[]` |  | 1 |
+| kept_in_extensions | `ethics_flags.say.ethical_concerns` |  | 22 |
+| kept_in_extensions | `venueid` |  | 35 |
+| lost_on_roundtrip | `content.code_of_conduct` |  | 16 |
+| lost_on_roundtrip | `content.comment` |  | 2 |
+| lost_on_roundtrip | `content.recommendation` |  | 1 |
+| lost_on_roundtrip | `content.title` |  | 9 |
+| lost_on_roundtrip | `domain` |  | 32 |
 | lost_on_roundtrip | `invitation` |  | 1 |
-| lost_on_roundtrip | `invitations` |  | 3 |
-| lost_on_roundtrip | `number` |  | 1 |
-| lost_on_roundtrip | `readers` |  | 2 |
-| lost_on_roundtrip | `replyto` |  | 4 |
-| lost_on_roundtrip | `tcdate` |  | 1 |
-| lost_on_roundtrip | `tmdate` |  | 1 |
-| lost_on_roundtrip | `writers` |  | 1 |
-| unmapped | `ethics_flags.fields.ethics_flag` |  | 5 |
-| unmapped | `ethics_flags.fields.flag_for_ethics_review` |  | 3 |
-| unmapped | `ethics_flags.fields.flag_for_ethics_review[]` |  | 14 |
-| unmapped | `ethics_flags.say.concern_categories[]` |  | 1 |
-| unmapped | `ethics_flags.say.ethical_concerns` |  | 22 |
-| unmapped | `venueid` |  | 35 |
+| lost_on_roundtrip | `invitations` |  | 35 |
+| lost_on_roundtrip | `nonreaders` |  | 29 |
+| lost_on_roundtrip | `number` |  | 33 |
+| lost_on_roundtrip | `parentInvitations` |  | 6 |
+| lost_on_roundtrip | `readers` |  | 34 |
+| lost_on_roundtrip | `replyto` |  | 36 |
+| lost_on_roundtrip | `tcdate` |  | 33 |
+| lost_on_roundtrip | `tmdate` |  | 33 |
+| lost_on_roundtrip | `version` |  | 32 |
+| lost_on_roundtrip | `writers` |  | 33 |
 
 ### `openreview_page`
 
@@ -412,8 +470,40 @@ No gaps seen.
 | lost_on_roundtrip | `articleType` |  | 1 |
 | lost_on_roundtrip | `criteriaResponses[].criterionId` |  | 1 |
 | lost_on_roundtrip | `dateReviewRequested` |  | 1 |
+| lost_on_roundtrip | `departments` |  | 1 |
 | lost_on_roundtrip | `fundingStatement` |  | 1 |
+| lost_on_roundtrip | `inputIndex` |  | 1 |
 | lost_on_roundtrip | `journalCode` |  | 1 |
+| lost_on_roundtrip | `numberOfDaysFromReviewAssignmentToCompletion` |  | 1 |
+| lost_on_roundtrip | `reviewAverageMScore` |  | 1 |
+| lost_on_roundtrip | `reviewRScore` |  | 1 |
+| lost_on_roundtrip | `reviewSumMScore` |  | 1 |
+| lost_on_roundtrip | `reviewerAssignmentStatus` |  | 1 |
+| lost_on_roundtrip | `reviewerDateAssigned` |  | 1 |
+| lost_on_roundtrip | `reviewerDateInvited` |  | 1 |
+| lost_on_roundtrip | `reviewerFirstName` |  | 1 |
+| lost_on_roundtrip | `reviewerFullName` |  | 1 |
+| lost_on_roundtrip | `reviewerLastName` |  | 1 |
+| lost_on_roundtrip | `reviewerORCIDId` |  | 1 |
+| lost_on_roundtrip | `reviewerORCIDIdValidation` |  | 1 |
 | lost_on_roundtrip | `reviewerOrcid` |  | 1 |
+| lost_on_roundtrip | `reviewerPrimaryEmailAddress` |  | 1 |
+| lost_on_roundtrip | `reviewerRatingCustomQuestions` |  | 1 |
+| lost_on_roundtrip | `reviewerRatingFormName` |  | 1 |
+| lost_on_roundtrip | `reviewerRecommendation` |  | 1 |
+| lost_on_roundtrip | `reviewerRecommendationNumericValue` |  | 1 |
+| lost_on_roundtrip | `reviewerSalutation` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCompletedDate` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[]` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].answerType` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].customQuestionId` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].questionName` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].questionStatus` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].scoreSheetCustomAnswer.answerId` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].scoreSheetCustomAnswer.answerName` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].scoreSheetCustomAnswer.answerStatus` |  | 1 |
+| lost_on_roundtrip | `scoreSheetCustomQuestions[].scoreSheetCustomAnswer.numericValue` |  | 1 |
+| lost_on_roundtrip | `scoreSheetDueDate` |  | 1 |
+| lost_on_roundtrip | `scoreSheetName` |  | 1 |
 | lost_on_roundtrip | `specialIssue` |  | 1 |
-| lost_on_roundtrip | `submissionId` |  | 1 |
+| lost_on_roundtrip | `submissionId` |  | 2 |

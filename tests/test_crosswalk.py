@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 
 import pytest
+from test_real_reviews import LOSSES as REAL_LOSSES
+from test_real_reviews import SOURCES
 from test_roundtrip import LOSSES
 
 from ocrs.gaps import iter_schema_paths
@@ -73,11 +75,16 @@ def test_two_runs_write_the_same_bytes(files):
     assert {p.as_posix(): t for p, t in load_script().outputs().items()} == files
 
 
-def test_lost_on_round_trip_is_what_test_roundtrip_lists(files):
+def test_lost_on_round_trip_is_what_the_round_trip_tests_list(files):
     folder_system = {"journal": "journal_narrative", "openreview_v2": "openreview"}
+    real_system = {source["file"]: source["system"] for source in SOURCES}
+    systems = {
+        **{f: folder_system.get(f.split("/")[0], f.split("/")[0]) for f in LOSSES},
+        **{f: real_system[f] for f in REAL_LOSSES},
+    }
     expected = {
-        (folder_system.get(fixture.split("/")[0], fixture.split("/")[0]), change[2:])
-        for fixture, changes in LOSSES.items()
+        (systems[fixture], change[2:])
+        for fixture, changes in [*LOSSES.items(), *REAL_LOSSES.items()]
         for change in changes
         if change.startswith("- ")
     }
@@ -119,3 +126,29 @@ def test_jats_fills_the_review_doi(long_rows):
         r for r in long_rows if r["system"] == "jats" and r["ocrs_path"] == "provenance.review_doi"
     ]
     assert [r["method"] for r in jats] == ["observed"]
+
+
+def test_a_step_that_fills_a_whole_item_leaves_its_leaves_observed(files, long_rows):
+    # A saved page's steps fill whole metrics and narrative parts; the leaves they fill are
+    # not blank, which would say no fixture fills them
+    assert "Rating" in sources(long_rows, "openreview_page", "metrics[]")
+    wide = {r["ocrs_path"]: r for r in rows(files["crosswalk/crosswalk.csv"])}
+    for path in ("metrics[].value", "narrative[].content", "findings.strengths[].text"):
+        assert wide[path]["openreview_page"] == "observed", path
+
+
+def test_only_a_record_says_a_field_is_unmapped(files):
+    gaps = rows(files["crosswalk/gaps.csv"])
+    # JATS keeps the article's title to write it back, and maps it to target.title
+    assert {"system": "jats", "kind": "kept_in_extensions", "source_field": "article.title"} in [
+        {k: r[k] for k in ("system", "kind", "source_field")} for r in gaps
+    ]
+    assert not any(r["kind"] == "unmapped" and r["system"] in {"jats", "openreview"} for r in gaps)
+    coverage = {r["system"]: r for r in rows(files["crosswalk/coverage.csv"])}
+    assert coverage["jats"]["unmapped_source_fields"] == ""
+    assert coverage["openaireview"]["unmapped_source_fields"] != ""
+
+
+def test_the_source_archive_ships_the_crosswalk():
+    # scripts/generate_docs.py publishes it, and the archive carries that script
+    assert "graft crosswalk" in (ROOT / "MANIFEST.in").read_text().splitlines()

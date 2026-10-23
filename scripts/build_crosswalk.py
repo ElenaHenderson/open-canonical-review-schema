@@ -27,6 +27,10 @@ longest path it does list. Paths under these hold opaque source data and are lef
 a saved OpenReview page one per Official Review. For the same reason, OpenAIReview's `unmapped`
 counts add up over every model run: each run counts the other models' entries as unmapped.
 
+`unmapped` comes only from a mapping record (the AI reviewers, and a saved page's
+`unmapped_fields`). For a mapper that records nothing, what it kept in `extensions.<system>` is
+`kept_in_extensions`: a field may be kept to write it back although it is also mapped.
+
 Usage: `uv run scripts/build_crosswalk.py` writes crosswalk/; `--check` compares instead and
 exits 1 on any difference. scripts/generate_docs.py publishes it beside the current schema.
 """
@@ -49,6 +53,7 @@ TESTS = ROOT / "tests"
 OUT = ROOT / "crosswalk"
 sys.path[:0] = [str(ROOT / "src"), str(TESTS)]
 
+from test_real_reviews import LOSSES as REAL_LOSSES  # noqa: E402
 from test_real_reviews import REAL, SOURCES, form  # noqa: E402
 from test_roundtrip import AI_REVIEWS, AI_RUN, AI_SOURCES, LOSSES, SOURCE_REVIEWS  # noqa: E402
 
@@ -222,15 +227,20 @@ def collect(fields: dict[str, Any]):
             for label in page["unmapped_fields"]:
                 gaps[(system, "unmapped", label, "")] += 1
         else:
+            # With no record, what the mapper kept is all that can be read, and not all of it
+            # is unmapped: JATS keeps the article's title, which it also maps, to write it back
             kept = dict(review.get("extensions", {}).get(system) or {})
             # The caller's scale bounds, not the source's: added by ocrs.registry.map_from
             kept.pop("caller_scale_bounds", None)
             for leaf, _ in iter_leaves(kept):
-                gaps[(system, "unmapped", generic_path(leaf), "")] += 1
-        covered = [target for target, *_ in links]
+                gaps[(system, "kept_in_extensions", generic_path(leaf), "")] += 1
+        # A step credits a leaf only when it lands on that leaf's row. A step that fills a whole
+        # item (`metrics[0]`) keeps its own row, and the leaves it filled are observed below it
+        covered = [(target, schema_path(target, known)) for target, *_ in links]
         for leaf, _ in iter_leaves(review):
-            filled[system].add(schema_path(leaf, known))
-            if not any(under(leaf, target) for target in covered):
+            leaf_path = schema_path(leaf, known)
+            filled[system].add(leaf_path)
+            if not any(under(leaf, t) and row == leaf_path for t, row in covered):
                 links.append((leaf, "", "observed", ""))
         for target, source, method, heading in links:
             target_path = schema_path(target, known)
@@ -240,12 +250,15 @@ def collect(fields: dict[str, Any]):
             seen[key].add(fixture)
             if heading:
                 headings[key].add(heading)
-    for fixture, changes in LOSSES.items():
-        folder = fixture.split("/")[0]
+    real_system = {source["file"]: source["system"] for source in SOURCES}
+    for system, changes in [
+        *((FOLDER_SYSTEM.get(f.split("/")[0], f.split("/")[0]), c) for f, c in LOSSES.items()),
+        *((real_system[f], c) for f, c in REAL_LOSSES.items()),
+    ]:
         for change in changes:
             sign, field = change.split(" ", 1)
             if sign == "-":
-                gaps[(FOLDER_SYSTEM.get(folder, folder), "lost_on_roundtrip", field, "")] += 1
+                gaps[(system, "lost_on_roundtrip", field, "")] += 1
     return seen, headings, gaps, fixtures, filled
 
 
@@ -301,7 +314,10 @@ def build() -> dict[str, str]:
     coverage_rows = []
     for system in systems:
         fills = leaf_set & filled[system]
+        # Only a record says a field is unmapped; a mapper without one leaves the count blank
         unmapped = sum(1 for s, kind, *_ in gaps if s == system and kind == "unmapped")
+        if system not in recorded:
+            unmapped = ""
         coverage_rows.append(
             [
                 system,
@@ -435,10 +451,15 @@ def markdown(systems, wide_rows, gap_rows, coverage_rows, leaf_count) -> str:
         "- **unmapped**: a source field with no OCRS field. Its value is kept in "
         "`extensions.<system>`. The count is how many times it was seen. An OpenAIReview "
         "paper.json is mapped once per model, and each run counts the other models' entries as "
-        "unmapped, so its counts add up over all the models.",
+        "unmapped, so its counts add up over all the models. Only systems whose mappers record "
+        "their mapping report it.",
+        "- **kept_in_extensions**: a source field a mapper that records nothing kept in "
+        "`extensions.<system>`, to write it back. It may have no OCRS field, or be a copy of one "
+        "it also maps (JATS keeps the article's title, which it maps to `target.title`). The "
+        "count is how many times it was seen.",
         "- **lost_on_roundtrip**: a source field that does not come back when an OCRS review is "
-        "written in the source's format again. Taken from `tests/test_roundtrip.py`. The count "
-        "is how many fixtures lose it.",
+        "written in the source's format again. Taken from `tests/test_roundtrip.py` and "
+        "`tests/test_real_reviews.py`. The count is how many fixtures lose it.",
         "- **coerced**: a source value OCRS does not allow, replaced by the nearest allowed one.",
     ]
     by_system: dict[str, list[list[Any]]] = defaultdict(list)
