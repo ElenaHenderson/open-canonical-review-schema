@@ -152,7 +152,7 @@ def main():
 
     # The crosswalk, beside the schema of the version it was generated for
     current = schema_id().rsplit("/", 2)[-2]
-    for name in ("crosswalk.csv", "crosswalk.long.csv", "CROSSWALK.md"):
+    for name in ("crosswalk.csv", "crosswalk.long.csv", "gaps.csv", "coverage.csv", "CROSSWALK.md"):
         shutil.copy(root / "crosswalk" / name, docs_dir / current / name)
 
     # Create the landing page
