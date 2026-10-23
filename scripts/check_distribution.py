@@ -70,6 +70,8 @@ def check_distribution(dist: Path) -> None:
             cwd=source,
             env=env,
         )
+        # The archive ships the crosswalk the docs publish, and it is the one its mappers write
+        run(str(python), "scripts/build_crosswalk.py", "--check", cwd=source, env=env)
 
 
 if __name__ == "__main__":

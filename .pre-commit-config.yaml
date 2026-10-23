@@ -18,3 +18,10 @@ repos:
         language: python
         files: ^(src/ocrs/schemas/canonical-review\.schema\.json|examples/.*\.json)$
         pass_filenames: false
+      - id: build-crosswalk
+        name: regenerate the crosswalk
+        # uv, not an isolated hook env: the generator runs the mappers and imports the tests
+        entry: uv run scripts/build_crosswalk.py
+        language: system
+        files: ^(src/ocrs/|tests/fixtures/|tests/test_roundtrip\.py|tests/test_real_reviews\.py|scripts/build_crosswalk\.py)
+        pass_filenames: false

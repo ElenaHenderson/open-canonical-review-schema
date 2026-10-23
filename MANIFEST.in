@@ -1,5 +1,6 @@
 recursive-include src/ocrs/schemas *.json
 include *.md CITATION.cff uv.lock
+graft crosswalk
 graft examples
 graft scripts
 graft site

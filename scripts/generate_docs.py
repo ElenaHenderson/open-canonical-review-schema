@@ -12,6 +12,7 @@ from json_schema_for_humans.generate import generate_from_filename
 from json_schema_for_humans.generation_configuration import GenerationConfiguration
 
 from ocrs.registry import supported_sources, supported_targets
+from ocrs.schema import schema_id
 
 
 def stroke_icon(paths: str) -> str:
@@ -136,6 +137,11 @@ def main():
     versions = sorted(path.name for path in (root / "versions").iterdir() if path.is_dir())
     for version in versions:
         shutil.copytree(root / "versions" / version, docs_dir / version, dirs_exist_ok=True)
+
+    # The crosswalk, beside the schema of the version it was generated for
+    current = schema_id().rsplit("/", 2)[-2]
+    for name in ("crosswalk.csv", "crosswalk.long.csv", "gaps.csv", "coverage.csv", "CROSSWALK.md"):
+        shutil.copy(root / "crosswalk" / name, docs_dir / current / name)
 
     # Create the landing page
     create_landing_page(docs_dir, versions)
