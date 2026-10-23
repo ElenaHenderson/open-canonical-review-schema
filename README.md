@@ -13,7 +13,9 @@
 
 A standardized JSON schema and Python mapping utilities for peer review data. OCRS enables interoperability between different peer review systems by providing a canonical representation that preserves rich metadata including reviewer information, decision recommendations, structured findings, metrics, and AI provenance tracking.
 
+[**Explore the schema →**](https://ocrs.valency.io/schema) Browse the full record, follow the review-content hierarchy, and hover over fields for their descriptions. Select a field to inspect its allowed values and validation rules.
 
+[![OCRS schema explorer, showing grouped findings and their fields](site/schema-explorer.jpg)](https://ocrs.valency.io/schema)
 
 ## Why OCRS?
 
@@ -30,6 +32,10 @@ Science is entering an agentic era. AI agents now draft papers, run analyses and
 ## Supported Systems
 
 OCRS provides bidirectional mappers for converting between the canonical schema and various peer review platforms:
+
+<p align="center">
+  <img src="site/review-flow.png" width="800" alt="Reviews from conference systems (OpenReview, CMT, HotCRP), AI reviewers (OpenAIReview, Reviewer3, DeepReview) and journals (Editorial Manager, ScholarOne, JATS, journal narratives) all map to and from OCRS v0.9.0, shown as two-way arrows">
+</p>
 
 | System | Source (`from`) | Target (`to`) | Notes |
 |--------|:---------------:|:-------------:|-------|
@@ -77,6 +83,25 @@ A review names the version it follows in `$schema`, which the mappers set to the
 ```
 
 For complete reviews, see [examples/](examples/). The Python package below also maps reviews from other systems to OCRS.
+
+## Install the Python package
+
+Python 3.12 or newer is required. Install the version matching the schema you use:
+
+```bash
+python -m pip install "ocrs @ git+https://github.com/valency-oss/open-canonical-review-schema.git@v0.9.0"
+```
+
+The [GitHub release](https://github.com/valency-oss/open-canonical-review-schema/releases/tag/v0.9.0)
+also provides a wheel, a source archive, and SHA-256 checksums. Download the wheel to install
+without Git:
+
+```bash
+python -m pip install ./ocrs-0.9.0-py3-none-any.whl
+```
+
+OCRS currently distributes packages through GitHub Releases. The repository's
+[`uv sync` instructions](#development) are for contributors working from a clone.
 
 ## API
 ```python
@@ -765,7 +790,12 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## License
 
-Apache License 2.0 - see [LICENSE](LICENSE) for details.
+OCRS code, schemas, and original documentation use Apache License 2.0; see [LICENSE](LICENSE)
+and [NOTICE](NOTICE). Published review fixtures retain their own licenses, and the names of
+supported systems remain their owners' trademarks, listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md). Maintainers can
+find the release and hosting procedure in [RELEASING.md](RELEASING.md).
 
 ## Acknowledgments
 
