@@ -137,6 +137,23 @@ def test_review_links_back_to_its_note(reviews, html):
     assert links[("findings.questions[1]", "Questions")]["how"] == "copied"
 
 
+def test_every_source_field_names_a_value_of_the_review(html):
+    from ocrs.report import value_at
+
+    for review in current_reviews_from_forum_page(html, imported_at="2026-10-18T00:00:00Z"):
+        entries = review["extensions"]["openreview"]["source_fields"]
+        for entry in entries:
+            assert value_at(review, entry["ocrs"]) is not None, entry
+        # Its ethics notes are a finding's text, not a field kept for going back to 0.8
+        ethics = [e for e in entries if e["field"] == "Ethical Concerns"]
+        assert all(e["ocrs"].startswith("findings.") for e in ethics)
+    assert any(
+        e["field"] == "Ethical Concerns"
+        for r in current_reviews_from_forum_page(html)
+        for e in r["extensions"]["openreview"]["source_fields"]
+    )
+
+
 def test_fields_without_an_ocrs_home_are_kept(reviews):
     ext = reviews[0]["extensions"]["openreview"]
 

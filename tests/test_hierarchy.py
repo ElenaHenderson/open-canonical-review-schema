@@ -491,3 +491,26 @@ def test_going_down_leaves_no_category_that_only_migration_filled():
     down = legacy_view(migrate(old))
     assert set(down["findings"]) == {"strengths"}
     assert down["ethics_and_risk"] == old["ethics_and_risk"]
+
+
+@pytest.mark.parametrize(
+    ("concerns", "category"), [(True, "weaknesses"), (None, "comments"), (False, "comments")]
+)
+def test_a_record_of_the_ethics_notes_follows_them_to_their_finding(concerns, category):
+    from ocrs.hierarchy import remap_path, upgrade_content
+
+    ethics = {"notes": "Consent is not described."}
+    if concerns is not None:
+        ethics["ethical_concerns"] = concerns
+    old = legacy(
+        findings={"weaknesses": [{"text": "Small sample."}], "comments": [{"text": "Typo."}]},
+        ethics_and_risk=ethics,
+    )
+    moves: dict[str, str] = {}
+    new = upgrade_content(copy.deepcopy(old), moves)
+
+    path = remap_path("ethics_and_risk.notes", moves)
+    assert path == f"findings.{category}[1].text"
+    assert value_at(new, path) == "Consent is not described."
+    # The rest of ethics_and_risk is kept for going back down
+    assert remap_path("ethics_and_risk", moves).startswith("extensions.ocrs_0_8.fields[")

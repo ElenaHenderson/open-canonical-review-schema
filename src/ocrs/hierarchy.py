@@ -336,9 +336,13 @@ def upgrade_content(
             "tags": ["ethics", *ethics.get("concern_categories", [])],
         }
         identify(f, "ethics")
-        findings.setdefault(
-            "weaknesses" if ethics.get("ethical_concerns") else "comments", []
-        ).append(f)
+        category = "weaknesses" if ethics.get("ethical_concerns") else "comments"
+        points = findings.setdefault(category, [])
+        # The notes are the finding's text: a record of them follows them there, not into
+        # the extension that keeps the rest of ethics_and_risk
+        if ethics.get("notes", "").strip():
+            move("ethics_and_risk.notes", f"findings.{category}[{len(points)}].text")
+        points.append(f)
         keep(
             "ethics_and_risk",
             {k: v for k, v in ethics.items() if k != "notes"}

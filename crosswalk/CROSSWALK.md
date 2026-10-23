@@ -93,7 +93,7 @@ No fixture fills 2 of the 8 fields in this section.
 | `findings.comments[].group` |  |  |  |  |  |  |  |  |  |  | observed |  |
 | `findings.comments[].id` |  |  |  |  |  |  |  |  | observed | observed | parsed:comments[].number |  |
 | `findings.comments[].tags` |  |  |  |  |  |  |  |  | observed | observed |  |  |
-| `findings.comments[].text` |  |  |  |  |  |  |  |  | observed | observed | copied:comments[].text |  |
+| `findings.comments[].text` |  |  |  |  |  |  |  |  | observed | copied:Ethical Concerns | copied:comments[].text |  |
 | `findings.comments[].title` |  |  |  |  |  |  |  |  |  |  | copied:comments[].title |  |
 | `findings.questions[]` |  |  |  |  |  |  |  |  |  | copied:Questions |  |  |
 | `findings.questions[].id` |  |  |  |  | observed |  |  |  | observed | observed |  |  |

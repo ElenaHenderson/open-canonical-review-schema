@@ -102,6 +102,8 @@ def test_lost_on_round_trip_is_what_the_round_trip_tests_list(files):
 def test_openreview_saved_page_summary_and_questions(long_rows):
     assert sources(long_rows, "openreview_page", "opinion.summary") == {"Summary"}
     assert sources(long_rows, "openreview_page", "findings.questions[]") == {"Questions"}
+    # Ethics notes become an ethics-tagged comment, and the record follows them there
+    assert "Ethical Concerns" in sources(long_rows, "openreview_page", "findings.comments[].text")
 
 
 def test_reviewer3_overview_and_comments(long_rows):
